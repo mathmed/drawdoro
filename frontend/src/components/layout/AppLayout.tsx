@@ -1,12 +1,16 @@
 import { useAppStore } from '../../store/useAppStore'
 import DrawingCanvas from '../canvas/DrawingCanvas'
+import CodePanel from '../code/CodePanel'
 import DocsPanel from '../docs/DocsPanel'
 import Sidebar from '../sidebar/Sidebar'
+import TemplateModal from '../templates/TemplateModal'
 import Toolbar from '../toolbar/Toolbar'
 
 export default function AppLayout() {
   const activeDiagram = useAppStore((state) => state.activeDiagram)
   const isDocsPanelOpen = useAppStore((state) => state.isDocsPanelOpen)
+  const isCodePanelOpen = useAppStore((state) => state.isCodePanelOpen)
+  const isTemplateModalOpen = useAppStore((state) => state.isTemplateModalOpen)
 
   return (
     <div
@@ -25,6 +29,7 @@ export default function AppLayout() {
           <>
             <DrawingCanvas key={activeDiagram.id} diagram={activeDiagram} />
             <Toolbar />
+            {isCodePanelOpen ? <CodePanel /> : null}
           </>
         ) : (
           <div
@@ -44,6 +49,7 @@ export default function AppLayout() {
         )}
       </main>
       {activeDiagram !== null && isDocsPanelOpen ? <DocsPanel /> : null}
+      {activeDiagram !== null && isTemplateModalOpen ? <TemplateModal /> : null}
     </div>
   )
 }
