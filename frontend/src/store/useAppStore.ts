@@ -1,6 +1,13 @@
 import type { Editor } from 'tldraw'
 import { create } from 'zustand'
 
+import {
+  createAdr as apiCreateAdr,
+  deleteAdr as apiDeleteAdr,
+  listAdrs,
+  updateAdr as apiUpdateAdr,
+} from '../api/adrs'
+import { createComment as apiCreateComment, listComments } from '../api/comments'
 import { getDocumentation, upsertDocumentation } from '../api/documentation'
 import {
   createDiagram as apiCreateDiagram,
@@ -11,13 +18,23 @@ import { createFolder as apiCreateFolder, listFolders } from '../api/folders'
 import { createProject as apiCreateProject, listProjects } from '../api/projects'
 import { createWorkspace as apiCreateWorkspace, listWorkspaces } from '../api/workspaces'
 import type {
+  Adr,
+  AdrStatus,
   CanvasState,
+  Comment,
+  CreateAdrData,
   Diagram,
   DocumentationPage,
   Folder,
   Project,
+  SemanticMetadata,
+  ShapeMetadata,
+  ValidationResult,
   Workspace,
 } from '../api/types'
+import { buildArchitectureGraph, validateArchitecture } from '../utils/validateArchitecture'
+
+type RightPanelTab = 'docs' | 'adrs' | 'info'
 
 interface AppState {
   workspaces: Workspace[]
@@ -33,6 +50,14 @@ interface AppState {
   isCodePanelOpen: boolean
   isTemplateModalOpen: boolean
   codeLanguage: 'mermaid' | 'd2'
+  comments: Comment[]
+  activeElementId: string | null
+  isCommentsPanelOpen: boolean
+  adrs: Adr[]
+  rightPanelTab: RightPanelTab
+  isPresentationMode: boolean
+  semanticMetadata: Record<string, ShapeMetadata>
+  validationResults: ValidationResult[]
 
   loadWorkspaces: () => Promise<void>
   setActiveWorkspace: (workspace: Workspace) => Promise<void>
@@ -53,6 +78,21 @@ interface AppState {
   setCodeLanguage: (lang: 'mermaid' | 'd2') => void
   saveMermaidSource: (source: string) => Promise<void>
   saveD2Source: (source: string) => Promise<void>
+  loadComments: (diagramId: string) => Promise<void>
+  addComment: (elementId: string, content: string) => Promise<void>
+  toggleCommentsPanel: () => void
+  setActiveElement: (id: string | null) => void
+  loadAdrs: (diagramId: string) => Promise<void>
+  createAdr: (data: CreateAdrData) => Promise<void>
+  updateAdr: (adrId: string, data: CreateAdrData) => Promise<void>
+  updateAdrStatus: (adrId: string, status: AdrStatus) => Promise<void>
+  deleteAdr: (adrId: string) => Promise<void>
+  setRightPanelTab: (tab: RightPanelTab) => void
+  enterPresentation: () => void
+  exitPresentation: () => void
+  updateShapeMetadata: (shapeId: string, metadata: Partial<ShapeMetadata>) => void
+  saveSemanticMetadata: () => Promise<void>
+  runValidation: () => void
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -69,6 +109,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   isCodePanelOpen: false,
   isTemplateModalOpen: false,
   codeLanguage: 'mermaid',
+  comments: [],
+  activeElementId: null,
+  isCommentsPanelOpen: false,
+  adrs: [],
+  rightPanelTab: 'docs',
+  isPresentationMode: false,
+  semanticMetadata: {},
+  validationResults: [],
 
   loadWorkspaces: async () => {
     const workspaces = await listWorkspaces()
@@ -100,9 +148,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setActiveDiagram: async (diagram) => {
-    set({ activeDiagram: diagram })
-    const documentation = await getDocumentation(diagram.id)
-    set({ documentation })
+    set({
+      activeDiagram: diagram,
+      semanticMetadata: (diagram.semantic_metadata as Record<string, ShapeMetadata> | null) ?? {},
+      validationResults: [],
+      activeElementId: null,
+    })
+    const [documentation, adrs, comments] = await Promise.all([
+      getDocumentation(diagram.id),
+      listAdrs(diagram.id),
+      listComments(diagram.id),
+    ])
+    set({ documentation, adrs, comments })
   },
 
   loadDiagram: async (diagramId) => {
@@ -125,9 +182,11 @@ export const useAppStore = create<AppState>((set, get) => ({
         const diagrams = await listDiagrams(project.id)
         const found = diagrams.find((diagram) => diagram.id === diagramId)
         if (found !== undefined) {
-          const [folders, documentation] = await Promise.all([
+          const [folders, documentation, adrs, comments] = await Promise.all([
             listFolders(project.id),
             getDocumentation(found.id),
+            listAdrs(found.id),
+            listComments(found.id),
           ])
           set({
             activeWorkspace: workspace,
@@ -137,6 +196,12 @@ export const useAppStore = create<AppState>((set, get) => ({
             diagrams,
             activeDiagram: found,
             documentation,
+            adrs,
+            comments,
+            semanticMetadata:
+              (found.semantic_metadata as Record<string, ShapeMetadata> | null) ?? {},
+            validationResults: [],
+            activeElementId: null,
           })
           return
         }
@@ -280,5 +345,129 @@ export const useAppStore = create<AppState>((set, get) => ({
         diagram.id === updated.id ? updated : diagram,
       ),
     })
+  },
+
+  loadComments: async (diagramId) => {
+    const comments = await listComments(diagramId)
+    set({ comments })
+  },
+
+  addComment: async (elementId, content) => {
+    const { activeDiagram } = get()
+    if (activeDiagram === null) {
+      return
+    }
+    const comment = await apiCreateComment(activeDiagram.id, elementId, content)
+    set({ comments: [...get().comments, comment] })
+  },
+
+  toggleCommentsPanel: () => set({ isCommentsPanelOpen: !get().isCommentsPanelOpen }),
+
+  setActiveElement: (id) => set({ activeElementId: id }),
+
+  loadAdrs: async (diagramId) => {
+    const adrs = await listAdrs(diagramId)
+    set({ adrs })
+  },
+
+  createAdr: async (data) => {
+    const { activeDiagram } = get()
+    if (activeDiagram === null) {
+      return
+    }
+    const adr = await apiCreateAdr(activeDiagram.id, data)
+    set({ adrs: [...get().adrs, adr] })
+  },
+
+  updateAdr: async (adrId, data) => {
+    const { activeDiagram } = get()
+    if (activeDiagram === null) {
+      return
+    }
+    const updated = await apiUpdateAdr(activeDiagram.id, adrId, data)
+    set({ adrs: get().adrs.map((adr) => (adr.id === adrId ? updated : adr)) })
+  },
+
+  updateAdrStatus: async (adrId, status) => {
+    const { activeDiagram, adrs } = get()
+    const current = adrs.find((adr) => adr.id === adrId)
+    if (activeDiagram === null || current === undefined) {
+      return
+    }
+    const updated = await apiUpdateAdr(activeDiagram.id, adrId, {
+      title: current.title,
+      context: current.context,
+      decision: current.decision,
+      consequences: current.consequences,
+      status,
+    })
+    set({ adrs: get().adrs.map((adr) => (adr.id === adrId ? updated : adr)) })
+  },
+
+  deleteAdr: async (adrId) => {
+    const { activeDiagram } = get()
+    if (activeDiagram === null) {
+      return
+    }
+    await apiDeleteAdr(activeDiagram.id, adrId)
+    set({ adrs: get().adrs.filter((adr) => adr.id !== adrId) })
+  },
+
+  setRightPanelTab: (tab) => set({ rightPanelTab: tab, isDocsPanelOpen: true }),
+
+  enterPresentation: () => {
+    const element = document.documentElement
+    if (element.requestFullscreen !== undefined) {
+      void element.requestFullscreen().catch(() => undefined)
+    }
+    set({ isPresentationMode: true })
+  },
+
+  exitPresentation: () => {
+    if (document.fullscreenElement !== null && document.exitFullscreen !== undefined) {
+      void document.exitFullscreen().catch(() => undefined)
+    }
+    set({ isPresentationMode: false })
+  },
+
+  updateShapeMetadata: (shapeId, metadata) => {
+    const current = get().semanticMetadata
+    set({
+      semanticMetadata: {
+        ...current,
+        [shapeId]: { ...current[shapeId], ...metadata },
+      },
+    })
+  },
+
+  saveSemanticMetadata: async () => {
+    const { activeDiagram, semanticMetadata } = get()
+    if (activeDiagram === null) {
+      return
+    }
+    const updated = await updateDiagram(activeDiagram.project_id, activeDiagram.id, {
+      name: activeDiagram.name,
+      folder_id: activeDiagram.folder_id,
+      canvas_state: activeDiagram.canvas_state,
+      mermaid_source: activeDiagram.mermaid_source,
+      d2_source: activeDiagram.d2_source,
+      semantic_metadata: semanticMetadata as SemanticMetadata,
+    })
+    set({
+      activeDiagram: updated,
+      diagrams: get().diagrams.map((diagram) =>
+        diagram.id === updated.id ? updated : diagram,
+      ),
+    })
+  },
+
+  runValidation: () => {
+    const { editor, semanticMetadata } = get()
+    if (editor === null) {
+      set({ validationResults: [] })
+      return
+    }
+    const graph = buildArchitectureGraph(editor)
+    set({ validationResults: validateArchitecture(graph, semanticMetadata) })
   },
 }))

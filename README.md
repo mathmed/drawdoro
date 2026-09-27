@@ -81,18 +81,23 @@ app/
   main/                   Entry point
 frontend/                 React + Vite + TypeScript
   src/
-    components/layout/    Sidebar + canvas + docs three-zone shell
-    components/canvas/    tldraw wrapper with backend persistence
+    components/layout/    Sidebar + canvas shell and tabbed right panel (Docs/ADRs/Info)
+    components/canvas/    tldraw wrapper with backend persistence and comment context menu
     components/sidebar/   Workspace, project, folder and diagram navigation
     components/docs/      Markdown documentation panel (auto-save)
     components/code/      Mermaid/D2 code panel with live preview (auto-save)
     components/templates/ Built-in diagram template picker modal
-    components/toolbar/   Docs/Code/Templates toggles, export menu and inline rename
+    components/comments/  Element-anchored comments panel and canvas badges
+    components/adr/        ADR list/form panel with colored status
+    components/presentation/ Fullscreen presentation mode navigating frames
+    components/semantic/  Shape metadata panel and architecture validation modal
+    components/toolbar/   Docs/Code/Templates/Comments/Validate/Present toggles, export and rename
     pages/                Home, Diagram, NotFound
     api/                  Axios client and per-resource API functions
     store/                Zustand global state
     data/                 Static data (built-in templates)
-    hooks/                Reusable hooks (useDebounce)
+    hooks/                Reusable hooks (useDebounce, useComments, usePresentation)
+    utils/                Pure helpers (architecture validation)
     shapes/               Custom tldraw shapes
 mcp/                      Python MCP server
   server.py               Entry point

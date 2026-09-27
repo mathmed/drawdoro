@@ -1,16 +1,20 @@
 import { useAppStore } from '../../store/useAppStore'
 import DrawingCanvas from '../canvas/DrawingCanvas'
 import CodePanel from '../code/CodePanel'
-import DocsPanel from '../docs/DocsPanel'
+import CommentsPanel from '../comments/CommentsPanel'
+import PresentationMode from '../presentation/PresentationMode'
 import Sidebar from '../sidebar/Sidebar'
 import TemplateModal from '../templates/TemplateModal'
 import Toolbar from '../toolbar/Toolbar'
+import RightPanel from './RightPanel'
 
 export default function AppLayout() {
   const activeDiagram = useAppStore((state) => state.activeDiagram)
   const isDocsPanelOpen = useAppStore((state) => state.isDocsPanelOpen)
   const isCodePanelOpen = useAppStore((state) => state.isCodePanelOpen)
   const isTemplateModalOpen = useAppStore((state) => state.isTemplateModalOpen)
+  const isCommentsPanelOpen = useAppStore((state) => state.isCommentsPanelOpen)
+  const isPresentationMode = useAppStore((state) => state.isPresentationMode)
 
   return (
     <div
@@ -23,13 +27,13 @@ export default function AppLayout() {
         color: '#e6edf3',
       }}
     >
-      <Sidebar />
+      {isPresentationMode ? null : <Sidebar />}
       <main style={{ flex: 1, position: 'relative', minWidth: 0 }}>
         {activeDiagram !== null ? (
           <>
             <DrawingCanvas key={activeDiagram.id} diagram={activeDiagram} />
-            <Toolbar />
-            {isCodePanelOpen ? <CodePanel /> : null}
+            {isPresentationMode ? null : <Toolbar />}
+            {!isPresentationMode && isCodePanelOpen ? <CodePanel /> : null}
           </>
         ) : (
           <div
@@ -48,8 +52,14 @@ export default function AppLayout() {
           </div>
         )}
       </main>
-      {activeDiagram !== null && isDocsPanelOpen ? <DocsPanel /> : null}
-      {activeDiagram !== null && isTemplateModalOpen ? <TemplateModal /> : null}
+      {activeDiagram !== null && !isPresentationMode && isDocsPanelOpen ? <RightPanel /> : null}
+      {activeDiagram !== null && !isPresentationMode && isCommentsPanelOpen ? (
+        <CommentsPanel />
+      ) : null}
+      {activeDiagram !== null && !isPresentationMode && isTemplateModalOpen ? (
+        <TemplateModal />
+      ) : null}
+      {isPresentationMode ? <PresentationMode /> : null}
     </div>
   )
 }
