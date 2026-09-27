@@ -1,18 +1,53 @@
-from fastapi import APIRouter
-from fastapi.responses import JSONResponse
+import uuid
+
+from fastapi import APIRouter, Depends
+
+from app.domain.usecases.comment.create_comment import CreateComment, CreateCommentParams
+from app.domain.usecases.comment.delete_comment import DeleteComment, DeleteCommentParams
+from app.domain.usecases.comment.list_comments import ListComments, ListCommentsParams
+from app.presentation.factories.comment_factories import (
+    create_comment_factory,
+    delete_comment_factory,
+    list_comments_factory,
+)
+from app.presentation.fastapi.schemas.comment_schemas import (
+    CommentResponse,
+    CreateCommentRequest,
+)
 
 router = APIRouter(prefix="/diagrams/{diagram_id}/comments", tags=["comments"])
 
 
-def _not_implemented(detail: str = "not implemented") -> JSONResponse:
-    return JSONResponse(status_code=501, content={"detail": detail})
+@router.get("", response_model=list[CommentResponse])
+async def list_comments(
+    diagram_id: uuid.UUID,
+    use_case: ListComments = Depends(list_comments_factory),
+) -> list[CommentResponse]:
+    comments = await use_case.execute(ListCommentsParams(diagram_id=diagram_id))
+    return [CommentResponse.model_validate(c) for c in comments]
 
 
-@router.get("")
-async def list_comments(diagram_id: str) -> JSONResponse:
-    return _not_implemented(f"diagram {diagram_id} not implemented")
+@router.post("", response_model=CommentResponse, status_code=201)
+async def create_comment(
+    diagram_id: uuid.UUID,
+    body: CreateCommentRequest,
+    use_case: CreateComment = Depends(create_comment_factory),
+) -> CommentResponse:
+    comment = await use_case.execute(
+        CreateCommentParams(
+            diagram_id=diagram_id,
+            element_id=body.element_id,
+            content=body.content,
+            author_id=body.author_id,
+        )
+    )
+    return CommentResponse.model_validate(comment)
 
 
-@router.post("", status_code=201)
-async def create_comment(diagram_id: str) -> JSONResponse:
-    return _not_implemented(f"diagram {diagram_id} not implemented")
+@router.delete("/{comment_id}", status_code=204)
+async def delete_comment(
+    diagram_id: uuid.UUID,
+    comment_id: uuid.UUID,
+    use_case: DeleteComment = Depends(delete_comment_factory),
+) -> None:
+    await use_case.execute(DeleteCommentParams(comment_id=comment_id))

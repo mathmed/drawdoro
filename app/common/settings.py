@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     app_name: str = "Drawdoro"
     log_level: str = "INFO"
     cors_origins: list[str] = []
+    database_url: str = "postgresql+asyncpg://drawdoro:drawdoro@localhost:5432/drawdoro"
 
     @property
     def is_production(self) -> bool:

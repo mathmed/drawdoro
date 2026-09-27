@@ -1,0 +1,154 @@
+from unittest.mock import MagicMock
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.domain.usecases.adr.create_adr import CreateAdr
+from app.domain.usecases.adr.delete_adr import DeleteAdr
+from app.domain.usecases.adr.get_adr import GetAdr
+from app.domain.usecases.adr.list_adrs import ListAdrs
+from app.domain.usecases.adr.update_adr import UpdateAdr
+from app.domain.usecases.comment.create_comment import CreateComment
+from app.domain.usecases.comment.delete_comment import DeleteComment
+from app.domain.usecases.comment.list_comments import ListComments
+from app.domain.usecases.diagram.create_diagram import CreateDiagram
+from app.domain.usecases.diagram.delete_diagram import DeleteDiagram
+from app.domain.usecases.diagram.get_diagram import GetDiagram
+from app.domain.usecases.diagram.list_diagrams import ListDiagrams
+from app.domain.usecases.diagram.update_diagram import UpdateDiagram
+from app.domain.usecases.documentation.get_documentation_page import GetDocumentationPage
+from app.domain.usecases.documentation.upsert_documentation_page import UpsertDocumentationPage
+from app.domain.usecases.folder.create_folder import CreateFolder
+from app.domain.usecases.folder.delete_folder import DeleteFolder
+from app.domain.usecases.folder.get_folder import GetFolder
+from app.domain.usecases.folder.list_folders import ListFolders
+from app.domain.usecases.folder.update_folder import UpdateFolder
+from app.domain.usecases.project.create_project import CreateProject
+from app.domain.usecases.project.delete_project import DeleteProject
+from app.domain.usecases.project.get_project import GetProject
+from app.domain.usecases.project.list_projects import ListProjects
+from app.domain.usecases.project.update_project import UpdateProject
+from app.domain.usecases.template.create_template import CreateTemplate
+from app.domain.usecases.template.delete_template import DeleteTemplate
+from app.domain.usecases.template.get_template import GetTemplate
+from app.domain.usecases.template.list_templates import ListTemplates
+from app.domain.usecases.workspace.create_workspace import CreateWorkspace
+from app.domain.usecases.workspace.delete_workspace import DeleteWorkspace
+from app.domain.usecases.workspace.get_workspace import GetWorkspace
+from app.domain.usecases.workspace.list_workspaces import ListWorkspaces
+from app.domain.usecases.workspace.update_workspace import UpdateWorkspace
+from app.presentation.factories.adr_factories import (
+    create_adr_factory,
+    delete_adr_factory,
+    get_adr_factory,
+    list_adrs_factory,
+    update_adr_factory,
+)
+from app.presentation.factories.comment_factories import (
+    create_comment_factory,
+    delete_comment_factory,
+    list_comments_factory,
+)
+from app.presentation.factories.diagram_factories import (
+    create_diagram_factory,
+    delete_diagram_factory,
+    get_diagram_factory,
+    list_diagrams_factory,
+    update_diagram_factory,
+)
+from app.presentation.factories.documentation_factories import (
+    get_documentation_page_factory,
+    upsert_documentation_page_factory,
+)
+from app.presentation.factories.folder_factories import (
+    create_folder_factory,
+    delete_folder_factory,
+    get_folder_factory,
+    list_folders_factory,
+    update_folder_factory,
+)
+from app.presentation.factories.project_factories import (
+    create_project_factory,
+    delete_project_factory,
+    get_project_factory,
+    list_projects_factory,
+    update_project_factory,
+)
+from app.presentation.factories.template_factories import (
+    create_template_factory,
+    delete_template_factory,
+    get_template_factory,
+    list_templates_factory,
+)
+from app.presentation.factories.workspace_factories import (
+    create_workspace_factory,
+    delete_workspace_factory,
+    get_workspace_factory,
+    list_workspaces_factory,
+    update_workspace_factory,
+)
+
+
+async def test_workspace_factories() -> None:
+    session = MagicMock(spec=AsyncSession)
+    assert isinstance(await create_workspace_factory(session), CreateWorkspace)
+    assert isinstance(await get_workspace_factory(session), GetWorkspace)
+    assert isinstance(await list_workspaces_factory(session), ListWorkspaces)
+    assert isinstance(await update_workspace_factory(session), UpdateWorkspace)
+    assert isinstance(await delete_workspace_factory(session), DeleteWorkspace)
+
+
+async def test_project_factories() -> None:
+    session = MagicMock(spec=AsyncSession)
+    assert isinstance(await create_project_factory(session), CreateProject)
+    assert isinstance(await get_project_factory(session), GetProject)
+    assert isinstance(await list_projects_factory(session), ListProjects)
+    assert isinstance(await update_project_factory(session), UpdateProject)
+    assert isinstance(await delete_project_factory(session), DeleteProject)
+
+
+async def test_folder_factories() -> None:
+    session = MagicMock(spec=AsyncSession)
+    assert isinstance(await create_folder_factory(session), CreateFolder)
+    assert isinstance(await get_folder_factory(session), GetFolder)
+    assert isinstance(await list_folders_factory(session), ListFolders)
+    assert isinstance(await update_folder_factory(session), UpdateFolder)
+    assert isinstance(await delete_folder_factory(session), DeleteFolder)
+
+
+async def test_diagram_factories() -> None:
+    session = MagicMock(spec=AsyncSession)
+    assert isinstance(await create_diagram_factory(session), CreateDiagram)
+    assert isinstance(await get_diagram_factory(session), GetDiagram)
+    assert isinstance(await list_diagrams_factory(session), ListDiagrams)
+    assert isinstance(await update_diagram_factory(session), UpdateDiagram)
+    assert isinstance(await delete_diagram_factory(session), DeleteDiagram)
+
+
+async def test_adr_factories() -> None:
+    session = MagicMock(spec=AsyncSession)
+    assert isinstance(await create_adr_factory(session), CreateAdr)
+    assert isinstance(await get_adr_factory(session), GetAdr)
+    assert isinstance(await list_adrs_factory(session), ListAdrs)
+    assert isinstance(await update_adr_factory(session), UpdateAdr)
+    assert isinstance(await delete_adr_factory(session), DeleteAdr)
+
+
+async def test_comment_factories() -> None:
+    session = MagicMock(spec=AsyncSession)
+    assert isinstance(await create_comment_factory(session), CreateComment)
+    assert isinstance(await list_comments_factory(session), ListComments)
+    assert isinstance(await delete_comment_factory(session), DeleteComment)
+
+
+async def test_template_factories() -> None:
+    session = MagicMock(spec=AsyncSession)
+    assert isinstance(await create_template_factory(session), CreateTemplate)
+    assert isinstance(await get_template_factory(session), GetTemplate)
+    assert isinstance(await list_templates_factory(session), ListTemplates)
+    assert isinstance(await delete_template_factory(session), DeleteTemplate)
+
+
+async def test_documentation_factories() -> None:
+    session = MagicMock(spec=AsyncSession)
+    assert isinstance(await get_documentation_page_factory(session), GetDocumentationPage)
+    assert isinstance(await upsert_documentation_page_factory(session), UpsertDocumentationPage)

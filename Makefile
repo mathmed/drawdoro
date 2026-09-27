@@ -46,3 +46,9 @@ check-code:
 # Fix lint issues and format code
 format-code:
 	uv run ruff check --fix . && uv run ruff format .
+
+migrate:
+	alembic upgrade head
+
+migration:
+	alembic revision --autogenerate -m "$(msg)"
