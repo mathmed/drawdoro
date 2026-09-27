@@ -1,49 +1,71 @@
 # CLAUDE.md
 
-Guidance for AI coding agents working in this repository. `AGENTS.md` is a symlink to this file, so
-Cursor, Codex and other tools that read `AGENTS.md` follow the same rules.
+Guidance for AI coding agents in this repository. `AGENTS.md` is a symlink.
 
 ## Project
 
-FastAPI API template on Python 3.14, managed with [uv](https://docs.astral.sh/uv/). See the README for
-setup, environment variables and the folder structure.
+**Drawdoro** is an internal architecture diagramming and documentation tool.
+
+- **Backend**: FastAPI + Python 3.14 (this directory), managed with uv
+- **Frontend**: React + Vite + TypeScript in `frontend/`
+- **MCP**: Python MCP server in `mcp/`
+
+## Monorepo structure
+
+```
+/                  Backend FastAPI API
+frontend/          React+Vite+TypeScript frontend
+mcp/               Python MCP server
+docker/            Dockerfile and docker-compose
+```
 
 ## Commands
 
 ```bash
-make setup        # install uv, dependencies and git hooks
-make run          # run the API locally with hot reload
-make test         # all tests with coverage (fails under 80%)
-make test-unit    # only the fast unit tests
-make hooks        # all quality checks: ruff, mypy, bandit, vulture, xenon, pip-audit
-make format-code  # fix lint issues and format with ruff
+make setup        install uv, dependencies and git hooks
+make run          run the API locally with hot reload
+make test         all tests with coverage (fails under 80%)
+make test-unit    only the fast unit tests
+make hooks        all quality checks: ruff, mypy, bandit, vulture, xenon, pip-audit
+make format-code  fix lint issues and format with ruff
 ```
 
-Always use `uv run` / `uv add` — never `pip` directly.
+Always use `uv run` for the backend. Frontend: `cd frontend && npm install && npm run dev`. MCP: `cd mcp && uv run python server.py`.
 
-## Architecture rules
+## Backend architecture rules
 
 ```
 app/common/        settings and logging, importable by any layer
 app/domain/        business core: contracts, entities, usecases, services, errors, enums, constants
-app/infra/         implementations of domain contracts (database, HTTP clients, mail...)
-app/presentation/  factories (dependency wiring) and FastAPI (routes, middlewares, handlers)
+app/infra/         implementations of domain contracts
+app/presentation/  factories (wiring) and FastAPI routes, middlewares, handlers
 app/main/          entry point
-tests/unit/        fast tests with mocked dependencies, mirroring app/
+tests/unit/        fast tests with mocked dependencies
 tests/integration/ HTTP tests with TestClient
 ```
 
-- `app/domain` never imports from `app/infra`, `app/presentation` or `app/common`. It declares contracts
-  (ABCs in `domain/contracts/`); `infra` implements them; `presentation/factories` wires them together.
-- Use cases extend `Usecase[Params, Response]`, have one public method (`execute`) and receive their
-  dependencies through the constructor.
-- Business failures raise the errors from `app/domain/errors/` (`NotFoundError`, `ConflictError`...).
-  Never raise `HTTPException` outside `presentation`; the domain error handler maps them to HTTP status.
-- New routes go in `presentation/fastapi/routes/` and must be registered in `routes/__init__.py`.
-- New environment variables go in `app/common/settings.py` (with a default when possible), in
-  `.env.example` and in the README environment variables table.
-- Every change comes with tests: unit tests for use cases and infra (mock external dependencies) and
-  integration tests for routes.
+- `app/domain` never imports from `app/infra`, `app/presentation` or `app/common`.
+- Use cases extend `Usecase[Params, Response]`, one public method `execute`.
+- Business failures raise errors from `app/domain/errors/`. Never `HTTPException` outside presentation.
+- New routes in `presentation/fastapi/routes/` registered in `routes/__init__.py`.
+- New env vars in `app/common/settings.py`, `.env.example` and README table.
+- Every change comes with tests.
+
+## Domain entities
+
+| Entity | Description |
+|---|---|
+| Workspace | Group of users; top-level organisational unit |
+| Project | Belongs to a Workspace; groups diagrams and folders |
+| Folder | Nestable; belongs to a Project or another Folder |
+| Diagram | canvas_state (tldraw JSON), mermaid_source, d2_source, semantic_metadata |
+| DocumentationPage | Markdown page linked to a Diagram (one per diagram) |
+| Comment | Anchored to a diagram element via element_id |
+| Template | Reusable diagram global or scoped to a Workspace |
+| CustomShape | tldraw custom shape owned by a user or Workspace |
+| ADR | Architecture Decision Record: proposed/accepted/deprecated/superseded |
+| User | Member of one or more Workspaces |
+| WorkspaceMember | User x Workspace join with role: owner/editor/viewer |
 
 ## Before opening a PR (mandatory)
 
@@ -55,48 +77,23 @@ tests/integration/ HTTP tests with TestClient
 
 ## Workflow
 
-- Code changes are delegated to the `coder` agent (`.claude/agents/coder.md`), which creates a branch,
-  implements, commits and opens a PR. Never commit directly to `main`.
-- **Exception**: if a `.local_dev` file exists at the repository root, the developer is working locally —
-  edit files directly, without delegating to `coder` and without creating commits or PRs.
-- Use the `reviewer` agent (`.claude/agents/reviewer.md`) to review a branch against these rules before
-  merging.
+- Code changes are delegated to the `coder` agent (`.claude/agents/coder.md`).
+- **Exception**: if a `.local_dev` file exists at the root, edit files directly without delegating.
+- Use the `reviewer` agent (`.claude/agents/reviewer.md`) to review a branch before merging.
 
 ## Personal preferences
 
-> These are the personal preferences of the template author. They are not requirements of the
-> architecture: change, remove or replace them with your own. Everything above this section describes how
-> the template works; everything below is taste.
-
-- **New standards**: whenever the user asks to change a code pattern (use enums instead of strings, name
-  variables a certain way...), ask whether it should become a project standard. If yes, add it to this
-  list so it is followed in every future conversation.
-- **`__init__.py`**: only create one when it actually exports symbols. Never create empty `__init__.py`
-  files just to mark packages.
-- **Comments and docstrings**: no docstrings on functions, methods or classes. Comments only when the code
-  is genuinely confusing and the reason is not obvious from the names. Never comment what the code does.
-- **Enums**: always use `enum.StrEnum` for fixed sets of strings (status, types, roles...). Never spread
-  hardcoded strings across the code.
-- **Data structures**: always use `BaseModel` or `dataclass` for structured data. Use `dict` only as a last
-  resort.
-- **Identifiers**: every identifier (variables, functions, classes, parameters, fields) in English.
-- **Class names**: never prefix class names with `_`.
-- **Single responsibility**: each module/class has one reason to change. If a module needs to import from
-  two unrelated integrations, extract the dependency to an intermediary.
-- **Dependencies**: always use the latest available version of any external library.
-- **README**: after any relevant change (new route, command, setup step, env var or architecture change),
-  check whether the README needs updating and update it.
-- **Typing**: every parameter and return value is typed, and `Any` is not used unless there is no
-  alternative (and the reason is written next to it). mypy runs in strict mode.
-- **Logging**: never use `print`; always `logger = logging.getLogger(__name__)`. Never log tokens,
-  passwords, secrets or personal data.
-- **Dates**: always timezone-aware UTC — `datetime.now(UTC)`. Never `datetime.now()` or `datetime.utcnow()`.
-- **Thin routes**: a route only converts the request, calls the use case and returns the response. No
-  business rules in `presentation`.
-- **Use case names**: start with a verb (`CreateUser`, `ListInvoices`), one use case per file.
-- **Exceptions**: never `except Exception: pass`. Catch specific exceptions, and only where something
-  can be done about them.
-- **Early return**: prefer guard clauses and early returns over nested `if`s.
-- **Tests**: name them `test_should_<behaviour>` and build the object under test in a `sut` fixture.
-- **Commits**: Conventional Commits in English — `<type>: <short description>`, with `feat`, `fix`,
-  `refactor`, `chore`, `test`, `docs`, `ci` or `build`.
+- **`__init__.py`**: only create when it exports symbols. Never empty.
+- **Comments**: no docstrings. Comments only when code is genuinely confusing.
+- **Enums**: always use `enum.StrEnum` for fixed sets of strings.
+- **Data structures**: always use `BaseModel` or `dataclass`. Use `dict` only as last resort.
+- **Identifiers**: every identifier in English.
+- **Typing**: every parameter and return value is typed. `Any` only if unavoidable.
+- **Logging**: never `print`; always `logger = logging.getLogger(__name__)`.
+- **Dates**: always timezone-aware UTC: `datetime.now(UTC)`.
+- **Thin routes**: a route only converts the request, calls the use case and returns response.
+- **Use case names**: start with a verb (CreateUser, ListInvoices), one per file.
+- **Exceptions**: never `except Exception: pass`. Catch specific exceptions.
+- **Early return**: prefer guard clauses over nested ifs.
+- **Tests**: name them `test_should_<behaviour>` and build the SUT in a `sut` fixture.
+- **Commits**: Conventional Commits in English: feat, fix, refactor, chore, test, docs, ci, build.

@@ -1,17 +1,51 @@
 services:
-  py-awesome-template:
-    container_name: py-awesome-template
+  api:
+    container_name: drawdoro-api
     build:
       context: ../
       dockerfile: ./docker/Dockerfile
       target: dev
     ports:
-      # Change on the .env file on the root of the project
-      - ${APP_PORT}:8000
+      - "${APP_PORT:-8000}:8000"
     volumes:
       - ../:/home/app
+    environment:
+      - ENV=development
+      - LOG_LEVEL=INFO
+      - CORS_ORIGINS=["http://localhost:3000"]
     networks:
-      - app_network
+      - drawdoro_network
+
+  frontend:
+    container_name: drawdoro-frontend
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../frontend:/app
+    environment:
+      - VITE_API_URL=http://api:8000
+    depends_on:
+      - api
+    networks:
+      - drawdoro_network
+
+  mcp:
+    container_name: drawdoro-mcp
+    image: python:3.12-slim
+    working_dir: /app
+    command: sh -c "pip install --quiet uv && uv run python server.py"
+    volumes:
+      - ../mcp:/app
+    environment:
+      - DRAWDORO_API_URL=http://api:8000
+    depends_on:
+      - api
+    networks:
+      - drawdoro_network
+
 networks:
-  app_network:
+  drawdoro_network:
     driver: bridge
