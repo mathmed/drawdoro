@@ -80,6 +80,7 @@
 | app/infra/database/repositories/template\_repository.py              |       32 |       18 |     44% |16-26, 29-33, 36-40, 43-48, 52 |
 | app/infra/database/repositories/workspace\_repository.py             |       38 |       22 |     42% |17-25, 28-35, 38-41, 44-55, 58-66, 70 |
 | app/infra/database/session.py                                        |        9 |        2 |     78% |     13-14 |
+| app/infra/realtime/connection\_manager.py                            |       19 |        0 |    100% |           |
 | app/main/main.py                                                     |        6 |        0 |    100% |           |
 | app/presentation/factories/adr\_factories.py                         |       19 |        0 |    100% |           |
 | app/presentation/factories/comment\_factories.py                     |       13 |        0 |    100% |           |
@@ -100,7 +101,7 @@
 | app/presentation/fastapi/routes/health\_routes.py                    |        5 |        0 |    100% |           |
 | app/presentation/fastapi/routes/project\_routes.py                   |       29 |        0 |    100% |           |
 | app/presentation/fastapi/routes/template\_routes.py                  |       24 |        0 |    100% |           |
-| app/presentation/fastapi/routes/websocket\_routes.py                 |        7 |        0 |    100% |           |
+| app/presentation/fastapi/routes/websocket\_routes.py                 |       22 |        0 |    100% |           |
 | app/presentation/fastapi/routes/workspace\_routes.py                 |       29 |        0 |    100% |           |
 | app/presentation/fastapi/schemas/adr\_schemas.py                     |        9 |        0 |    100% |           |
 | app/presentation/fastapi/schemas/comment\_schemas.py                 |        7 |        0 |    100% |           |
@@ -110,7 +111,7 @@
 | app/presentation/fastapi/schemas/project\_schemas.py                 |        9 |        0 |    100% |           |
 | app/presentation/fastapi/schemas/template\_schemas.py                |       10 |        0 |    100% |           |
 | app/presentation/fastapi/schemas/workspace\_schemas.py               |        7 |        0 |    100% |           |
-| **TOTAL**                                                            | **1538** |  **250** | **84%** |           |
+| **TOTAL**                                                            | **1572** |  **250** | **84%** |           |
 
 
 ## Setup coverage badge
