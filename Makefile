@@ -1,4 +1,4 @@
-.PHONY: setup dev dev-build run build test test-unit hooks check-code format-code
+.PHONY: setup dev dev-build run build test test-unit hooks check-code format-code frontend db
 
 # Install uv (if missing), project dependencies and git hooks
 setup:
@@ -19,6 +19,10 @@ dev:
 dev-build:
 	docker compose --env-file=.env -f ./docker/docker-compose.yaml up --build
 
+# Start only the database (docker)
+db:
+	docker compose --env-file=.env -f ./docker/docker-compose.yaml up -d --wait db
+
 # Build the production docker image
 build:
 	docker build --target production -t py-awesome-template -f docker/Dockerfile .
@@ -26,6 +30,9 @@ build:
 # Start project locally without docker
 run:
 	uv run uvicorn app.main.main:app --reload --host 0.0.0.0 --port 8000
+
+frontend:
+	cd frontend && npm run dev
 
 # Run all tests with coverage
 test:

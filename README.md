@@ -43,6 +43,7 @@ Health check: `curl http://localhost:8000/health`
 | `make setup` | Install uv, project dependencies and git hooks |
 | `make run` | Run the API locally with hot reload |
 | `make dev` | Run all services with Docker |
+| `make db` | Start only the Postgres database with Docker (detached, waits for healthcheck) |
 | `make build` | Build the production Docker image |
 | `make test` | Run all tests with coverage |
 | `make test-unit` | Run only the unit tests |
