@@ -1,33 +1,69 @@
-from fastapi import APIRouter
-from fastapi.responses import JSONResponse
+import uuid
+
+from fastapi import APIRouter, Depends
+
+from app.domain.usecases.workspace.create_workspace import CreateWorkspace, CreateWorkspaceParams
+from app.domain.usecases.workspace.delete_workspace import DeleteWorkspace, DeleteWorkspaceParams
+from app.domain.usecases.workspace.get_workspace import GetWorkspace, GetWorkspaceParams
+from app.domain.usecases.workspace.list_workspaces import ListWorkspaces, ListWorkspacesParams
+from app.domain.usecases.workspace.update_workspace import UpdateWorkspace, UpdateWorkspaceParams
+from app.presentation.factories.workspace_factories import (
+    create_workspace_factory,
+    delete_workspace_factory,
+    get_workspace_factory,
+    list_workspaces_factory,
+    update_workspace_factory,
+)
+from app.presentation.fastapi.schemas.workspace_schemas import (
+    CreateWorkspaceRequest,
+    UpdateWorkspaceRequest,
+    WorkspaceResponse,
+)
 
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])
 
 
-def _not_implemented(detail: str = "not implemented") -> JSONResponse:
-    return JSONResponse(status_code=501, content={"detail": detail})
+@router.get("", response_model=list[WorkspaceResponse])
+async def list_workspaces(
+    use_case: ListWorkspaces = Depends(list_workspaces_factory),
+) -> list[WorkspaceResponse]:
+    workspaces = await use_case.execute(ListWorkspacesParams())
+    return [WorkspaceResponse.model_validate(w) for w in workspaces]
 
 
-@router.get("")
-async def list_workspaces() -> JSONResponse:
-    return _not_implemented()
+@router.post("", response_model=WorkspaceResponse, status_code=201)
+async def create_workspace(
+    body: CreateWorkspaceRequest,
+    use_case: CreateWorkspace = Depends(create_workspace_factory),
+) -> WorkspaceResponse:
+    workspace = await use_case.execute(CreateWorkspaceParams(name=body.name, slug=body.slug))
+    return WorkspaceResponse.model_validate(workspace)
 
 
-@router.post("", status_code=201)
-async def create_workspace() -> JSONResponse:
-    return _not_implemented()
+@router.get("/{workspace_id}", response_model=WorkspaceResponse)
+async def get_workspace(
+    workspace_id: uuid.UUID,
+    use_case: GetWorkspace = Depends(get_workspace_factory),
+) -> WorkspaceResponse:
+    workspace = await use_case.execute(GetWorkspaceParams(workspace_id=workspace_id))
+    return WorkspaceResponse.model_validate(workspace)
 
 
-@router.get("/{workspace_id}")
-async def get_workspace(workspace_id: str) -> JSONResponse:
-    return _not_implemented(f"workspace {workspace_id} not implemented")
-
-
-@router.put("/{workspace_id}")
-async def update_workspace(workspace_id: str) -> JSONResponse:
-    return _not_implemented(f"workspace {workspace_id} not implemented")
+@router.put("/{workspace_id}", response_model=WorkspaceResponse)
+async def update_workspace(
+    workspace_id: uuid.UUID,
+    body: UpdateWorkspaceRequest,
+    use_case: UpdateWorkspace = Depends(update_workspace_factory),
+) -> WorkspaceResponse:
+    workspace = await use_case.execute(
+        UpdateWorkspaceParams(workspace_id=workspace_id, name=body.name, slug=body.slug)
+    )
+    return WorkspaceResponse.model_validate(workspace)
 
 
 @router.delete("/{workspace_id}", status_code=204)
-async def delete_workspace(workspace_id: str) -> JSONResponse:
-    return _not_implemented(f"workspace {workspace_id} not implemented")
+async def delete_workspace(
+    workspace_id: uuid.UUID,
+    use_case: DeleteWorkspace = Depends(delete_workspace_factory),
+) -> None:
+    await use_case.execute(DeleteWorkspaceParams(workspace_id=workspace_id))

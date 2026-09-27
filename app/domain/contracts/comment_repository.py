@@ -1,3 +1,4 @@
+import uuid
 from abc import ABC, abstractmethod
 
 from app.domain.entities.models.comment import Comment
@@ -5,7 +6,10 @@ from app.domain.entities.models.comment import Comment
 
 class CommentRepository(ABC):
     @abstractmethod
-    def create(self, _comment: Comment) -> Comment: ...
+    async def create(self, comment: Comment) -> Comment: ...
 
     @abstractmethod
-    def list_by_diagram(self, _diagram_id: str) -> list[Comment]: ...
+    async def list_by_diagram(self, diagram_id: uuid.UUID) -> list[Comment]: ...
+
+    @abstractmethod
+    async def delete(self, comment_id: uuid.UUID) -> None: ...

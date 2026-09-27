@@ -1,3 +1,4 @@
+import uuid
 from abc import ABC, abstractmethod
 
 from app.domain.entities.models.documentation_page import DocumentationPage
@@ -5,7 +6,7 @@ from app.domain.entities.models.documentation_page import DocumentationPage
 
 class DocumentationPageRepository(ABC):
     @abstractmethod
-    def get_by_diagram(self, _diagram_id: str) -> DocumentationPage | None: ...
+    async def get_by_diagram(self, diagram_id: uuid.UUID) -> DocumentationPage | None: ...
 
     @abstractmethod
-    def upsert(self, _page: DocumentationPage) -> DocumentationPage: ...
+    async def upsert(self, page: DocumentationPage) -> DocumentationPage: ...

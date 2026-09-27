@@ -2,7 +2,6 @@ from .adr_routes import router as adr_router
 from .comment_routes import router as comment_router
 from .diagram_routes import router as diagram_router
 from .documentation_routes import router as documentation_router
-from .example_routes import router as example_router
 from .folder_routes import router as folder_router
 from .health_routes import router as health_router
 from .project_routes import router as project_router
@@ -12,7 +11,6 @@ from .workspace_routes import router as workspace_router
 
 routers = [
     health_router,
-    example_router,
     workspace_router,
     project_router,
     folder_router,

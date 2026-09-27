@@ -48,6 +48,8 @@ Health check: `curl http://localhost:8000/health`
 | `make test-unit` | Run only the unit tests |
 | `make hooks` | Run all quality checks (ruff, mypy, bandit, vulture, xenon, pip-audit) |
 | `make format-code` | Fix lint issues and format the code |
+| `make migrate` | Apply database migrations (requires running DB) |
+| `make migration msg="desc"` | Generate a new Alembic migration |
 
 ## Environment variables
 
@@ -58,6 +60,7 @@ Health check: `curl http://localhost:8000/health`
 | `LOG_LEVEL` | `INFO` | Python logging level |
 | `CORS_ORIGINS` | `[]` | JSON list of allowed origins |
 | `DRAWDORO_API_URL` | `http://localhost:8000` | Backend URL used by the MCP server |
+| `DATABASE_URL` | `postgresql+asyncpg://drawdoro:drawdoro@localhost:5432/drawdoro` | PostgreSQL async connection URL |
 
 ## Folder structure
 
