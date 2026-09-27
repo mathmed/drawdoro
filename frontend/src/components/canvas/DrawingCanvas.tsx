@@ -13,6 +13,7 @@ import {
 import 'tldraw/tldraw.css'
 
 import type { CanvasState, Diagram } from '../../api/types'
+import { useRealtime } from '../../hooks/useRealtime'
 import { useAppStore } from '../../store/useAppStore'
 import CommentBadge from '../comments/CommentBadge'
 
@@ -63,22 +64,35 @@ export default function DrawingCanvas({ diagram }: DrawingCanvasProps) {
   const saveCanvasState = useAppStore((state) => state.saveCanvasState)
   const setEditor = useAppStore((state) => state.setEditor)
   const isPresentationMode = useAppStore((state) => state.isPresentationMode)
+  const editor = useAppStore((state) => state.editor)
+  const setPeers = useAppStore((state) => state.setPeers)
 
-  function handleMount(editor: Editor): () => void {
-    setEditor(editor)
+  const { sendUpdate } = useRealtime({
+    diagramId: diagram.id,
+    editor,
+    onPeersChange: setPeers,
+  })
+
+  function handleMount(mountedEditor: Editor): () => void {
+    setEditor(mountedEditor)
 
     if (diagram.canvas_state !== null) {
-      editor.store.loadSnapshot(diagram.canvas_state as unknown as TLStoreSnapshot)
+      mountedEditor.store.loadSnapshot(diagram.canvas_state as unknown as TLStoreSnapshot)
     }
 
     let timer: ReturnType<typeof setTimeout>
-    const unlisten = editor.store.listen(
-      () => {
+    const unlisten = mountedEditor.store.listen(
+      (entry) => {
+        // Ignora mudancas vindas de outros peers
+        if (entry.source === 'remote') {
+          return
+        }
         clearTimeout(timer)
         timer = setTimeout(() => {
-          const snapshot = editor.store.getSnapshot()
+          const snapshot = mountedEditor.store.getSnapshot()
           void saveCanvasState(snapshot as unknown as CanvasState)
-        }, 1500)
+          sendUpdate(snapshot)
+        }, 500)
       },
       { scope: 'document' },
     )

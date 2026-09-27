@@ -123,7 +123,7 @@ mcp/                      Python MCP server
 | GET/PUT/DELETE | /templates/{id} | Get / update / delete template |
 | GET/POST | /diagrams/{id}/adrs | List / create ADRs |
 | GET/PUT/DELETE | /diagrams/{id}/adrs/{id} | Get / update / delete ADR |
-| WS | /ws/diagrams/{id} | Real-time collaboration (placeholder) |
+| WS | /ws/diagrams/{id} | Real-time collaboration: broadcasts canvas updates, cursors and peer count to everyone connected to the same diagram |
 
 All routes except `/health` return `501 Not Implemented` until infra is wired.
 
