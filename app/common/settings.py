@@ -14,9 +14,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     env: Environment = Environment.DEVELOPMENT
-    app_name: str = "Awesome Python Template"
+    app_name: str = "Drawdoro"
     log_level: str = "INFO"
-    # JSON list, e.g. CORS_ORIGINS='["http://localhost:3000"]'
     cors_origins: list[str] = []
 
     @property

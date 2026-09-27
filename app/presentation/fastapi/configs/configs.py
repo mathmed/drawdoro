@@ -17,7 +17,7 @@ def apply_routes_config(app: FastAPI) -> None:
 def make_fastapi_app(settings: Settings) -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
-        description="A template for Python projects",
+        description="Architecture diagramming and documentation tool.",
     )
     app.add_middleware(
         CORSMiddleware,

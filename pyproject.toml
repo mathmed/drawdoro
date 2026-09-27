@@ -1,19 +1,15 @@
 [project]
-name = "py-awesome-template"
-description = ""
+name = "drawdoro"
+description = "Architecture diagramming and documentation tool"
 authors = []
-version = "1.0.0"
+version = "0.1.0"
 requires-python = ">=3.14"
-# Change project dependencies here
 dependencies = [
     "fastapi>=0.141.1",
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
     "uvicorn[standard]>=0.54.0",
 ]
-
-[project.urls]
-"Homepage" = "https://github.com/mathmed/py-awesome-template"
 
 [dependency-groups]
 dev = [
