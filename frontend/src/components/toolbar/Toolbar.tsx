@@ -26,6 +26,7 @@ export default function Toolbar() {
   const runValidation = useAppStore((state) => state.runValidation)
   const validationResults = useAppStore((state) => state.validationResults)
   const enterPresentation = useAppStore((state) => state.enterPresentation)
+  const peers = useAppStore((state) => state.peers)
 
   const [name, setName] = useState(activeDiagram?.name ?? '')
   const [isValidationOpen, setIsValidationOpen] = useState(false)
@@ -128,6 +129,19 @@ export default function Toolbar() {
           ▶️ Apresentar
         </button>
         <ExportMenu />
+        {peers > 1 ? (
+          <span
+            style={{
+              fontSize: 12,
+              color: '#10b981',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
+            👥 {peers}
+          </span>
+        ) : null}
       </div>
       {isValidationOpen ? (
         <ValidationModal

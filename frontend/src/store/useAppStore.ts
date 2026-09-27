@@ -58,6 +58,7 @@ interface AppState {
   isPresentationMode: boolean
   semanticMetadata: Record<string, ShapeMetadata>
   validationResults: ValidationResult[]
+  peers: number
 
   loadWorkspaces: () => Promise<void>
   setActiveWorkspace: (workspace: Workspace) => Promise<void>
@@ -93,6 +94,7 @@ interface AppState {
   updateShapeMetadata: (shapeId: string, metadata: Partial<ShapeMetadata>) => void
   saveSemanticMetadata: () => Promise<void>
   runValidation: () => void
+  setPeers: (n: number) => void
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -117,6 +119,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   isPresentationMode: false,
   semanticMetadata: {},
   validationResults: [],
+  peers: 1,
 
   loadWorkspaces: async () => {
     const workspaces = await listWorkspaces()
@@ -470,4 +473,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     const graph = buildArchitectureGraph(editor)
     set({ validationResults: validateArchitecture(graph, semanticMetadata) })
   },
+
+  setPeers: (n) => set({ peers: n }),
 }))
