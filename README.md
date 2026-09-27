@@ -61,6 +61,7 @@ Health check: `curl http://localhost:8000/health`
 | `CORS_ORIGINS` | `[]` | JSON list of allowed origins |
 | `DRAWDORO_API_URL` | `http://localhost:8000` | Backend URL used by the MCP server |
 | `DATABASE_URL` | `postgresql+asyncpg://drawdoro:drawdoro@localhost:5432/drawdoro` | PostgreSQL async connection URL |
+| `VITE_API_URL` | `/api` | Frontend base URL for the backend. Defaults to the Vite dev proxy that forwards `/api` to `http://localhost:8000`. |
 
 ## Folder structure
 
@@ -80,13 +81,15 @@ app/
   main/                   Entry point
 frontend/                 React + Vite + TypeScript
   src/
-    components/canvas/    tldraw wrapper
-    components/sidebar/   Project and folder navigation
-    components/docs/      Markdown documentation panel
-    components/toolbar/   Custom toolbar
+    components/layout/    Sidebar + canvas + docs three-zone shell
+    components/canvas/    tldraw wrapper with backend persistence
+    components/sidebar/   Workspace, project, folder and diagram navigation
+    components/docs/      Markdown documentation panel (auto-save)
+    components/toolbar/   Docs toggle and inline diagram rename
     pages/                Home, Diagram, NotFound
-    api/                  Axios HTTP client for the backend
+    api/                  Axios client and per-resource API functions
     store/                Zustand global state
+    hooks/                Reusable hooks (useDebounce)
     shapes/               Custom tldraw shapes
 mcp/                      Python MCP server
   server.py               Entry point
