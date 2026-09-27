@@ -1,3 +1,4 @@
+import type { Editor } from 'tldraw'
 import { create } from 'zustand'
 
 import { getDocumentation, upsertDocumentation } from '../api/documentation'
@@ -28,6 +29,10 @@ interface AppState {
   activeDiagram: Diagram | null
   documentation: DocumentationPage | null
   isDocsPanelOpen: boolean
+  editor: Editor | null
+  isCodePanelOpen: boolean
+  isTemplateModalOpen: boolean
+  codeLanguage: 'mermaid' | 'd2'
 
   loadWorkspaces: () => Promise<void>
   setActiveWorkspace: (workspace: Workspace) => Promise<void>
@@ -42,6 +47,12 @@ interface AppState {
   saveDocumentation: (content: string) => Promise<void>
   renameDiagram: (name: string) => Promise<void>
   toggleDocsPanel: () => void
+  setEditor: (editor: Editor | null) => void
+  toggleCodePanel: () => void
+  toggleTemplateModal: () => void
+  setCodeLanguage: (lang: 'mermaid' | 'd2') => void
+  saveMermaidSource: (source: string) => Promise<void>
+  saveD2Source: (source: string) => Promise<void>
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -54,6 +65,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   activeDiagram: null,
   documentation: null,
   isDocsPanelOpen: false,
+  editor: null,
+  isCodePanelOpen: false,
+  isTemplateModalOpen: false,
+  codeLanguage: 'mermaid',
 
   loadWorkspaces: async () => {
     const workspaces = await listWorkspaces()
@@ -216,4 +231,54 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   toggleDocsPanel: () => set({ isDocsPanelOpen: !get().isDocsPanelOpen }),
+
+  setEditor: (editor) => set({ editor }),
+
+  toggleCodePanel: () => set({ isCodePanelOpen: !get().isCodePanelOpen }),
+
+  toggleTemplateModal: () => set({ isTemplateModalOpen: !get().isTemplateModalOpen }),
+
+  setCodeLanguage: (lang) => set({ codeLanguage: lang }),
+
+  saveMermaidSource: async (source) => {
+    const { activeDiagram } = get()
+    if (activeDiagram === null) {
+      return
+    }
+    const updated = await updateDiagram(activeDiagram.project_id, activeDiagram.id, {
+      name: activeDiagram.name,
+      folder_id: activeDiagram.folder_id,
+      canvas_state: activeDiagram.canvas_state,
+      mermaid_source: source,
+      d2_source: activeDiagram.d2_source,
+      semantic_metadata: activeDiagram.semantic_metadata ?? null,
+    })
+    set({
+      activeDiagram: updated,
+      diagrams: get().diagrams.map((diagram) =>
+        diagram.id === updated.id ? updated : diagram,
+      ),
+    })
+  },
+
+  saveD2Source: async (source) => {
+    const { activeDiagram } = get()
+    if (activeDiagram === null) {
+      return
+    }
+    const updated = await updateDiagram(activeDiagram.project_id, activeDiagram.id, {
+      name: activeDiagram.name,
+      folder_id: activeDiagram.folder_id,
+      canvas_state: activeDiagram.canvas_state,
+      mermaid_source: activeDiagram.mermaid_source,
+      d2_source: source,
+      semantic_metadata: activeDiagram.semantic_metadata ?? null,
+    })
+    set({
+      activeDiagram: updated,
+      diagrams: get().diagrams.map((diagram) =>
+        diagram.id === updated.id ? updated : diagram,
+      ),
+    })
+  },
 }))

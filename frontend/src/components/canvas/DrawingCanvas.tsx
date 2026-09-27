@@ -10,14 +10,17 @@ interface DrawingCanvasProps {
 
 export default function DrawingCanvas({ diagram }: DrawingCanvasProps) {
   const saveCanvasState = useAppStore((state) => state.saveCanvasState)
+  const setEditor = useAppStore((state) => state.setEditor)
 
-  function handleMount(editor: Editor): void {
+  function handleMount(editor: Editor): () => void {
+    setEditor(editor)
+
     if (diagram.canvas_state !== null) {
       editor.store.loadSnapshot(diagram.canvas_state as unknown as TLStoreSnapshot)
     }
 
     let timer: ReturnType<typeof setTimeout>
-    editor.store.listen(
+    const unlisten = editor.store.listen(
       () => {
         clearTimeout(timer)
         timer = setTimeout(() => {
@@ -27,6 +30,12 @@ export default function DrawingCanvas({ diagram }: DrawingCanvasProps) {
       },
       { scope: 'document' },
     )
+
+    return () => {
+      clearTimeout(timer)
+      unlisten()
+      setEditor(null)
+    }
   }
 
   return (

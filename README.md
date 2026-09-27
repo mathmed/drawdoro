@@ -85,10 +85,13 @@ frontend/                 React + Vite + TypeScript
     components/canvas/    tldraw wrapper with backend persistence
     components/sidebar/   Workspace, project, folder and diagram navigation
     components/docs/      Markdown documentation panel (auto-save)
-    components/toolbar/   Docs toggle and inline diagram rename
+    components/code/      Mermaid/D2 code panel with live preview (auto-save)
+    components/templates/ Built-in diagram template picker modal
+    components/toolbar/   Docs/Code/Templates toggles, export menu and inline rename
     pages/                Home, Diagram, NotFound
     api/                  Axios client and per-resource API functions
     store/                Zustand global state
+    data/                 Static data (built-in templates)
     hooks/                Reusable hooks (useDebounce)
     shapes/               Custom tldraw shapes
 mcp/                      Python MCP server
