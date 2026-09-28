@@ -1,6 +1,6 @@
 # Repository Coverage
 
-
+[Full report](https://htmlpreview.github.io/?https://github.com/mathmed/drawdoro/blob/python-coverage-comment-action-data/htmlcov/index.html)
 
 | Name                                                                     |    Stmts |     Miss |   Cover |   Missing |
 |------------------------------------------------------------------------- | -------: | -------: | ------: | --------: |
@@ -18,7 +18,7 @@
 | app/domain/contracts/workspace\_repository.py                            |        4 |        0 |    100% |           |
 | app/domain/entities/models/base\_model.py                                |        3 |        0 |    100% |           |
 | app/domain/entities/models/comment.py                                    |        9 |        0 |    100% |           |
-| app/domain/entities/models/diagram.py                                    |       13 |        0 |    100% |           |
+| app/domain/entities/models/diagram.py                                    |       14 |        0 |    100% |           |
 | app/domain/entities/models/documentation\_page.py                        |        9 |        0 |    100% |           |
 | app/domain/entities/models/folder.py                                     |       10 |        0 |    100% |           |
 | app/domain/entities/models/identity.py                                   |        2 |        0 |    100% |           |
@@ -37,7 +37,9 @@
 | app/domain/usecases/diagram/create\_diagram.py                           |       14 |        2 |     86% |     21-27 |
 | app/domain/usecases/diagram/delete\_diagram.py                           |       13 |        4 |     69% |     17-20 |
 | app/domain/usecases/diagram/get\_diagram.py                              |       14 |        0 |    100% |           |
+| app/domain/usecases/diagram/get\_diagram\_by\_share\_token.py            |       13 |        0 |    100% |           |
 | app/domain/usecases/diagram/list\_diagrams.py                            |       10 |        1 |     90% |        17 |
+| app/domain/usecases/diagram/share\_diagram.py                            |       19 |        0 |    100% |           |
 | app/domain/usecases/diagram/update\_diagram.py                           |       22 |        8 |     64% |     23-30 |
 | app/domain/usecases/documentation/get\_documentation\_page.py            |       14 |        4 |     71% |     18-21 |
 | app/domain/usecases/documentation/upsert\_documentation\_page.py         |       11 |        2 |     82% |     18-19 |
@@ -63,7 +65,7 @@
 | app/infra/auth/cognito\_token\_verifier.py                               |       31 |        0 |    100% |           |
 | app/infra/database/models/comment.py                                     |       13 |        0 |    100% |           |
 | app/infra/database/models/custom\_shape.py                               |       14 |        0 |    100% |           |
-| app/infra/database/models/diagram.py                                     |       17 |        0 |    100% |           |
+| app/infra/database/models/diagram.py                                     |       18 |        0 |    100% |           |
 | app/infra/database/models/documentation\_page.py                         |       12 |        0 |    100% |           |
 | app/infra/database/models/folder.py                                      |       14 |        0 |    100% |           |
 | app/infra/database/models/project.py                                     |       14 |        0 |    100% |           |
@@ -71,7 +73,7 @@
 | app/infra/database/models/workspace.py                                   |       14 |        0 |    100% |           |
 | app/infra/database/models/workspace\_member.py                           |       12 |        0 |    100% |           |
 | app/infra/database/repositories/comment\_repository.py                   |       31 |       16 |     48% |17-27, 30-33, 36-42, 45-48, 52 |
-| app/infra/database/repositories/diagram\_repository.py                   |       43 |       26 |     40% |17-28, 31-38, 41-47, 50-56, 59-72, 75-83, 87 |
+| app/infra/database/repositories/diagram\_repository.py                   |       54 |       35 |     35% |17-28, 31-38, 41-48, 51-61, 64-70, 73-79, 82-95, 98-106, 110 |
 | app/infra/database/repositories/documentation\_page\_repository.py       |       25 |       13 |     48% |16-20, 23-38, 42 |
 | app/infra/database/repositories/folder\_repository.py                    |       38 |       22 |     42% |17-26, 29-36, 39-45, 48-59, 62-70, 74 |
 | app/infra/database/repositories/project\_repository.py                   |       38 |       19 |     50% |25-26, 29-36, 39-45, 48-59, 62-70, 74 |
@@ -83,7 +85,7 @@
 | app/main/main.py                                                         |        6 |        0 |    100% |           |
 | app/presentation/factories/auth\_factories.py                            |       23 |        0 |    100% |           |
 | app/presentation/factories/comment\_factories.py                         |       13 |        0 |    100% |           |
-| app/presentation/factories/diagram\_factories.py                         |       19 |        0 |    100% |           |
+| app/presentation/factories/diagram\_factories.py                         |       25 |        0 |    100% |           |
 | app/presentation/factories/documentation\_factories.py                   |       10 |        0 |    100% |           |
 | app/presentation/factories/folder\_factories.py                          |       19 |        0 |    100% |           |
 | app/presentation/factories/project\_factories.py                         |       19 |        0 |    100% |           |
@@ -101,18 +103,19 @@
 | app/presentation/fastapi/routes/folder\_routes.py                        |       30 |        0 |    100% |           |
 | app/presentation/fastapi/routes/health\_routes.py                        |        5 |        0 |    100% |           |
 | app/presentation/fastapi/routes/project\_routes.py                       |       30 |        0 |    100% |           |
-| app/presentation/fastapi/routes/websocket\_routes.py                     |       47 |        2 |     96% |    37, 46 |
+| app/presentation/fastapi/routes/share\_routes.py                         |       17 |        0 |    100% |           |
+| app/presentation/fastapi/routes/websocket\_routes.py                     |       63 |        6 |     90% |     66-77 |
 | app/presentation/fastapi/routes/workspace\_member\_routes.py             |       26 |        0 |    100% |           |
 | app/presentation/fastapi/routes/workspace\_routes.py                     |       32 |        0 |    100% |           |
 | app/presentation/fastapi/schemas/comment\_schemas.py                     |        7 |        0 |    100% |           |
-| app/presentation/fastapi/schemas/diagram\_schemas.py                     |       13 |        0 |    100% |           |
+| app/presentation/fastapi/schemas/diagram\_schemas.py                     |       17 |        0 |    100% |           |
 | app/presentation/fastapi/schemas/documentation\_schemas.py               |        6 |        0 |    100% |           |
 | app/presentation/fastapi/schemas/folder\_schemas.py                      |        9 |        0 |    100% |           |
 | app/presentation/fastapi/schemas/project\_schemas.py                     |        9 |        0 |    100% |           |
 | app/presentation/fastapi/schemas/user\_schemas.py                        |        4 |        0 |    100% |           |
 | app/presentation/fastapi/schemas/workspace\_member\_schemas.py           |        8 |        0 |    100% |           |
 | app/presentation/fastapi/schemas/workspace\_schemas.py                   |        7 |        0 |    100% |           |
-| **TOTAL**                                                                | **1724** |  **234** | **86%** |           |
+| **TOTAL**                                                                | **1812** |  **247** | **86%** |           |
 
 
 ## Setup coverage badge
@@ -121,11 +124,22 @@ Below are examples of the badges you can use in your main branch `README` file.
 
 ### Direct image
 
-[![Coverage badge](https://github.com/mathmed/drawdoro/raw/python-coverage-comment-action-data/badge.svg)](https://github.com/mathmed/drawdoro/tree/python-coverage-comment-action-data)
+[![Coverage badge](https://raw.githubusercontent.com/mathmed/drawdoro/python-coverage-comment-action-data/badge.svg)](https://htmlpreview.github.io/?https://github.com/mathmed/drawdoro/blob/python-coverage-comment-action-data/htmlcov/index.html)
 
 This is the one to use if your repository is private or if you don't want to customize anything.
 
+### [Shields.io](https://shields.io) Json Endpoint
 
+[![Coverage badge](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mathmed/drawdoro/python-coverage-comment-action-data/endpoint.json)](https://htmlpreview.github.io/?https://github.com/mathmed/drawdoro/blob/python-coverage-comment-action-data/htmlcov/index.html)
+
+Using this one will allow you to [customize](https://shields.io/endpoint) the look of your badge.
+It won't work with private repositories. It won't be refreshed more than once per five minutes.
+
+### [Shields.io](https://shields.io) Dynamic Badge
+
+[![Coverage badge](https://img.shields.io/badge/dynamic/json?color=brightgreen&label=coverage&query=%24.message&url=https%3A%2F%2Fraw.githubusercontent.com%2Fmathmed%2Fdrawdoro%2Fpython-coverage-comment-action-data%2Fendpoint.json)](https://htmlpreview.github.io/?https://github.com/mathmed/drawdoro/blob/python-coverage-comment-action-data/htmlcov/index.html)
+
+This one will always be the same color. It won't work for private repos. I'm not even sure why we included it.
 
 ## What is that?
 
