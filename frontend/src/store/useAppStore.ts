@@ -267,7 +267,15 @@ export const useAppStore = create<AppState>((set, get) => {
 
     setActiveProject: async (project) => {
       remember(LAST_PROJECT_KEY, project.id)
-      set({ activeProject: project, isLoadingProject: true })
+      // Clear the previous project's tree immediately; otherwise the newly
+      // expanded project shows the last project's folders/diagrams until the
+      // async fetch resolves, which looks like the tree is caching stale state.
+      const isSameProject = get().activeProject?.id === project.id
+      set({
+        activeProject: project,
+        isLoadingProject: true,
+        ...(isSameProject ? {} : { folders: [], diagrams: [] }),
+      })
       try {
         const [folders, diagrams] = await Promise.all([
           listFolders(project.id),
