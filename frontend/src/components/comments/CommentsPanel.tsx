@@ -1,21 +1,57 @@
-import { useState } from 'react'
+import { Crosshair, MessageSquare, MousePointerClick, SendHorizontal, User } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import type { TLShapeId } from 'tldraw'
 
 import { useComments } from '../../hooks/useComments'
 import { useAppStore } from '../../store/useAppStore'
+import { modKey, timeAgo } from '../../utils/format'
+import EmptyState from '../ui/EmptyState'
 
 export default function CommentsPanel() {
   const activeDiagram = useAppStore((state) => state.activeDiagram)
   const activeElementId = useAppStore((state) => state.activeElementId)
   const setActiveElement = useAppStore((state) => state.setActiveElement)
-  const toggleCommentsPanel = useAppStore((state) => state.toggleCommentsPanel)
   const editor = useAppStore((state) => state.editor)
   const addComment = useAppStore((state) => state.addComment)
 
   const { comments } = useComments(activeDiagram?.id ?? null, activeElementId)
   const [draft, setDraft] = useState('')
+  const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null)
 
-  const targetElementId =
-    activeElementId ?? (editor !== null ? editor.getOnlySelectedShapeId() : null)
+  useEffect(() => {
+    if (editor === null) {
+      return
+    }
+    function update(): void {
+      if (editor !== null) {
+        setSelectedShapeId(editor.getOnlySelectedShapeId())
+      }
+    }
+    update()
+    return editor.store.listen(update, { scope: 'session' })
+  }, [editor])
+
+  const targetElementId = activeElementId ?? selectedShapeId
+
+  function shapeLabel(elementId: string): string {
+    const shape = editor?.getShape(elementId as TLShapeId)
+    if (shape === undefined) {
+      return 'Deleted shape'
+    }
+    return shape.type.charAt(0).toUpperCase() + shape.type.slice(1)
+  }
+
+  function focusShape(elementId: string): void {
+    if (editor === null) {
+      return
+    }
+    const id = elementId as TLShapeId
+    if (editor.getShape(id) === undefined) {
+      return
+    }
+    editor.select(id)
+    editor.zoomToSelection({ animation: { duration: 240 } })
+  }
 
   async function handleSend(): Promise<void> {
     const content = draft.trim()
@@ -27,142 +63,87 @@ export default function CommentsPanel() {
   }
 
   return (
-    <aside
-      style={{
-        width: 300,
-        flexShrink: 0,
-        height: '100%',
-        background: '#161b22',
-        borderLeft: '1px solid #30363d',
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-    >
-      <header
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '10px 12px',
-          borderBottom: '1px solid #30363d',
-          fontSize: 13,
-          fontWeight: 600,
-        }}
-      >
-        <span>💬 Comments</span>
-        <button
-          type="button"
-          onClick={toggleCommentsPanel}
-          style={{
-            background: 'transparent',
-            color: '#8b949e',
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: 14,
-          }}
-        >
-          ✕
-        </button>
-      </header>
-
+    <>
       {activeElementId !== null ? (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '6px 12px',
-            borderBottom: '1px solid #30363d',
-            fontSize: 12,
-            color: '#8b949e',
-          }}
-        >
-          <span>On element: {activeElementId.slice(0, 12)}…</span>
-          <button
-            type="button"
-            onClick={() => setActiveElement(null)}
-            style={{
-              background: 'transparent',
-              color: '#2f81f7',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: 12,
-            }}
-          >
-            show all
+        <div className="panel-toolbar">
+          <span className="context-chip">
+            <Crosshair size={13} /> Showing comments on {shapeLabel(activeElementId).toLowerCase()}
+          </span>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setActiveElement(null)}>
+            Show all
           </button>
         </div>
       ) : null}
 
-      <div style={{ flex: 1, overflow: 'auto', padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div className="scroll" style={{ flex: 1 }}>
         {comments.length === 0 ? (
-          <div style={{ color: '#8b949e', fontSize: 13 }}>No comments yet.</div>
+          <EmptyState
+            icon={<MessageSquare size={20} />}
+            title={activeElementId !== null ? 'No comments on this shape' : 'No comments yet'}
+            description="Select a shape on the canvas — or right-click it and choose Comment — to start a thread."
+          />
         ) : (
-          comments.map((comment) => (
-            <div
-              key={comment.id}
-              style={{
-                background: '#0f1117',
-                border: '1px solid #30363d',
-                borderRadius: 8,
-                padding: 8,
-              }}
-            >
-              <div style={{ fontSize: 13, color: '#e6edf3', whiteSpace: 'pre-wrap' }}>
-                {comment.content}
+          <div className="panel-content" style={{ gap: 18 }}>
+            {comments.map((comment) => (
+              <div key={comment.id} className="comment">
+                <div className="comment-avatar">
+                  <User size={14} />
+                </div>
+                <div className="comment-body">
+                  <div className="comment-meta">
+                    <span className="comment-author">Anonymous</span>
+                    <span>·</span>
+                    <span title={new Date(comment.created_at).toLocaleString()}>{timeAgo(comment.created_at)}</span>
+                  </div>
+                  <div className="comment-text">{comment.content}</div>
+                  {activeElementId === null ? (
+                    <button type="button" className="comment-link" onClick={() => focusShape(comment.element_id)}>
+                      on {shapeLabel(comment.element_id).toLowerCase()} →
+                    </button>
+                  ) : null}
+                </div>
               </div>
-              <div style={{ fontSize: 11, color: '#8b949e', marginTop: 4 }}>
-                {new Date(comment.created_at).toLocaleString()}
-              </div>
-            </div>
-          ))
+            ))}
+          </div>
         )}
       </div>
 
-      <div style={{ borderTop: '1px solid #30363d', padding: 12 }}>
+      <div className="composer">
         {targetElementId === null ? (
-          <div style={{ fontSize: 12, color: '#8b949e', marginBottom: 6 }}>
-            Select an element to comment on it.
+          <span className="context-chip">
+            <MousePointerClick size={13} /> Select a shape to comment on it
+          </span>
+        ) : (
+          <span className="context-chip">
+            <Crosshair size={13} /> Commenting on {shapeLabel(targetElementId).toLowerCase()}
+          </span>
+        )}
+        <div className="composer-box">
+          <textarea
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            placeholder={targetElementId === null ? 'No shape selected' : 'Write a comment…'}
+            disabled={targetElementId === null}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                event.preventDefault()
+                void handleSend()
+              }
+            }}
+          />
+          <div className="composer-footer">
+            <span>{modKey} ↵ to send</span>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => void handleSend()}
+              disabled={targetElementId === null || draft.trim() === ''}
+            >
+              <SendHorizontal size={13} /> Send
+            </button>
           </div>
-        ) : null}
-        <textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="Write a comment…"
-          disabled={targetElementId === null}
-          style={{
-            width: '100%',
-            boxSizing: 'border-box',
-            resize: 'vertical',
-            minHeight: 60,
-            background: '#0f1117',
-            color: '#e6edf3',
-            border: '1px solid #30363d',
-            borderRadius: 6,
-            padding: 8,
-            fontSize: 13,
-          }}
-        />
-        <button
-          type="button"
-          onClick={() => void handleSend()}
-          disabled={targetElementId === null || draft.trim() === ''}
-          style={{
-            marginTop: 8,
-            width: '100%',
-            background: '#2f81f7',
-            color: '#e6edf3',
-            border: '1px solid #30363d',
-            borderRadius: 6,
-            padding: '6px 12px',
-            fontSize: 13,
-            cursor: targetElementId === null ? 'default' : 'pointer',
-            opacity: targetElementId === null || draft.trim() === '' ? 0.6 : 1,
-          }}
-        >
-          Comment
-        </button>
+        </div>
       </div>
-    </aside>
+    </>
   )
 }

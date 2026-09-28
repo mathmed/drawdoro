@@ -1,36 +1,63 @@
-import { useState } from 'react'
+import {
+  ChevronRight,
+  ChevronsUpDown,
+  FilePlus2,
+  Folder as FolderIcon,
+  FolderOpen,
+  FolderPlus,
+  House,
+  Layers,
+  Monitor,
+  Moon,
+  MoreHorizontal,
+  PanelLeftClose,
+  Pencil,
+  Plus,
+  Search,
+  Sun,
+  Trash2,
+  Workflow,
+} from 'lucide-react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import type { Diagram, Folder, Project } from '../../api/types'
 import { useAppStore } from '../../store/useAppStore'
+import { confirmDialog, promptDialog } from '../../store/useDialogStore'
+import { useThemeStore, type ThemePreference } from '../../store/useThemeStore'
+import { initial, modKey, slugify } from '../../utils/format'
+import Logo from '../ui/Logo'
+import Menu, { type MenuEntry } from '../ui/Menu'
 
-function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
+const INDENT = 14
+
+function RowMenu({ items, label }: { items: MenuEntry[]; label: string }) {
+  return (
+    <Menu
+      align="end"
+      items={items}
+      trigger={({ toggle }) => (
+        <button
+          type="button"
+          className="btn btn-ghost btn-icon btn-xs"
+          aria-label={label}
+          onClick={(event) => {
+            event.stopPropagation()
+            toggle()
+          }}
+        >
+          {label === 'Add' ? <Plus size={14} /> : <MoreHorizontal size={14} />}
+        </button>
+      )}
+    />
+  )
 }
 
-const rowStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 4,
-  fontSize: 13,
-  padding: '3px 4px',
-  borderRadius: 4,
-  cursor: 'pointer',
-  userSelect: 'none',
-}
-
-const addButtonStyle: React.CSSProperties = {
-  background: 'transparent',
-  border: 'none',
-  color: '#8b949e',
-  cursor: 'pointer',
-  fontSize: 12,
-  padding: '0 2px',
-}
+const THEME_OPTIONS: { value: ThemePreference; icon: ReactNode; label: string }[] = [
+  { value: 'light', icon: <Sun size={14} />, label: 'Light' },
+  { value: 'dark', icon: <Moon size={14} />, label: 'Dark' },
+  { value: 'system', icon: <Monitor size={14} />, label: 'System' },
+]
 
 export default function Sidebar() {
   const navigate = useNavigate()
@@ -42,264 +69,435 @@ export default function Sidebar() {
   const folders = useAppStore((state) => state.folders)
   const diagrams = useAppStore((state) => state.diagrams)
   const activeDiagram = useAppStore((state) => state.activeDiagram)
+  const isLoadingProject = useAppStore((state) => state.isLoadingProject)
 
   const setActiveWorkspace = useAppStore((state) => state.setActiveWorkspace)
   const setActiveProject = useAppStore((state) => state.setActiveProject)
-  const setActiveDiagram = useAppStore((state) => state.setActiveDiagram)
   const createWorkspace = useAppStore((state) => state.createWorkspace)
   const createProject = useAppStore((state) => state.createProject)
+  const renameProject = useAppStore((state) => state.renameProject)
+  const deleteProject = useAppStore((state) => state.deleteProject)
   const createFolder = useAppStore((state) => state.createFolder)
-  const createDiagram = useAppStore((state) => state.createDiagram)
+  const renameFolder = useAppStore((state) => state.renameFolder)
+  const deleteFolder = useAppStore((state) => state.deleteFolder)
+  const renameDiagram = useAppStore((state) => state.renameDiagram)
+  const deleteDiagram = useAppStore((state) => state.deleteDiagram)
+  const openNewDiagram = useAppStore((state) => state.openNewDiagram)
+  const toggleSidebar = useAppStore((state) => state.toggleSidebar)
+  const setCommandPaletteOpen = useAppStore((state) => state.setCommandPaletteOpen)
 
-  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set())
+  const themePreference = useThemeStore((state) => state.preference)
+  const setThemePreference = useThemeStore((state) => state.setPreference)
+
+  const [collapsedProject, setCollapsedProject] = useState<string | null>(null)
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
 
-  function toggle(set: Set<string>, id: string): Set<string> {
-    const next = new Set(set)
-    if (next.has(id)) {
-      next.delete(id)
-    } else {
-      next.add(id)
+  // Reveal the active diagram in the tree by expanding every folder above it.
+  useEffect(() => {
+    if (activeDiagram === null || activeDiagram.folder_id === null) {
+      return
     }
-    return next
-  }
+    const ancestors: string[] = []
+    let current = folders.find((folder) => folder.id === activeDiagram.folder_id)
+    while (current !== undefined) {
+      ancestors.push(current.id)
+      const parentId = current.parent_folder_id
+      current = folders.find((folder) => folder.id === parentId)
+    }
+    setExpandedFolders((previous) => new Set([...previous, ...ancestors]))
+  }, [activeDiagram, folders])
 
-  async function handleSelectWorkspace(id: string): Promise<void> {
-    const workspace = workspaces.find((item) => item.id === id)
-    if (workspace !== undefined) {
-      await setActiveWorkspace(workspace)
-    }
+  function toggleFolder(id: string): void {
+    setExpandedFolders((current) => {
+      const next = new Set(current)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
   }
 
   async function handleCreateWorkspace(): Promise<void> {
-    const name = window.prompt('Workspace name')?.trim()
-    if (name === undefined || name === '') {
+    const name = await promptDialog({
+      title: 'New workspace',
+      description: 'Workspaces group projects and the people who work on them.',
+      label: 'Name',
+      placeholder: 'e.g. Platform Engineering',
+    })
+    if (name === null) {
       return
     }
-    const slug = window.prompt('Workspace slug', slugify(name))?.trim()
-    if (slug === undefined || slug === '') {
-      return
-    }
+    const slug = slugify(name) || `workspace-${Date.now()}`
     await createWorkspace(name, slug)
   }
 
   async function handleCreateProject(): Promise<void> {
-    const name = window.prompt('Project name')?.trim()
-    if (name === undefined || name === '') {
-      return
+    const name = await promptDialog({
+      title: 'New project',
+      description: 'Projects hold the diagrams, docs and decisions for a system.',
+      label: 'Name',
+      placeholder: 'e.g. Payments platform',
+    })
+    if (name !== null) {
+      await createProject(name)
+      navigate('/')
     }
-    await createProject(name)
-  }
-
-  async function handleExpandProject(project: Project): Promise<void> {
-    if (activeProject?.id !== project.id) {
-      await setActiveProject(project)
-    }
-    setExpandedProjects((current) => toggle(current, project.id))
   }
 
   async function handleCreateFolder(parentId?: string): Promise<void> {
-    const name = window.prompt('Folder name')?.trim()
-    if (name === undefined || name === '') {
+    const name = await promptDialog({ title: 'New folder', label: 'Name', placeholder: 'e.g. Services' })
+    if (name === null) {
       return
     }
     await createFolder(name, parentId)
+    if (parentId !== undefined) {
+      setExpandedFolders((current) => new Set([...current, parentId]))
+    }
   }
 
-  async function handleCreateDiagram(folderId?: string): Promise<void> {
-    const name = window.prompt('Diagram name')?.trim()
-    if (name === undefined || name === '') {
+  function handleNewDiagram(folderId?: string): void {
+    if (folderId !== undefined) {
+      setExpandedFolders((current) => new Set([...current, folderId]))
+    }
+    openNewDiagram(folderId)
+  }
+
+  async function handleSelectProject(project: Project): Promise<void> {
+    if (activeProject?.id === project.id) {
+      setCollapsedProject((current) => (current === project.id ? null : project.id))
       return
     }
-    const diagram = await createDiagram(name, folderId)
-    if (diagram !== null) {
-      await setActiveDiagram(diagram)
-      navigate(`/diagrams/${diagram.id}`)
+    setCollapsedProject(null)
+    await setActiveProject(project)
+    if (activeDiagram !== null) {
+      navigate('/')
     }
   }
 
-  async function handleOpenDiagram(diagram: Diagram): Promise<void> {
-    await setActiveDiagram(diagram)
-    navigate(`/diagrams/${diagram.id}`)
+  async function handleRenameProject(project: Project): Promise<void> {
+    const name = await promptDialog({
+      title: 'Rename project',
+      label: 'Name',
+      initialValue: project.name,
+      confirmLabel: 'Rename',
+    })
+    if (name !== null && name !== project.name) {
+      await renameProject(project, name)
+    }
+  }
+
+  async function handleDeleteProject(project: Project): Promise<void> {
+    const confirmed = await confirmDialog({
+      title: `Delete “${project.name}”?`,
+      description: 'All folders, diagrams, docs and comments in this project will be permanently deleted.',
+      confirmLabel: 'Delete project',
+      danger: true,
+    })
+    if (confirmed) {
+      await deleteProject(project)
+      navigate('/')
+    }
+  }
+
+  async function handleRenameFolder(folder: Folder): Promise<void> {
+    const name = await promptDialog({
+      title: 'Rename folder',
+      label: 'Name',
+      initialValue: folder.name,
+      confirmLabel: 'Rename',
+    })
+    if (name !== null && name !== folder.name) {
+      await renameFolder(folder, name)
+    }
+  }
+
+  async function handleDeleteFolder(folder: Folder): Promise<void> {
+    const confirmed = await confirmDialog({
+      title: `Delete folder “${folder.name}”?`,
+      description: 'The folder is removed. Diagrams and subfolders inside it move to the project root.',
+      confirmLabel: 'Delete folder',
+      danger: true,
+    })
+    if (confirmed) {
+      await deleteFolder(folder)
+    }
+  }
+
+  async function handleRenameDiagram(diagram: Diagram): Promise<void> {
+    const name = await promptDialog({
+      title: 'Rename diagram',
+      label: 'Name',
+      initialValue: diagram.name,
+      confirmLabel: 'Rename',
+    })
+    if (name !== null && name !== diagram.name) {
+      await renameDiagram(name, diagram)
+    }
+  }
+
+  async function handleDeleteDiagram(diagram: Diagram): Promise<void> {
+    const confirmed = await confirmDialog({
+      title: `Delete “${diagram.name}”?`,
+      description: 'The diagram, its documentation and comments will be permanently deleted.',
+      confirmLabel: 'Delete diagram',
+      danger: true,
+    })
+    if (!confirmed) {
+      return
+    }
+    const wasActive = activeDiagram?.id === diagram.id
+    await deleteDiagram(diagram)
+    if (wasActive) {
+      navigate('/')
+    }
   }
 
   function childFolders(parentId: string | null): Folder[] {
-    return folders.filter((folder) => folder.parent_folder_id === parentId)
+    return folders
+      .filter((folder) => folder.parent_folder_id === parentId)
+      .sort((a, b) => a.name.localeCompare(b.name))
   }
 
   function folderDiagrams(folderId: string | null): Diagram[] {
-    return diagrams.filter((diagram) => diagram.folder_id === folderId)
+    return diagrams
+      .filter((diagram) => diagram.folder_id === folderId)
+      .sort((a, b) => a.name.localeCompare(b.name))
   }
 
-  function renderFolder(folder: Folder, depth: number): React.ReactNode {
+  function addMenu(folderId?: string): MenuEntry[] {
+    return [
+      { label: 'New diagram', icon: <FilePlus2 size={15} />, onSelect: () => handleNewDiagram(folderId) },
+      { label: 'New folder', icon: <FolderPlus size={15} />, onSelect: () => void handleCreateFolder(folderId) },
+    ]
+  }
+
+  function renderDiagram(diagram: Diagram, depth: number): ReactNode {
+    return (
+      <div
+        key={diagram.id}
+        className="tree-row"
+        data-active={activeDiagram?.id === diagram.id}
+        style={{ paddingLeft: 8 + depth * INDENT + 18 }}
+        onClick={() => navigate(`/diagrams/${diagram.id}`)}
+      >
+        <Workflow size={15} />
+        <span className="tree-label">{diagram.name}</span>
+        <div className="tree-actions">
+          <RowMenu
+            label="More"
+            items={[
+              { label: 'Rename', icon: <Pencil size={15} />, onSelect: () => void handleRenameDiagram(diagram) },
+              { kind: 'separator' },
+              {
+                label: 'Delete',
+                icon: <Trash2 size={15} />,
+                danger: true,
+                onSelect: () => void handleDeleteDiagram(diagram),
+              },
+            ]}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  function renderFolder(folder: Folder, depth: number): ReactNode {
     const isExpanded = expandedFolders.has(folder.id)
     return (
       <div key={folder.id}>
-        <div style={{ ...rowStyle, paddingLeft: 8 + depth * 12 }}>
-          <span
-            style={{ flex: 1 }}
-            onClick={() => setExpandedFolders((current) => toggle(current, folder.id))}
-          >
-            {isExpanded ? '📂' : '📁'} {folder.name}
+        <div
+          className="tree-row"
+          style={{ paddingLeft: 8 + depth * INDENT }}
+          onClick={() => toggleFolder(folder.id)}
+        >
+          <span className="tree-chevron" data-open={isExpanded}>
+            <ChevronRight size={14} />
           </span>
-          <button
-            type="button"
-            title="New subfolder"
-            style={addButtonStyle}
-            onClick={() => void handleCreateFolder(folder.id)}
-          >
-            📁+
-          </button>
-          <button
-            type="button"
-            title="New diagram"
-            style={addButtonStyle}
-            onClick={() => void handleCreateDiagram(folder.id)}
-          >
-            📄+
-          </button>
+          {isExpanded ? <FolderOpen size={15} /> : <FolderIcon size={15} />}
+          <span className="tree-label">{folder.name}</span>
+          <div className="tree-actions">
+            <RowMenu label="Add" items={addMenu(folder.id)} />
+            <RowMenu
+              label="More"
+              items={[
+                { label: 'Rename', icon: <Pencil size={15} />, onSelect: () => void handleRenameFolder(folder) },
+                { kind: 'separator' },
+                {
+                  label: 'Delete',
+                  icon: <Trash2 size={15} />,
+                  danger: true,
+                  onSelect: () => void handleDeleteFolder(folder),
+                },
+              ]}
+            />
+          </div>
         </div>
         {isExpanded ? (
           <div>
             {childFolders(folder.id).map((child) => renderFolder(child, depth + 1))}
             {folderDiagrams(folder.id).map((diagram) => renderDiagram(diagram, depth + 1))}
+            {childFolders(folder.id).length === 0 && folderDiagrams(folder.id).length === 0 ? (
+              <div className="tree-empty" style={{ paddingLeft: 8 + (depth + 1) * INDENT + 18 }}>
+                Empty folder
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>
     )
   }
 
-  function renderDiagram(diagram: Diagram, depth: number): React.ReactNode {
-    const isActive = activeDiagram?.id === diagram.id
-    return (
-      <div
-        key={diagram.id}
-        style={{
-          ...rowStyle,
-          paddingLeft: 8 + depth * 12,
-          background: isActive ? '#1f6feb33' : 'transparent',
-          color: isActive ? '#e6edf3' : '#c9d1d9',
-        }}
-        onClick={() => void handleOpenDiagram(diagram)}
-      >
-        📄 {diagram.name}
-      </div>
-    )
-  }
-
-  function renderProject(project: Project): React.ReactNode {
-    const isExpanded = expandedProjects.has(project.id) && activeProject?.id === project.id
+  function renderProject(project: Project): ReactNode {
+    const isActive = activeProject?.id === project.id
+    const isExpanded = isActive && collapsedProject !== project.id
+    const isEmpty = folders.length === 0 && diagrams.length === 0
     return (
       <div key={project.id}>
-        <div style={{ ...rowStyle, fontWeight: 600 }}>
-          <span style={{ flex: 1 }} onClick={() => void handleExpandProject(project)}>
-            {isExpanded ? '▾' : '▸'} {project.name}
+        <div
+          className="tree-row"
+          data-strong={isActive}
+          style={{ paddingLeft: 8 }}
+          onClick={() => void handleSelectProject(project)}
+        >
+          <span className="tree-chevron" data-open={isExpanded}>
+            <ChevronRight size={14} />
           </span>
-          <button
-            type="button"
-            title="New folder"
-            style={addButtonStyle}
-            onClick={() => void handleCreateFolder()}
-          >
-            📁+
-          </button>
-          <button
-            type="button"
-            title="New diagram"
-            style={addButtonStyle}
-            onClick={() => void handleCreateDiagram()}
-          >
-            📄+
-          </button>
+          <Layers size={15} />
+          <span className="tree-label">{project.name}</span>
+          <div className="tree-actions">
+            {isActive ? <RowMenu label="Add" items={addMenu()} /> : null}
+            <RowMenu
+              label="More"
+              items={[
+                { label: 'Rename', icon: <Pencil size={15} />, onSelect: () => void handleRenameProject(project) },
+                { kind: 'separator' },
+                {
+                  label: 'Delete project',
+                  icon: <Trash2 size={15} />,
+                  danger: true,
+                  onSelect: () => void handleDeleteProject(project),
+                },
+              ]}
+            />
+          </div>
         </div>
         {isExpanded ? (
           <div>
             {childFolders(null).map((folder) => renderFolder(folder, 1))}
             {folderDiagrams(null).map((diagram) => renderDiagram(diagram, 1))}
+            {isEmpty && !isLoadingProject ? (
+              <div className="tree-empty" style={{ paddingLeft: 8 + INDENT + 18 }}>
+                No diagrams yet ·{' '}
+                <button type="button" onClick={() => handleNewDiagram()}>
+                  Create one
+                </button>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>
     )
   }
 
+  const workspaceItems: MenuEntry[] = [
+    { kind: 'label', label: 'Workspaces' },
+    ...workspaces.map((workspace) => ({
+      label: workspace.name,
+      icon: <span className="avatar" style={{ width: 20, height: 20, fontSize: 10.5 }}>{initial(workspace.name)}</span>,
+      checked: workspace.id === activeWorkspace?.id,
+      onSelect: () => {
+        void setActiveWorkspace(workspace)
+        navigate('/')
+      },
+    })),
+    { kind: 'separator' },
+    { label: 'New workspace', icon: <Plus size={15} />, onSelect: () => void handleCreateWorkspace() },
+  ]
+
   return (
-    <aside
-      style={{
-        width: 250,
-        flexShrink: 0,
-        height: '100%',
-        background: '#161b22',
-        borderRight: '1px solid #30363d',
-        display: 'flex',
-        flexDirection: 'column',
-        color: '#e6edf3',
-      }}
-    >
-      <div style={{ padding: '10px 12px', borderBottom: '1px solid #30363d' }}>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <select
-            value={activeWorkspace?.id ?? ''}
-            onChange={(event) => void handleSelectWorkspace(event.target.value)}
-            style={{
-              flex: 1,
-              background: '#0f1117',
-              color: '#e6edf3',
-              border: '1px solid #30363d',
-              borderRadius: 6,
-              padding: '5px 6px',
-              fontSize: 13,
-            }}
-          >
-            {workspaces.length === 0 ? <option value="">No workspaces</option> : null}
-            {workspaces.map((workspace) => (
-              <option key={workspace.id} value={workspace.id}>
-                {workspace.name}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            title="New workspace"
-            onClick={() => void handleCreateWorkspace()}
-            style={{
-              background: '#21262d',
-              color: '#e6edf3',
-              border: '1px solid #30363d',
-              borderRadius: 6,
-              padding: '5px 8px',
-              cursor: 'pointer',
-            }}
-          >
-            +
-          </button>
-        </div>
+    <aside className="sidebar">
+      <div className="sidebar-header">
+        <Menu
+          className="menu-anchor workspace-anchor"
+          items={workspaceItems}
+          trigger={({ toggle }) => (
+            <button type="button" className="workspace-switcher" onClick={toggle}>
+              <span className="avatar">{initial(activeWorkspace?.name)}</span>
+              <span className="workspace-switcher-name">{activeWorkspace?.name ?? 'No workspace'}</span>
+              <ChevronsUpDown size={14} />
+            </button>
+          )}
+        />
+        <button
+          type="button"
+          className="btn btn-ghost btn-icon btn-sm"
+          aria-label="Collapse sidebar"
+          data-tooltip={`Collapse  ${modKey} \\`}
+          onClick={toggleSidebar}
+        >
+          <PanelLeftClose size={16} />
+        </button>
       </div>
 
-      <div style={{ flex: 1, overflow: 'auto', padding: '8px 6px' }}>
+      <button type="button" className="sidebar-search" onClick={() => setCommandPaletteOpen(true)}>
+        <Search size={14} />
+        <span>Search…</span>
+        <kbd className="kbd">{modKey} K</kbd>
+      </button>
+
+      <div className="sidebar-body scroll">
         <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '0 4px 4px',
-            fontSize: 11,
-            textTransform: 'uppercase',
-            letterSpacing: 0.5,
-            color: '#8b949e',
-          }}
+          className="tree-row"
+          data-active={activeDiagram === null && activeProject !== null}
+          style={{ paddingLeft: 8 }}
+          onClick={() => navigate('/')}
         >
+          <House size={15} />
+          <span className="tree-label">Overview</span>
+        </div>
+
+        <div className="sidebar-section">
           <span>Projects</span>
           <button
             type="button"
-            title="New project"
-            style={addButtonStyle}
+            className="btn btn-ghost btn-icon btn-xs"
+            aria-label="New project"
+            data-tooltip="New project"
             disabled={activeWorkspace === null}
             onClick={() => void handleCreateProject()}
           >
-            +
+            <Plus size={14} />
           </button>
         </div>
         {projects.map((project) => renderProject(project))}
+        {activeWorkspace !== null && projects.length === 0 ? (
+          <div className="tree-empty">
+            No projects ·{' '}
+            <button type="button" onClick={() => void handleCreateProject()}>
+              Create one
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="sidebar-footer">
+        <Logo size={20} withWordmark />
+        <div className="segmented" role="group" aria-label="Theme">
+          {THEME_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              aria-label={option.label}
+              aria-pressed={themePreference === option.value}
+              title={option.label}
+              onClick={() => setThemePreference(option.value)}
+            >
+              {option.icon}
+            </button>
+          ))}
+        </div>
       </div>
     </aside>
   )

@@ -33,8 +33,6 @@ export interface Diagram {
   folder_id: string | null
   name: string
   canvas_state: CanvasState | null
-  mermaid_source: string | null
-  d2_source: string | null
   semantic_metadata?: SemanticMetadata | null
   created_at?: string
   updated_at?: string
@@ -57,28 +55,6 @@ export interface Comment {
   created_at: string
 }
 
-export type AdrStatus = 'proposed' | 'accepted' | 'deprecated' | 'superseded'
-
-export interface Adr {
-  id: string
-  diagram_id: string
-  title: string
-  context: string
-  decision: string
-  consequences: string
-  status: AdrStatus
-  created_at: string
-  updated_at: string
-}
-
-export interface CreateAdrData {
-  title: string
-  context: string
-  decision: string
-  consequences: string
-  status: AdrStatus
-}
-
 export type SemanticType =
   | 'service'
   | 'database'
@@ -99,4 +75,5 @@ export interface ShapeMetadata {
 export interface ValidationResult {
   severity: 'error' | 'warning'
   message: string
+  shapeIds: string[]
 }

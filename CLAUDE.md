@@ -58,12 +58,10 @@ tests/integration/ HTTP tests with TestClient
 | Workspace | Group of users; top-level organisational unit |
 | Project | Belongs to a Workspace; groups diagrams and folders |
 | Folder | Nestable; belongs to a Project or another Folder |
-| Diagram | canvas_state (tldraw JSON), mermaid_source, d2_source, semantic_metadata |
+| Diagram | canvas_state (tldraw JSON), semantic_metadata |
 | DocumentationPage | Markdown page linked to a Diagram (one per diagram) |
 | Comment | Anchored to a diagram element via element_id |
-| Template | Reusable diagram global or scoped to a Workspace |
 | CustomShape | tldraw custom shape owned by a user or Workspace |
-| ADR | Architecture Decision Record: proposed/accepted/deprecated/superseded |
 | User | Member of one or more Workspaces |
 | WorkspaceMember | User x Workspace join with role: owner/editor/viewer |
 

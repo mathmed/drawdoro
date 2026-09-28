@@ -20,8 +20,6 @@ class DiagramRepositoryImpl(DiagramRepository):
             folder_id=diagram.folder_id,
             name=diagram.name,
             canvas_state=diagram.canvas_state,
-            mermaid_source=diagram.mermaid_source,
-            d2_source=diagram.d2_source,
             semantic_metadata=diagram.semantic_metadata,
         )
         self._session.add(orm)
@@ -68,8 +66,6 @@ class DiagramRepositoryImpl(DiagramRepository):
         orm.name = diagram.name
         orm.folder_id = diagram.folder_id
         orm.canvas_state = diagram.canvas_state
-        orm.mermaid_source = diagram.mermaid_source
-        orm.d2_source = diagram.d2_source
         orm.semantic_metadata = diagram.semantic_metadata
         await self._session.commit()
         await self._session.refresh(orm)
@@ -94,8 +90,6 @@ def _to_domain(orm: DiagramORM) -> Diagram:
         folder_id=orm.folder_id,
         name=orm.name,
         canvas_state=orm.canvas_state,
-        mermaid_source=orm.mermaid_source,
-        d2_source=orm.d2_source,
         semantic_metadata=orm.semantic_metadata,
         created_at=orm.created_at,
         updated_at=orm.updated_at,

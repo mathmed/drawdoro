@@ -1,0 +1,58 @@
+diff --git a/node_modules/tldraw/dist-cjs/lib/shapes/arrow/arrowheads.js b/node_modules/tldraw/dist-cjs/lib/shapes/arrow/arrowheads.js
+index fb527b1..4dbe893 100644
+--- a/node_modules/tldraw/dist-cjs/lib/shapes/arrow/arrowheads.js
++++ b/node_modules/tldraw/dist-cjs/lib/shapes/arrow/arrowheads.js
+@@ -29,13 +29,13 @@ function getArrowPoints(info, side, strokeWidth) {
+     case "straight": {
+       const opposite = side === "end" ? info.start.point : info.end.point;
+       const compareLength = import_editor.Vec.Dist(opposite, point);
+-      const length = (0, import_editor.clamp)(compareLength / 5, strokeWidth, strokeWidth * 3);
++      const length = (0, import_editor.clamp)(compareLength / 5, Math.max(strokeWidth * 2, 10), Math.max(strokeWidth * 4, 18));
+       int = import_editor.Vec.Nudge(point, opposite, length);
+       break;
+     }
+     case "arc": {
+       const compareLength = Math.abs(info.bodyArc.length);
+-      const length = (0, import_editor.clamp)(compareLength / 5, strokeWidth, strokeWidth * 3);
++      const length = (0, import_editor.clamp)(compareLength / 5, Math.max(strokeWidth * 2, 10), Math.max(strokeWidth * 4, 18));
+       const intersections = (0, import_editor.intersectCircleCircle)(
+         point,
+         length,
+@@ -48,7 +48,7 @@ function getArrowPoints(info, side, strokeWidth) {
+     case "elbow": {
+       const previousPoint = side === "end" ? info.route.points[info.route.points.length - 2] : info.route.points[1];
+       const previousSegmentLength = import_editor.Vec.ManhattanDist(previousPoint, point);
+-      const length = (0, import_editor.clamp)(previousSegmentLength / 2, strokeWidth, strokeWidth * 3);
++      const length = (0, import_editor.clamp)(previousSegmentLength / 2, Math.max(strokeWidth * 2, 10), Math.max(strokeWidth * 4, 18));
+       int = previousPoint ? import_editor.Vec.Nudge(point, previousPoint, length) : point;
+       break;
+     }
+diff --git a/node_modules/tldraw/dist-esm/lib/shapes/arrow/arrowheads.mjs b/node_modules/tldraw/dist-esm/lib/shapes/arrow/arrowheads.mjs
+index 0e5a12d..0224e1d 100644
+--- a/node_modules/tldraw/dist-esm/lib/shapes/arrow/arrowheads.mjs
++++ b/node_modules/tldraw/dist-esm/lib/shapes/arrow/arrowheads.mjs
+@@ -13,13 +13,13 @@ function getArrowPoints(info, side, strokeWidth) {
+     case "straight": {
+       const opposite = side === "end" ? info.start.point : info.end.point;
+       const compareLength = Vec.Dist(opposite, point);
+-      const length = clamp(compareLength / 5, strokeWidth, strokeWidth * 3);
++      const length = clamp(compareLength / 5, Math.max(strokeWidth * 2, 10), Math.max(strokeWidth * 4, 18));
+       int = Vec.Nudge(point, opposite, length);
+       break;
+     }
+     case "arc": {
+       const compareLength = Math.abs(info.bodyArc.length);
+-      const length = clamp(compareLength / 5, strokeWidth, strokeWidth * 3);
++      const length = clamp(compareLength / 5, Math.max(strokeWidth * 2, 10), Math.max(strokeWidth * 4, 18));
+       const intersections = intersectCircleCircle(
+         point,
+         length,
+@@ -32,7 +32,7 @@ function getArrowPoints(info, side, strokeWidth) {
+     case "elbow": {
+       const previousPoint = side === "end" ? info.route.points[info.route.points.length - 2] : info.route.points[1];
+       const previousSegmentLength = Vec.ManhattanDist(previousPoint, point);
+-      const length = clamp(previousSegmentLength / 2, strokeWidth, strokeWidth * 3);
++      const length = clamp(previousSegmentLength / 2, Math.max(strokeWidth * 2, 10), Math.max(strokeWidth * 4, 18));
+       int = previousPoint ? Vec.Nudge(point, previousPoint, length) : point;
+       break;
+     }

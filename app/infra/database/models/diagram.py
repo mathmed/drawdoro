@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, ForeignKey, String, Text, func
+from sqlalchemy import JSON, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infra.database.models.workspace import Base
@@ -18,8 +18,6 @@ class DiagramORM(Base):
     )
     name: Mapped[str] = mapped_column(String(255))
     canvas_state: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-    mermaid_source: Mapped[str | None] = mapped_column(Text, nullable=True)
-    d2_source: Mapped[str | None] = mapped_column(Text, nullable=True)
     semantic_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())

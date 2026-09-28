@@ -1,28 +1,31 @@
 import type { Editor } from 'tldraw'
 import { create } from 'zustand'
 
-import {
-  createAdr as apiCreateAdr,
-  deleteAdr as apiDeleteAdr,
-  listAdrs,
-  updateAdr as apiUpdateAdr,
-} from '../api/adrs'
 import { createComment as apiCreateComment, listComments } from '../api/comments'
 import { getDocumentation, upsertDocumentation } from '../api/documentation'
 import {
   createDiagram as apiCreateDiagram,
+  deleteDiagram as apiDeleteDiagram,
   listDiagrams,
   updateDiagram,
+  type UpdateDiagramInput,
 } from '../api/diagrams'
-import { createFolder as apiCreateFolder, listFolders } from '../api/folders'
-import { createProject as apiCreateProject, listProjects } from '../api/projects'
+import {
+  createFolder as apiCreateFolder,
+  deleteFolder as apiDeleteFolder,
+  listFolders,
+  updateFolder as apiUpdateFolder,
+} from '../api/folders'
+import {
+  createProject as apiCreateProject,
+  deleteProject as apiDeleteProject,
+  listProjects,
+  updateProject as apiUpdateProject,
+} from '../api/projects'
 import { createWorkspace as apiCreateWorkspace, listWorkspaces } from '../api/workspaces'
 import type {
-  Adr,
-  AdrStatus,
   CanvasState,
   Comment,
-  CreateAdrData,
   Diagram,
   DocumentationPage,
   Folder,
@@ -34,7 +37,33 @@ import type {
 } from '../api/types'
 import { buildArchitectureGraph, validateArchitecture } from '../utils/validateArchitecture'
 
-type RightPanelTab = 'docs' | 'adrs' | 'info'
+export type InspectorTab = 'properties' | 'docs' | 'comments'
+export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
+
+const LAST_WORKSPACE_KEY = 'drawdoro:last-workspace'
+const LAST_PROJECT_KEY = 'drawdoro:last-project'
+
+function remember(key: string, value: string | null): void {
+  try {
+    if (value === null) {
+      localStorage.removeItem(key)
+    } else {
+      localStorage.setItem(key, value)
+    }
+  } catch {
+    // Remembering the last selection is a convenience; ignore unavailable storage.
+  }
+}
+
+function recall(key: string): string | null {
+  try {
+    return localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+let pendingSaves = 0
 
 interface AppState {
   workspaces: Workspace[]
@@ -44,17 +73,20 @@ interface AppState {
   folders: Folder[]
   diagrams: Diagram[]
   activeDiagram: Diagram | null
+  isLoadingWorkspaces: boolean
+  isLoadingProject: boolean
+  isLoadingDiagram: boolean
+  saveStatus: SaveStatus
   documentation: DocumentationPage | null
-  isDocsPanelOpen: boolean
   editor: Editor | null
-  isCodePanelOpen: boolean
-  isTemplateModalOpen: boolean
-  codeLanguage: 'mermaid' | 'd2'
+  isSidebarOpen: boolean
+  isInspectorOpen: boolean
+  inspectorTab: InspectorTab
+  isCommandPaletteOpen: boolean
+  isValidationOpen: boolean
+  newDiagramDialog: { folderId?: string } | null
   comments: Comment[]
   activeElementId: string | null
-  isCommentsPanelOpen: boolean
-  adrs: Adr[]
-  rightPanelTab: RightPanelTab
   isPresentationMode: boolean
   semanticMetadata: Record<string, ShapeMetadata>
   validationResults: ValidationResult[]
@@ -64,415 +96,426 @@ interface AppState {
   setActiveWorkspace: (workspace: Workspace) => Promise<void>
   setActiveProject: (project: Project) => Promise<void>
   setActiveDiagram: (diagram: Diagram) => Promise<void>
+  closeDiagram: () => void
   loadDiagram: (diagramId: string) => Promise<void>
   createWorkspace: (name: string, slug: string) => Promise<void>
-  createProject: (name: string) => Promise<void>
+  createProject: (name: string) => Promise<Project | null>
+  renameProject: (project: Project, name: string) => Promise<void>
+  deleteProject: (project: Project) => Promise<void>
   createFolder: (name: string, parentId?: string) => Promise<void>
+  renameFolder: (folder: Folder, name: string) => Promise<void>
+  deleteFolder: (folder: Folder) => Promise<void>
   createDiagram: (name: string, folderId?: string) => Promise<Diagram | null>
+  renameDiagram: (name: string, diagram?: Diagram) => Promise<void>
+  deleteDiagram: (diagram: Diagram) => Promise<void>
   saveCanvasState: (state: CanvasState) => Promise<void>
   saveDocumentation: (content: string) => Promise<void>
-  renameDiagram: (name: string) => Promise<void>
-  toggleDocsPanel: () => void
   setEditor: (editor: Editor | null) => void
-  toggleCodePanel: () => void
-  toggleTemplateModal: () => void
-  setCodeLanguage: (lang: 'mermaid' | 'd2') => void
-  saveMermaidSource: (source: string) => Promise<void>
-  saveD2Source: (source: string) => Promise<void>
+  toggleSidebar: () => void
+  toggleInspector: () => void
+  openInspector: (tab: InspectorTab) => void
+  closeInspector: () => void
+  setCommandPaletteOpen: (open: boolean) => void
+  openNewDiagram: (folderId?: string) => void
+  closeNewDiagram: () => void
   loadComments: (diagramId: string) => Promise<void>
   addComment: (elementId: string, content: string) => Promise<void>
-  toggleCommentsPanel: () => void
   setActiveElement: (id: string | null) => void
-  loadAdrs: (diagramId: string) => Promise<void>
-  createAdr: (data: CreateAdrData) => Promise<void>
-  updateAdr: (adrId: string, data: CreateAdrData) => Promise<void>
-  updateAdrStatus: (adrId: string, status: AdrStatus) => Promise<void>
-  deleteAdr: (adrId: string) => Promise<void>
-  setRightPanelTab: (tab: RightPanelTab) => void
+  commentOnElement: (id: string) => void
   enterPresentation: () => void
   exitPresentation: () => void
   updateShapeMetadata: (shapeId: string, metadata: Partial<ShapeMetadata>) => void
   saveSemanticMetadata: () => Promise<void>
   runValidation: () => void
+  closeValidation: () => void
   setPeers: (n: number) => void
 }
 
-export const useAppStore = create<AppState>((set, get) => ({
-  workspaces: [],
-  activeWorkspace: null,
-  projects: [],
-  activeProject: null,
-  folders: [],
-  diagrams: [],
-  activeDiagram: null,
-  documentation: null,
-  isDocsPanelOpen: false,
-  editor: null,
-  isCodePanelOpen: false,
-  isTemplateModalOpen: false,
-  codeLanguage: 'mermaid',
-  comments: [],
-  activeElementId: null,
-  isCommentsPanelOpen: false,
-  adrs: [],
-  rightPanelTab: 'docs',
-  isPresentationMode: false,
-  semanticMetadata: {},
-  validationResults: [],
-  peers: 1,
-
-  loadWorkspaces: async () => {
-    const workspaces = await listWorkspaces()
-    set({ workspaces })
-    const { activeWorkspace } = get()
-    if (activeWorkspace === null && workspaces.length > 0) {
-      await get().setActiveWorkspace(workspaces[0])
+export const useAppStore = create<AppState>((set, get) => {
+  // The backend PUT replaces every field, so each save sends the full current diagram
+  // with only the changed fields overridden.
+  async function persistDiagram(patch: Partial<UpdateDiagramInput>, target?: Diagram): Promise<void> {
+    const diagram = target ?? get().activeDiagram
+    if (diagram === null) {
+      return
     }
-  },
+    pendingSaves += 1
+    set({ saveStatus: 'saving' })
+    try {
+      const updated = await updateDiagram(diagram.project_id, diagram.id, {
+        name: diagram.name,
+        folder_id: diagram.folder_id,
+        canvas_state: diagram.canvas_state,
+        semantic_metadata: diagram.semantic_metadata ?? null,
+        ...patch,
+      })
+      set({
+        activeDiagram: get().activeDiagram?.id === updated.id ? updated : get().activeDiagram,
+        diagrams: get().diagrams.map((item) => (item.id === updated.id ? updated : item)),
+      })
+      pendingSaves -= 1
+      if (pendingSaves === 0) {
+        set({ saveStatus: 'saved' })
+      }
+    } catch (error) {
+      pendingSaves -= 1
+      set({ saveStatus: 'error' })
+      throw error
+    }
+  }
 
-  setActiveWorkspace: async (workspace) => {
-    set({
-      activeWorkspace: workspace,
-      activeProject: null,
-      folders: [],
-      diagrams: [],
-    })
-    const projects = await listProjects(workspace.id)
-    set({ projects })
-  },
-
-  setActiveProject: async (project) => {
-    set({ activeProject: project })
-    const [folders, diagrams] = await Promise.all([
-      listFolders(project.id),
-      listDiagrams(project.id),
-    ])
-    set({ folders, diagrams })
-  },
-
-  setActiveDiagram: async (diagram) => {
-    set({
+  function diagramContext(diagram: Diagram): Partial<AppState> {
+    return {
       activeDiagram: diagram,
       semanticMetadata: (diagram.semantic_metadata as Record<string, ShapeMetadata> | null) ?? {},
       validationResults: [],
       activeElementId: null,
-    })
-    const [documentation, adrs, comments] = await Promise.all([
-      getDocumentation(diagram.id),
-      listAdrs(diagram.id),
-      listComments(diagram.id),
-    ])
-    set({ documentation, adrs, comments })
-  },
-
-  loadDiagram: async (diagramId) => {
-    const current = get().activeDiagram
-    if (current !== null && current.id === diagramId) {
-      return
+      saveStatus: 'idle',
     }
+  }
 
-    // Direct navigation / refresh: we only have the diagram id, so scan the
-    // workspaces until we find its project, then hydrate the full context.
-    let workspaces = get().workspaces
-    if (workspaces.length === 0) {
-      workspaces = await listWorkspaces()
-      set({ workspaces })
-    }
+  return {
+    workspaces: [],
+    activeWorkspace: null,
+    projects: [],
+    activeProject: null,
+    folders: [],
+    diagrams: [],
+    activeDiagram: null,
+    isLoadingWorkspaces: true,
+    isLoadingProject: false,
+    isLoadingDiagram: false,
+    saveStatus: 'idle',
+    documentation: null,
+    editor: null,
+    isSidebarOpen: true,
+    isInspectorOpen: false,
+    inspectorTab: 'properties',
+    isCommandPaletteOpen: false,
+    isValidationOpen: false,
+    newDiagramDialog: null,
+    comments: [],
+    activeElementId: null,
+    isPresentationMode: false,
+    semanticMetadata: {},
+    validationResults: [],
+    peers: 1,
 
-    for (const workspace of workspaces) {
-      const projects = await listProjects(workspace.id)
-      for (const project of projects) {
-        const diagrams = await listDiagrams(project.id)
-        const found = diagrams.find((diagram) => diagram.id === diagramId)
-        if (found !== undefined) {
-          const [folders, documentation, adrs, comments] = await Promise.all([
-            listFolders(project.id),
-            getDocumentation(found.id),
-            listAdrs(found.id),
-            listComments(found.id),
-          ])
-          set({
-            activeWorkspace: workspace,
-            projects,
-            activeProject: project,
-            folders,
-            diagrams,
-            activeDiagram: found,
-            documentation,
-            adrs,
-            comments,
-            semanticMetadata:
-              (found.semantic_metadata as Record<string, ShapeMetadata> | null) ?? {},
-            validationResults: [],
-            activeElementId: null,
-          })
+    loadWorkspaces: async () => {
+      set({ isLoadingWorkspaces: true })
+      try {
+        const workspaces = await listWorkspaces()
+        set({ workspaces })
+        if (get().activeWorkspace !== null || workspaces.length === 0) {
           return
         }
+        const lastId = recall(LAST_WORKSPACE_KEY)
+        const workspace = workspaces.find((item) => item.id === lastId) ?? workspaces[0]
+        await get().setActiveWorkspace(workspace)
+      } finally {
+        set({ isLoadingWorkspaces: false })
       }
-    }
-  },
+    },
 
-  createWorkspace: async (name, slug) => {
-    const workspace = await apiCreateWorkspace(name, slug)
-    set({ workspaces: [...get().workspaces, workspace] })
-    await get().setActiveWorkspace(workspace)
-  },
+    setActiveWorkspace: async (workspace) => {
+      remember(LAST_WORKSPACE_KEY, workspace.id)
+      set({
+        activeWorkspace: workspace,
+        projects: [],
+        activeProject: null,
+        folders: [],
+        diagrams: [],
+      })
+      const projects = await listProjects(workspace.id)
+      if (get().activeWorkspace?.id !== workspace.id) {
+        return
+      }
+      set({ projects })
+      if (get().activeProject !== null || projects.length === 0) {
+        return
+      }
+      const lastId = recall(LAST_PROJECT_KEY)
+      const project = projects.find((item) => item.id === lastId) ?? projects[0]
+      await get().setActiveProject(project)
+    },
 
-  createProject: async (name) => {
-    const { activeWorkspace } = get()
-    if (activeWorkspace === null) {
-      return
-    }
-    const project = await apiCreateProject(activeWorkspace.id, name)
-    set({ projects: [...get().projects, project] })
-    await get().setActiveProject(project)
-  },
+    setActiveProject: async (project) => {
+      remember(LAST_PROJECT_KEY, project.id)
+      set({ activeProject: project, isLoadingProject: true })
+      try {
+        const [folders, diagrams] = await Promise.all([
+          listFolders(project.id),
+          listDiagrams(project.id),
+        ])
+        if (get().activeProject?.id === project.id) {
+          set({ folders, diagrams })
+        }
+      } finally {
+        set({ isLoadingProject: false })
+      }
+    },
 
-  createFolder: async (name, parentId) => {
-    const { activeProject } = get()
-    if (activeProject === null) {
-      return
-    }
-    const folder = await apiCreateFolder(activeProject.id, name, parentId)
-    set({ folders: [...get().folders, folder] })
-  },
+    setActiveDiagram: async (diagram) => {
+      set({ ...diagramContext(diagram), documentation: null, comments: [] })
+      const [documentation, comments] = await Promise.all([getDocumentation(diagram.id), listComments(diagram.id)])
+      if (get().activeDiagram?.id === diagram.id) {
+        set({ documentation, comments })
+      }
+    },
 
-  createDiagram: async (name, folderId) => {
-    const { activeProject } = get()
-    if (activeProject === null) {
-      return null
-    }
-    const diagram = await apiCreateDiagram(activeProject.id, name, folderId)
-    set({ diagrams: [...get().diagrams, diagram] })
-    return diagram
-  },
+    closeDiagram: () => {
+      if (get().isPresentationMode) {
+        get().exitPresentation()
+      }
+      set({
+        activeDiagram: null,
+        documentation: null,
+        comments: [],
+        semanticMetadata: {},
+        validationResults: [],
+        activeElementId: null,
+        peers: 1,
+        saveStatus: 'idle',
+      })
+    },
 
-  saveCanvasState: async (state) => {
-    const { activeDiagram } = get()
-    if (activeDiagram === null) {
-      return
-    }
-    const updated = await updateDiagram(activeDiagram.project_id, activeDiagram.id, {
-      name: activeDiagram.name,
-      folder_id: activeDiagram.folder_id,
-      canvas_state: state,
-      mermaid_source: activeDiagram.mermaid_source,
-      d2_source: activeDiagram.d2_source,
-      semantic_metadata: activeDiagram.semantic_metadata ?? null,
-    })
-    set({
-      activeDiagram: updated,
-      diagrams: get().diagrams.map((diagram) =>
-        diagram.id === updated.id ? updated : diagram,
-      ),
-    })
-  },
+    loadDiagram: async (diagramId) => {
+      const current = get().activeDiagram
+      if (current !== null && current.id === diagramId) {
+        return
+      }
 
-  renameDiagram: async (name) => {
-    const { activeDiagram } = get()
-    if (activeDiagram === null) {
-      return
-    }
-    const updated = await updateDiagram(activeDiagram.project_id, activeDiagram.id, {
-      name,
-      folder_id: activeDiagram.folder_id,
-      canvas_state: activeDiagram.canvas_state,
-      mermaid_source: activeDiagram.mermaid_source,
-      d2_source: activeDiagram.d2_source,
-      semantic_metadata: activeDiagram.semantic_metadata ?? null,
-    })
-    set({
-      activeDiagram: updated,
-      diagrams: get().diagrams.map((diagram) =>
-        diagram.id === updated.id ? updated : diagram,
-      ),
-    })
-  },
+      const known = get().diagrams.find((diagram) => diagram.id === diagramId)
+      if (known !== undefined) {
+        await get().setActiveDiagram(known)
+        return
+      }
 
-  saveDocumentation: async (content) => {
-    const { activeDiagram } = get()
-    if (activeDiagram === null) {
-      return
-    }
-    const documentation = await upsertDocumentation(activeDiagram.id, content)
-    set({ documentation })
-  },
+      // Direct navigation / refresh: we only have the diagram id, so scan the
+      // workspaces until we find its project, then hydrate the full context.
+      set({ isLoadingDiagram: true })
+      try {
+        let workspaces = get().workspaces
+        if (workspaces.length === 0) {
+          workspaces = await listWorkspaces()
+          set({ workspaces })
+        }
 
-  toggleDocsPanel: () => set({ isDocsPanelOpen: !get().isDocsPanelOpen }),
+        for (const workspace of workspaces) {
+          const projects = await listProjects(workspace.id)
+          for (const project of projects) {
+            const diagrams = await listDiagrams(project.id)
+            const found = diagrams.find((diagram) => diagram.id === diagramId)
+            if (found === undefined) {
+              continue
+            }
+            const [folders, documentation, comments] = await Promise.all([
+              listFolders(project.id),
+              getDocumentation(found.id),
+              listComments(found.id),
+            ])
+            remember(LAST_WORKSPACE_KEY, workspace.id)
+            remember(LAST_PROJECT_KEY, project.id)
+            set({
+              activeWorkspace: workspace,
+              projects,
+              activeProject: project,
+              folders,
+              diagrams,
+              documentation,
+              comments,
+              ...diagramContext(found),
+            })
+            return
+          }
+        }
+      } finally {
+        set({ isLoadingDiagram: false })
+      }
+    },
 
-  setEditor: (editor) => set({ editor }),
+    createWorkspace: async (name, slug) => {
+      const workspace = await apiCreateWorkspace(name, slug)
+      set({ workspaces: [...get().workspaces, workspace] })
+      await get().setActiveWorkspace(workspace)
+    },
 
-  toggleCodePanel: () => set({ isCodePanelOpen: !get().isCodePanelOpen }),
+    createProject: async (name) => {
+      const { activeWorkspace } = get()
+      if (activeWorkspace === null) {
+        return null
+      }
+      const project = await apiCreateProject(activeWorkspace.id, name)
+      set({ projects: [...get().projects, project] })
+      await get().setActiveProject(project)
+      return project
+    },
 
-  toggleTemplateModal: () => set({ isTemplateModalOpen: !get().isTemplateModalOpen }),
+    renameProject: async (project, name) => {
+      const updated = await apiUpdateProject(project.workspace_id, project.id, name, project.description ?? '')
+      set({
+        projects: get().projects.map((item) => (item.id === updated.id ? updated : item)),
+        activeProject: get().activeProject?.id === updated.id ? updated : get().activeProject,
+      })
+    },
 
-  setCodeLanguage: (lang) => set({ codeLanguage: lang }),
+    deleteProject: async (project) => {
+      await apiDeleteProject(project.workspace_id, project.id)
+      const projects = get().projects.filter((item) => item.id !== project.id)
+      set({ projects })
+      if (get().activeDiagram?.project_id === project.id) {
+        get().closeDiagram()
+      }
+      if (get().activeProject?.id !== project.id) {
+        return
+      }
+      set({ activeProject: null, folders: [], diagrams: [] })
+      remember(LAST_PROJECT_KEY, null)
+      if (projects.length > 0) {
+        await get().setActiveProject(projects[0])
+      }
+    },
 
-  saveMermaidSource: async (source) => {
-    const { activeDiagram } = get()
-    if (activeDiagram === null) {
-      return
-    }
-    const updated = await updateDiagram(activeDiagram.project_id, activeDiagram.id, {
-      name: activeDiagram.name,
-      folder_id: activeDiagram.folder_id,
-      canvas_state: activeDiagram.canvas_state,
-      mermaid_source: source,
-      d2_source: activeDiagram.d2_source,
-      semantic_metadata: activeDiagram.semantic_metadata ?? null,
-    })
-    set({
-      activeDiagram: updated,
-      diagrams: get().diagrams.map((diagram) =>
-        diagram.id === updated.id ? updated : diagram,
-      ),
-    })
-  },
+    createFolder: async (name, parentId) => {
+      const { activeProject } = get()
+      if (activeProject === null) {
+        return
+      }
+      const folder = await apiCreateFolder(activeProject.id, name, parentId)
+      set({ folders: [...get().folders, folder] })
+    },
 
-  saveD2Source: async (source) => {
-    const { activeDiagram } = get()
-    if (activeDiagram === null) {
-      return
-    }
-    const updated = await updateDiagram(activeDiagram.project_id, activeDiagram.id, {
-      name: activeDiagram.name,
-      folder_id: activeDiagram.folder_id,
-      canvas_state: activeDiagram.canvas_state,
-      mermaid_source: activeDiagram.mermaid_source,
-      d2_source: source,
-      semantic_metadata: activeDiagram.semantic_metadata ?? null,
-    })
-    set({
-      activeDiagram: updated,
-      diagrams: get().diagrams.map((diagram) =>
-        diagram.id === updated.id ? updated : diagram,
-      ),
-    })
-  },
+    renameFolder: async (folder, name) => {
+      const updated = await apiUpdateFolder(folder.project_id, folder.id, name, folder.parent_folder_id)
+      set({ folders: get().folders.map((item) => (item.id === updated.id ? updated : item)) })
+    },
 
-  loadComments: async (diagramId) => {
-    const comments = await listComments(diagramId)
-    set({ comments })
-  },
+    deleteFolder: async (folder) => {
+      await apiDeleteFolder(folder.project_id, folder.id)
+      // Children are re-parented server side, so reload the tree instead of guessing.
+      const [folders, diagrams] = await Promise.all([
+        listFolders(folder.project_id),
+        listDiagrams(folder.project_id),
+      ])
+      set({ folders, diagrams })
+    },
 
-  addComment: async (elementId, content) => {
-    const { activeDiagram } = get()
-    if (activeDiagram === null) {
-      return
-    }
-    const comment = await apiCreateComment(activeDiagram.id, elementId, content)
-    set({ comments: [...get().comments, comment] })
-  },
+    createDiagram: async (name, folderId) => {
+      const { activeProject } = get()
+      if (activeProject === null) {
+        return null
+      }
+      const diagram = await apiCreateDiagram(activeProject.id, name, folderId)
+      set({ diagrams: [...get().diagrams, diagram] })
+      return diagram
+    },
 
-  toggleCommentsPanel: () => set({ isCommentsPanelOpen: !get().isCommentsPanelOpen }),
+    renameDiagram: async (name, diagram) => {
+      await persistDiagram({ name }, diagram)
+    },
 
-  setActiveElement: (id) => set({ activeElementId: id }),
+    deleteDiagram: async (diagram) => {
+      await apiDeleteDiagram(diagram.project_id, diagram.id)
+      set({ diagrams: get().diagrams.filter((item) => item.id !== diagram.id) })
+      if (get().activeDiagram?.id === diagram.id) {
+        get().closeDiagram()
+      }
+    },
 
-  loadAdrs: async (diagramId) => {
-    const adrs = await listAdrs(diagramId)
-    set({ adrs })
-  },
+    saveCanvasState: async (state) => {
+      await persistDiagram({ canvas_state: state })
+    },
 
-  createAdr: async (data) => {
-    const { activeDiagram } = get()
-    if (activeDiagram === null) {
-      return
-    }
-    const adr = await apiCreateAdr(activeDiagram.id, data)
-    set({ adrs: [...get().adrs, adr] })
-  },
+    saveDocumentation: async (content) => {
+      const { activeDiagram } = get()
+      if (activeDiagram === null) {
+        return
+      }
+      set({ saveStatus: 'saving' })
+      try {
+        const documentation = await upsertDocumentation(activeDiagram.id, content)
+        set({ documentation, saveStatus: 'saved' })
+      } catch (error) {
+        set({ saveStatus: 'error' })
+        throw error
+      }
+    },
 
-  updateAdr: async (adrId, data) => {
-    const { activeDiagram } = get()
-    if (activeDiagram === null) {
-      return
-    }
-    const updated = await apiUpdateAdr(activeDiagram.id, adrId, data)
-    set({ adrs: get().adrs.map((adr) => (adr.id === adrId ? updated : adr)) })
-  },
+    setEditor: (editor) => set({ editor }),
 
-  updateAdrStatus: async (adrId, status) => {
-    const { activeDiagram, adrs } = get()
-    const current = adrs.find((adr) => adr.id === adrId)
-    if (activeDiagram === null || current === undefined) {
-      return
-    }
-    const updated = await apiUpdateAdr(activeDiagram.id, adrId, {
-      title: current.title,
-      context: current.context,
-      decision: current.decision,
-      consequences: current.consequences,
-      status,
-    })
-    set({ adrs: get().adrs.map((adr) => (adr.id === adrId ? updated : adr)) })
-  },
+    toggleSidebar: () => set({ isSidebarOpen: !get().isSidebarOpen }),
 
-  deleteAdr: async (adrId) => {
-    const { activeDiagram } = get()
-    if (activeDiagram === null) {
-      return
-    }
-    await apiDeleteAdr(activeDiagram.id, adrId)
-    set({ adrs: get().adrs.filter((adr) => adr.id !== adrId) })
-  },
+    toggleInspector: () => set({ isInspectorOpen: !get().isInspectorOpen }),
 
-  setRightPanelTab: (tab) => set({ rightPanelTab: tab, isDocsPanelOpen: true }),
+    openInspector: (tab) => set({ inspectorTab: tab, isInspectorOpen: true }),
 
-  enterPresentation: () => {
-    const element = document.documentElement
-    if (element.requestFullscreen !== undefined) {
-      void element.requestFullscreen().catch(() => undefined)
-    }
-    set({ isPresentationMode: true })
-  },
+    closeInspector: () => set({ isInspectorOpen: false }),
 
-  exitPresentation: () => {
-    if (document.fullscreenElement !== null && document.exitFullscreen !== undefined) {
-      void document.exitFullscreen().catch(() => undefined)
-    }
-    set({ isPresentationMode: false })
-  },
+    setCommandPaletteOpen: (open) => set({ isCommandPaletteOpen: open }),
 
-  updateShapeMetadata: (shapeId, metadata) => {
-    const current = get().semanticMetadata
-    set({
-      semanticMetadata: {
-        ...current,
-        [shapeId]: { ...current[shapeId], ...metadata },
-      },
-    })
-  },
+    openNewDiagram: (folderId) => set({ newDiagramDialog: { folderId } }),
 
-  saveSemanticMetadata: async () => {
-    const { activeDiagram, semanticMetadata } = get()
-    if (activeDiagram === null) {
-      return
-    }
-    const updated = await updateDiagram(activeDiagram.project_id, activeDiagram.id, {
-      name: activeDiagram.name,
-      folder_id: activeDiagram.folder_id,
-      canvas_state: activeDiagram.canvas_state,
-      mermaid_source: activeDiagram.mermaid_source,
-      d2_source: activeDiagram.d2_source,
-      semantic_metadata: semanticMetadata as SemanticMetadata,
-    })
-    set({
-      activeDiagram: updated,
-      diagrams: get().diagrams.map((diagram) =>
-        diagram.id === updated.id ? updated : diagram,
-      ),
-    })
-  },
+    closeNewDiagram: () => set({ newDiagramDialog: null }),
 
-  runValidation: () => {
-    const { editor, semanticMetadata } = get()
-    if (editor === null) {
-      set({ validationResults: [] })
-      return
-    }
-    const graph = buildArchitectureGraph(editor)
-    set({ validationResults: validateArchitecture(graph, semanticMetadata) })
-  },
+    loadComments: async (diagramId) => {
+      const comments = await listComments(diagramId)
+      set({ comments })
+    },
 
-  setPeers: (n) => set({ peers: n }),
-}))
+    addComment: async (elementId, content) => {
+      const { activeDiagram } = get()
+      if (activeDiagram === null) {
+        return
+      }
+      const comment = await apiCreateComment(activeDiagram.id, elementId, content)
+      set({ comments: [...get().comments, comment] })
+    },
+
+    setActiveElement: (id) => set({ activeElementId: id }),
+
+    commentOnElement: (id) => set({ activeElementId: id, inspectorTab: 'comments', isInspectorOpen: true }),
+
+    enterPresentation: () => {
+      const element = document.documentElement
+      if (element.requestFullscreen !== undefined) {
+        void element.requestFullscreen().catch(() => undefined)
+      }
+      set({ isPresentationMode: true })
+    },
+
+    exitPresentation: () => {
+      if (document.fullscreenElement !== null && document.exitFullscreen !== undefined) {
+        void document.exitFullscreen().catch(() => undefined)
+      }
+      set({ isPresentationMode: false })
+    },
+
+    updateShapeMetadata: (shapeId, metadata) => {
+      const current = get().semanticMetadata
+      set({
+        semanticMetadata: {
+          ...current,
+          [shapeId]: { ...current[shapeId], ...metadata },
+        },
+      })
+    },
+
+    saveSemanticMetadata: async () => {
+      await persistDiagram({ semantic_metadata: get().semanticMetadata as SemanticMetadata })
+    },
+
+    runValidation: () => {
+      const { editor, semanticMetadata } = get()
+      if (editor === null) {
+        set({ validationResults: [], isValidationOpen: true })
+        return
+      }
+      const graph = buildArchitectureGraph(editor)
+      set({ validationResults: validateArchitecture(graph, semanticMetadata), isValidationOpen: true })
+    },
+
+    closeValidation: () => set({ isValidationOpen: false }),
+
+    setPeers: (n) => set({ peers: n }),
+  }
+})

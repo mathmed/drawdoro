@@ -1,6 +1,10 @@
+import { useEffect } from 'react'
 import {
+  ArrowShapeKindStyle,
+  ArrowShapeUtil,
   DefaultContextMenu,
   DefaultContextMenuContent,
+  loadSnapshot,
   Tldraw,
   TldrawUiMenuGroup,
   TldrawUiMenuItem,
@@ -14,8 +18,16 @@ import 'tldraw/tldraw.css'
 
 import type { CanvasState, Diagram } from '../../api/types'
 import { useRealtime } from '../../hooks/useRealtime'
+import { useSelectionShortcuts } from '../../hooks/useSelectionShortcuts'
 import { useAppStore } from '../../store/useAppStore'
+import { useThemeStore } from '../../store/useThemeStore'
+import { DrawdoroGeoShapeUtil, registerGeoDefaults } from '../../shapes/DrawdoroGeoShapeUtil'
+import { canRunSelection, runSelection, SELECTION_COMMANDS } from '../../utils/shapeSelection'
 import CommentBadge from '../comments/CommentBadge'
+import ConnectHandles from './ConnectHandles'
+import StylePanel, { MenuPanelWithStyles } from './StylePanel'
+import RichTextToolbar, { textOptions } from './RichTextToolbar'
+import Toolbar, { toolOverrides } from './Toolbar'
 
 interface DrawingCanvasProps {
   diagram: Diagram
@@ -23,18 +35,12 @@ interface DrawingCanvasProps {
 
 function CustomContextMenu(props: TLUiContextMenuProps) {
   const editor = useEditor()
-  const setActiveElement = useAppStore((state) => state.setActiveElement)
-  const isCommentsPanelOpen = useAppStore((state) => state.isCommentsPanelOpen)
-  const toggleCommentsPanel = useAppStore((state) => state.toggleCommentsPanel)
+  const commentOnElement = useAppStore((state) => state.commentOnElement)
   const selectedId = editor.getOnlySelectedShapeId()
 
   function handleComment(): void {
-    if (selectedId === null) {
-      return
-    }
-    setActiveElement(selectedId)
-    if (!isCommentsPanelOpen) {
-      toggleCommentsPanel()
+    if (selectedId !== null) {
+      commentOnElement(selectedId)
     }
   }
 
@@ -44,20 +50,50 @@ function CustomContextMenu(props: TLUiContextMenuProps) {
         <TldrawUiMenuGroup id="drawdoro-comments">
           <TldrawUiMenuItem
             id="drawdoro-comment"
-            label="💬 Comentar"
+            label="Comment"
             icon="chat"
             readonlyOk
             onSelect={handleComment}
           />
         </TldrawUiMenuGroup>
       ) : null}
+      <TldrawUiMenuGroup id="drawdoro-select">
+        {SELECTION_COMMANDS.filter(({ command }) => canRunSelection(command, editor)).map((entry) => (
+          <TldrawUiMenuItem
+            key={entry.command}
+            id={`drawdoro-select-${entry.command}`}
+            label={entry.label}
+            kbd={entry.kbd}
+            readonlyOk
+            onSelect={() => {
+              runSelection(entry.command, editor, useAppStore.getState().semanticMetadata)
+            }}
+          />
+        ))}
+      </TldrawUiMenuGroup>
       <DefaultContextMenuContent />
     </DefaultContextMenu>
   )
 }
 
+// Elbow arrows snap to the four side anchors of a shape; the wider radii make that snapping
+// kick in before the pointer has to land exactly on the anchor.
+const shapeUtils = [
+  DrawdoroGeoShapeUtil,
+  ArrowShapeUtil.configure({
+    elbowArrowPointSnapDistance: 36,
+    elbowArrowEdgeSnapDistance: 28,
+    elbowArrowCenterSnapDistance: 32,
+    arcArrowCenterSnapDistance: 24,
+  }),
+]
+
 const components: TLComponents = {
   ContextMenu: CustomContextMenu,
+  StylePanel,
+  MenuPanel: MenuPanelWithStyles,
+  Toolbar,
+  RichTextToolbar,
 }
 
 export default function DrawingCanvas({ diagram }: DrawingCanvasProps) {
@@ -66,6 +102,13 @@ export default function DrawingCanvas({ diagram }: DrawingCanvasProps) {
   const isPresentationMode = useAppStore((state) => state.isPresentationMode)
   const editor = useAppStore((state) => state.editor)
   const setPeers = useAppStore((state) => state.setPeers)
+  const theme = useThemeStore((state) => state.resolved)
+
+  useSelectionShortcuts(editor)
+
+  useEffect(() => {
+    editor?.user.updateUserPreferences({ colorScheme: theme })
+  }, [editor, theme])
 
   const { sendUpdate } = useRealtime({
     diagramId: diagram.id,
@@ -75,15 +118,22 @@ export default function DrawingCanvas({ diagram }: DrawingCanvasProps) {
 
   function handleMount(mountedEditor: Editor): () => void {
     setEditor(mountedEditor)
+    // tldraw follows the browser language by default; pin it so its menus match the app's English UI.
+    mountedEditor.user.updateUserPreferences({ colorScheme: useThemeStore.getState().resolved, locale: 'en' })
 
     if (diagram.canvas_state !== null) {
-      mountedEditor.store.loadSnapshot(diagram.canvas_state as unknown as TLStoreSnapshot)
+      // store.loadSnapshot would also wipe the session record (focus, tool state), which left
+      // the editor unfocused and every tldraw keyboard shortcut dead.
+      loadSnapshot(mountedEditor.store, diagram.canvas_state as unknown as TLStoreSnapshot)
     }
+    mountedEditor.setStyleForNextShapes(ArrowShapeKindStyle, 'elbow')
+    const unregisterGeoDefaults = registerGeoDefaults(mountedEditor)
+    mountedEditor.focus()
 
     let timer: ReturnType<typeof setTimeout>
     const unlisten = mountedEditor.store.listen(
       (entry) => {
-        // Ignora mudancas vindas de outros peers
+        // Changes coming from other peers are already persisted by them.
         if (entry.source === 'remote') {
           return
         }
@@ -100,18 +150,25 @@ export default function DrawingCanvas({ diagram }: DrawingCanvasProps) {
     return () => {
       clearTimeout(timer)
       unlisten()
+      unregisterGeoDefaults()
       setEditor(null)
     }
   }
 
   return (
-    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+    <div
+      style={{ width: '100%', height: '100%', position: 'relative' }}
+      onPointerDownCapture={() => editor?.focus()}
+    >
       <Tldraw
         onMount={handleMount}
         components={components}
+        shapeUtils={shapeUtils}
+        overrides={toolOverrides}
+        textOptions={textOptions}
         hideUi={isPresentationMode}
-        inferDarkMode
       />
+      {isPresentationMode || editor === null ? null : <ConnectHandles editor={editor} />}
       {isPresentationMode ? null : <CommentBadge />}
     </div>
   )

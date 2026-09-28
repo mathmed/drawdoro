@@ -12,8 +12,6 @@ class UpdateDiagramParams(InputData):
     name: str
     folder_id: uuid.UUID | None = None
     canvas_state: dict[str, Any] | None = None
-    mermaid_source: str | None = None
-    d2_source: str | None = None
     semantic_metadata: dict[str, Any] | None = None
 
 
@@ -28,7 +26,5 @@ class UpdateDiagram(Usecase[UpdateDiagramParams, Diagram]):
         diagram.name = params.name
         diagram.folder_id = params.folder_id
         diagram.canvas_state = params.canvas_state
-        diagram.mermaid_source = params.mermaid_source
-        diagram.d2_source = params.d2_source
         diagram.semantic_metadata = params.semantic_metadata
         return await self._repo.update(diagram)

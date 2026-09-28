@@ -11,7 +11,7 @@ Internal architecture diagramming and documentation tool. Create, annotate and d
 | Canvas | tldraw |
 | State | Zustand |
 | Docs | @uiw/react-md-editor |
-| Diagrams | Mermaid |
+| Icons | lucide-react |
 | HTTP client | Axios |
 | MCP server | Python MCP SDK |
 
@@ -72,7 +72,7 @@ app/
   domain/                 Business core, framework-free
     contracts/            Interfaces implemented by infra (repositories, gateways)
     entities/             Models and value objects
-    enums/                StrEnum types (AdrStatus, WorkspaceRole)
+    enums/                StrEnum types (WorkspaceRole)
     errors/               Domain errors (NotFoundError, ConflictError...)
     usecases/             One use case per operation
   infra/                  Contract implementations: database, HTTP clients...
@@ -82,24 +82,25 @@ app/
   main/                   Entry point
 frontend/                 React + Vite + TypeScript
   src/
-    components/layout/    Sidebar + canvas shell and tabbed right panel (Docs/ADRs/Info)
-    components/canvas/    tldraw wrapper with backend persistence and comment context menu
-    components/sidebar/   Workspace, project, folder and diagram navigation
+    components/layout/    App shell and tabbed right panel (Properties/Docs/Comments)
+    components/topbar/    Breadcrumbs, inline rename, save status, presence, Validate/Export/Present
+    components/sidebar/   Workspace switcher and project/folder/diagram tree with rename/delete
+    components/home/      Project overview and onboarding screens
+    components/canvas/    tldraw wrapper: persistence, style panel, toolbar, quick-connect handles
+    components/palette/   Command palette (Cmd/Ctrl+K)
+    components/diagram/   New diagram dialog
     components/docs/      Markdown documentation panel (auto-save)
-    components/code/      Mermaid/D2 code panel with live preview (auto-save)
-    components/templates/ Built-in diagram template picker modal
-    components/comments/  Element-anchored comments panel and canvas badges
-    components/adr/        ADR list/form panel with colored status
+    components/comments/  Element-anchored comments panel and canvas pins
     components/presentation/ Fullscreen presentation mode navigating frames
-    components/semantic/  Shape metadata panel and architecture validation modal
-    components/toolbar/   Docs/Code/Templates/Comments/Validate/Present toggles, export and rename
+    components/semantic/  Shape properties panel and architecture validation modal
+    components/ui/        Design-system primitives: modal, menu, dialogs, toasts, empty states
     pages/                Home, Diagram, NotFound
     api/                  Axios client and per-resource API functions
-    store/                Zustand global state
-    data/                 Static data (built-in templates)
-    hooks/                Reusable hooks (useDebounce, useComments, usePresentation)
-    utils/                Pure helpers (architecture validation)
-    shapes/               Custom tldraw shapes
+    store/                Zustand stores (app, theme, dialogs, toasts)
+    styles/               Design tokens (light/dark) and component styles
+    hooks/                Reusable hooks (shortcuts, realtime, comments, presentation)
+    utils/                Pure helpers (validation, export, shape selection/connection)
+    shapes/               tldraw shape extensions (rounded edges, custom stroke colours)
 mcp/                      Python MCP server
   server.py               Entry point
   tools/                  MCP tools (diagrams, projects)
@@ -120,10 +121,6 @@ mcp/                      Python MCP server
 | GET/PUT/DELETE | /projects/{id}/diagrams/{id} | Get / update / delete diagram |
 | GET/PUT | /diagrams/{id}/documentation | Get / update documentation page |
 | GET/POST | /diagrams/{id}/comments | List / create comments |
-| GET/POST | /templates | List / create templates |
-| GET/PUT/DELETE | /templates/{id} | Get / update / delete template |
-| GET/POST | /diagrams/{id}/adrs | List / create ADRs |
-| GET/PUT/DELETE | /diagrams/{id}/adrs/{id} | Get / update / delete ADR |
 | WS | /ws/diagrams/{id} | Real-time collaboration: broadcasts canvas updates, cursors and peer count to everyone connected to the same diagram |
 
 All routes except `/health` return `501 Not Implemented` until infra is wired.

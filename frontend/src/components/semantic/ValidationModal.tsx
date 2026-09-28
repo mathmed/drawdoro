@@ -1,4 +1,9 @@
+import { ChevronRight, CircleAlert, CircleCheck, TriangleAlert } from 'lucide-react'
+import type { TLShapeId } from 'tldraw'
+
 import type { ValidationResult } from '../../api/types'
+import { useAppStore } from '../../store/useAppStore'
+import Modal from '../ui/Modal'
 
 interface ValidationModalProps {
   results: ValidationResult[]
@@ -8,85 +13,73 @@ interface ValidationModalProps {
 export default function ValidationModal({ results, onClose }: ValidationModalProps) {
   const errors = results.filter((result) => result.severity === 'error')
   const warnings = results.filter((result) => result.severity === 'warning')
+  const editor = useAppStore((state) => state.editor)
+  const openInspector = useAppStore((state) => state.openInspector)
+
+  // Jump to the offending shapes and open Properties so the fix is one click away.
+  function focus(result: ValidationResult): void {
+    if (editor === null) {
+      return
+    }
+    const ids = result.shapeIds.filter((id) => editor.getShape(id as TLShapeId) !== undefined) as TLShapeId[]
+    if (ids.length === 0) {
+      return
+    }
+    onClose()
+    editor.setCurrentTool('select')
+    editor.select(...ids)
+    editor.zoomToSelection({ animation: { duration: 240 } })
+    openInspector('properties')
+  }
 
   return (
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0,0,0,0.6)',
-        zIndex: 900,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
+    <Modal
+      title="Architecture validation"
+      description="Click an issue to jump to the shape and fix it in Properties."
+      onClose={onClose}
+      footer={
+        <button type="button" className="btn btn-primary" onClick={onClose}>
+          Done
+        </button>
+      }
     >
-      <div
-        onClick={(event) => event.stopPropagation()}
-        style={{
-          width: 480,
-          maxWidth: '90vw',
-          maxHeight: '80vh',
-          overflow: 'auto',
-          background: '#161b22',
-          border: '1px solid #30363d',
-          borderRadius: 12,
-          boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
-          padding: 20,
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: 12,
-          }}
-        >
-          <h2 style={{ fontSize: 16, margin: 0 }}>🔍 Architecture validation</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              background: 'transparent',
-              color: '#8b949e',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: 16,
-            }}
-          >
-            ✕
-          </button>
+      {results.length === 0 ? (
+        <div className="validation-ok">
+          <CircleCheck size={32} />
+          <strong style={{ color: 'var(--text)' }}>No issues found</strong>
+          The architecture looks consistent.
         </div>
-
-        {results.length === 0 ? (
-          <div style={{ color: '#2ea043', fontSize: 14 }}>
-            ✅ No issues found. The architecture looks consistent.
+      ) : (
+        <>
+          <div className="validation-summary">
+            {errors.length > 0 ? (
+              <span className="badge badge-danger">
+                {errors.length} error{errors.length === 1 ? '' : 's'}
+              </span>
+            ) : null}
+            {warnings.length > 0 ? (
+              <span className="badge badge-warning">
+                {warnings.length} warning{warnings.length === 1 ? '' : 's'}
+              </span>
+            ) : null}
           </div>
-        ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={{ fontSize: 13, color: '#8b949e' }}>
-              {errors.length} error(s), {warnings.length} warning(s)
-            </div>
-            {results.map((result, index) => (
-              <div
+            {[...errors, ...warnings].map((result, index) => (
+              <button
                 key={`${result.severity}-${index}`}
-                style={{
-                  background: '#0f1117',
-                  border: `1px solid ${result.severity === 'error' ? '#f85149' : '#d29922'}`,
-                  borderRadius: 8,
-                  padding: 10,
-                  fontSize: 13,
-                  color: '#e6edf3',
-                }}
+                type="button"
+                className="validation-item"
+                data-severity={result.severity}
+                onClick={() => focus(result)}
               >
-                {result.severity === 'error' ? '❌' : '⚠️'} {result.message}
-              </div>
+                {result.severity === 'error' ? <CircleAlert size={16} /> : <TriangleAlert size={16} />}
+                <span style={{ flex: 1 }}>{result.message}</span>
+                <ChevronRight size={15} className="validation-go" />
+              </button>
             ))}
           </div>
-        )}
-      </div>
-    </div>
+        </>
+      )}
+    </Modal>
   )
 }

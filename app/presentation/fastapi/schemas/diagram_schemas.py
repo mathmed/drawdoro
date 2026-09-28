@@ -9,16 +9,12 @@ class CreateDiagramRequest(BaseModel):
     name: str
     folder_id: uuid.UUID | None = None
     canvas_state: dict[str, Any] | None = None
-    mermaid_source: str | None = None
-    d2_source: str | None = None
 
 
 class UpdateDiagramRequest(BaseModel):
     name: str
     folder_id: uuid.UUID | None = None
     canvas_state: dict[str, Any] | None = None
-    mermaid_source: str | None = None
-    d2_source: str | None = None
     semantic_metadata: dict[str, Any] | None = None
 
 
@@ -30,8 +26,6 @@ class DiagramResponse(BaseModel):
     folder_id: uuid.UUID | None
     name: str
     canvas_state: dict[str, Any] | None
-    mermaid_source: str | None
-    d2_source: str | None
     semantic_metadata: dict[str, Any] | None
     created_at: datetime
     updated_at: datetime
