@@ -9,6 +9,7 @@ import DiagramPage from './pages/Diagram'
 import Home from './pages/Home'
 import Landing from './pages/Landing'
 import NotFound from './pages/NotFound'
+import SharedDiagramPage from './pages/SharedDiagram'
 import { useAppStore } from './store/useAppStore'
 import { useAuthStore } from './store/useAuthStore'
 
@@ -53,6 +54,8 @@ export default function App() {
     <>
       <Routes>
         <Route path="/auth/callback" element={<AuthCallback />} />
+        {/* Public: the share link works signed-in or as a guest, so it sits outside the AuthGate. */}
+        <Route path="/share/:token" element={<SharedDiagramPage />} />
         <Route path="*" element={<AuthGate />} />
       </Routes>
       <DialogHost />

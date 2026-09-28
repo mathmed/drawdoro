@@ -27,6 +27,19 @@ index fb527b1..4dbe893 100644
        int = previousPoint ? import_editor.Vec.Nudge(point, previousPoint, length) : point;
        break;
      }
+diff --git a/node_modules/tldraw/dist-cjs/lib/shapes/shared/PathBuilder.js b/node_modules/tldraw/dist-cjs/lib/shapes/shared/PathBuilder.js
+index 762117a..d8e3aeb 100644
+--- a/node_modules/tldraw/dist-cjs/lib/shapes/shared/PathBuilder.js
++++ b/node_modules/tldraw/dist-cjs/lib/shapes/shared/PathBuilder.js
+@@ -413,7 +413,7 @@ class PathBuilder {
+     const {
+       strokeWidth,
+       randomSeed,
+-      offset: defaultOffset = strokeWidth / 3,
++      offset: defaultOffset = strokeWidth * 0.9,
+       roundness: defaultRoundness = strokeWidth * 2,
+       passes = 2,
+       onlyFilled = false
 diff --git a/node_modules/tldraw/dist-esm/lib/shapes/arrow/arrowheads.mjs b/node_modules/tldraw/dist-esm/lib/shapes/arrow/arrowheads.mjs
 index 0e5a12d..0224e1d 100644
 --- a/node_modules/tldraw/dist-esm/lib/shapes/arrow/arrowheads.mjs
@@ -56,3 +69,16 @@ index 0e5a12d..0224e1d 100644
        int = previousPoint ? Vec.Nudge(point, previousPoint, length) : point;
        break;
      }
+diff --git a/node_modules/tldraw/dist-esm/lib/shapes/shared/PathBuilder.mjs b/node_modules/tldraw/dist-esm/lib/shapes/shared/PathBuilder.mjs
+index 0a352e4..58abb42 100644
+--- a/node_modules/tldraw/dist-esm/lib/shapes/shared/PathBuilder.mjs
++++ b/node_modules/tldraw/dist-esm/lib/shapes/shared/PathBuilder.mjs
+@@ -405,7 +405,7 @@ class PathBuilder {
+     const {
+       strokeWidth,
+       randomSeed,
+-      offset: defaultOffset = strokeWidth / 3,
++      offset: defaultOffset = strokeWidth * 0.9,
+       roundness: defaultRoundness = strokeWidth * 2,
+       passes = 2,
+       onlyFilled = false

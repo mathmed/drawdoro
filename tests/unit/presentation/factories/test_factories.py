@@ -8,7 +8,9 @@ from app.domain.usecases.comment.list_comments import ListComments
 from app.domain.usecases.diagram.create_diagram import CreateDiagram
 from app.domain.usecases.diagram.delete_diagram import DeleteDiagram
 from app.domain.usecases.diagram.get_diagram import GetDiagram
+from app.domain.usecases.diagram.get_diagram_by_share_token import GetDiagramByShareToken
 from app.domain.usecases.diagram.list_diagrams import ListDiagrams
+from app.domain.usecases.diagram.share_diagram import ShareDiagram
 from app.domain.usecases.diagram.update_diagram import UpdateDiagram
 from app.domain.usecases.documentation.get_documentation_page import GetDocumentationPage
 from app.domain.usecases.documentation.upsert_documentation_page import UpsertDocumentationPage
@@ -35,8 +37,10 @@ from app.presentation.factories.comment_factories import (
 from app.presentation.factories.diagram_factories import (
     create_diagram_factory,
     delete_diagram_factory,
+    get_diagram_by_share_token_factory,
     get_diagram_factory,
     list_diagrams_factory,
+    share_diagram_factory,
     update_diagram_factory,
 )
 from app.presentation.factories.documentation_factories import (
@@ -100,6 +104,8 @@ async def test_diagram_factories() -> None:
     assert isinstance(await list_diagrams_factory(session), ListDiagrams)
     assert isinstance(await update_diagram_factory(session), UpdateDiagram)
     assert isinstance(await delete_diagram_factory(session), DeleteDiagram)
+    assert isinstance(await share_diagram_factory(session), ShareDiagram)
+    assert isinstance(await get_diagram_by_share_token_factory(session), GetDiagramByShareToken)
 
 
 async def test_comment_factories() -> None:

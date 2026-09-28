@@ -10,6 +10,7 @@ import {
   PanelLeftOpen,
   PanelRight,
   Play,
+  Share2,
   ShieldCheck,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -19,6 +20,7 @@ import type { Folder } from '../../api/types'
 import { useAppStore } from '../../store/useAppStore'
 import { exportDiagram, type ExportFormat } from '../../utils/exportDiagram'
 import { modKey } from '../../utils/format'
+import ShareDialog from '../diagram/ShareDialog'
 import PresenceAvatars from '../presence/PresenceAvatars'
 import Menu from '../ui/Menu'
 
@@ -111,6 +113,7 @@ export default function TopBar() {
   const toggleInspector = useAppStore((state) => state.toggleInspector)
   const runValidation = useAppStore((state) => state.runValidation)
   const enterPresentation = useAppStore((state) => state.enterPresentation)
+  const [isShareOpen, setIsShareOpen] = useState(false)
 
   function handleExport(format: ExportFormat): void {
     if (activeDiagram !== null) {
@@ -182,6 +185,14 @@ export default function TopBar() {
               </button>
             )}
           />
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            data-tooltip="Create a shareable link"
+            onClick={() => setIsShareOpen(true)}
+          >
+            <Share2 size={15} /> Share
+          </button>
           <span className="topbar-divider" />
           <button type="button" className="btn btn-primary btn-sm" onClick={enterPresentation}>
             <Play size={14} /> Present
@@ -198,6 +209,10 @@ export default function TopBar() {
             <PanelRight size={16} />
           </button>
         </div>
+      ) : null}
+
+      {isShareOpen && activeDiagram !== null ? (
+        <ShareDialog diagramId={activeDiagram.id} onClose={() => setIsShareOpen(false)} />
       ) : null}
     </header>
   )

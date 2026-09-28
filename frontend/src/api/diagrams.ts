@@ -50,3 +50,21 @@ export async function updateDiagram(
 export async function deleteDiagram(projectId: string, diagramId: string): Promise<void> {
   await apiClient.delete(`/projects/${projectId}/diagrams/${diagramId}`)
 }
+
+export async function shareDiagram(diagramId: string): Promise<string> {
+  const { data } = await apiClient.post<{ share_token: string }>(`/diagrams/${diagramId}/share`)
+  return data.share_token
+}
+
+export interface SharedDiagram {
+  id: string
+  name: string
+  canvas_state: CanvasState | null
+  semantic_metadata?: SemanticMetadata | null
+}
+
+// Public: no auth required. Used by the shareable link and by guest visitors.
+export async function getSharedDiagram(shareToken: string): Promise<SharedDiagram> {
+  const { data } = await apiClient.get<SharedDiagram>(`/share/${shareToken}`)
+  return data
+}

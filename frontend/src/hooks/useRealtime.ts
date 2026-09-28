@@ -19,6 +19,9 @@ interface RealtimeOptions {
   diagramId: string
   editor: Editor | null
   onPresenceChange: (presence: Presence) => void
+  // Guests reach a diagram through a share link instead of a signed-in session.
+  shareToken?: string
+  guestName?: string
 }
 
 interface RealtimeMessage {
@@ -31,7 +34,13 @@ interface RealtimeMessage {
 
 const RECONNECT_DELAY_MS = 2000
 
-export function useRealtime({ diagramId, editor, onPresenceChange }: RealtimeOptions) {
+export function useRealtime({
+  diagramId,
+  editor,
+  onPresenceChange,
+  shareToken,
+  guestName,
+}: RealtimeOptions) {
   const wsRef = useRef<WebSocket | null>(null)
   const clientId = useRef(crypto.randomUUID())
   const applyingRemote = useRef(false)
@@ -44,12 +53,22 @@ export function useRealtime({ diagramId, editor, onPresenceChange }: RealtimeOpt
   const connect = useCallback(
     async (connectionGeneration: number) => {
       // Browsers can't send headers on a WebSocket handshake, so the ID token goes in the URL.
-      const token = authConfig.enabled ? await getIdToken() : null
+      // Guests have no session; they authenticate the connection with their share token instead.
+      const token = shareToken === undefined && authConfig.enabled ? await getIdToken() : null
       if (connectionGeneration !== generation.current) {
         return
       }
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-      const query = token === null ? '' : `?token=${encodeURIComponent(token)}`
+      const params = new URLSearchParams()
+      if (shareToken !== undefined) {
+        params.set('share', shareToken)
+        if (guestName !== undefined && guestName !== '') {
+          params.set('name', guestName)
+        }
+      } else if (token !== null) {
+        params.set('token', token)
+      }
+      const query = params.toString() === '' ? '' : `?${params.toString()}`
       const ws = new WebSocket(`${protocol}//${window.location.host}/api/ws/diagrams/${diagramId}${query}`)
 
       ws.onmessage = (event) => {
@@ -85,7 +104,7 @@ export function useRealtime({ diagramId, editor, onPresenceChange }: RealtimeOpt
 
       wsRef.current = ws
     },
-    [diagramId, editor, onPresenceChange],
+    [diagramId, editor, onPresenceChange, shareToken, guestName],
   )
 
   const sendUpdate = useCallback((snapshot: object) => {
