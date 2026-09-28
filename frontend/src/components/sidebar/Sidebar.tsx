@@ -7,6 +7,7 @@ import {
   FolderPlus,
   House,
   Layers,
+  LogOut,
   Monitor,
   Moon,
   MoreHorizontal,
@@ -16,17 +17,22 @@ import {
   Search,
   Sun,
   Trash2,
+  Users,
   Workflow,
 } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import type { Diagram, Folder, Project } from '../../api/types'
+import { authConfig } from '../../auth/config'
+import { logout } from '../../auth/session'
 import { useAppStore } from '../../store/useAppStore'
 import { confirmDialog, promptDialog } from '../../store/useDialogStore'
+import { useAuthStore } from '../../store/useAuthStore'
 import { useThemeStore, type ThemePreference } from '../../store/useThemeStore'
 import { initial, modKey, slugify } from '../../utils/format'
 import Logo from '../ui/Logo'
+import MembersDialog from '../workspace/MembersDialog'
 import Menu, { type MenuEntry } from '../ui/Menu'
 
 const INDENT = 14
@@ -86,6 +92,9 @@ export default function Sidebar() {
   const toggleSidebar = useAppStore((state) => state.toggleSidebar)
   const setCommandPaletteOpen = useAppStore((state) => state.setCommandPaletteOpen)
 
+  const profile = useAuthStore((state) => state.profile)
+  const myRole = useAppStore((state) => state.myRole)
+  const [isMembersOpen, setIsMembersOpen] = useState(false)
   const themePreference = useThemeStore((state) => state.preference)
   const setThemePreference = useThemeStore((state) => state.setPreference)
 
@@ -413,11 +422,16 @@ export default function Sidebar() {
       },
     })),
     { kind: 'separator' },
+    ...(authConfig.enabled && activeWorkspace !== null
+      ? [{ label: 'Members', icon: <Users size={15} />, onSelect: () => setIsMembersOpen(true) }]
+      : []),
     { label: 'New workspace', icon: <Plus size={15} />, onSelect: () => void handleCreateWorkspace() },
   ]
 
   return (
-    <aside className="sidebar">
+    // Viewers can browse but not change anything; the API enforces the same rule.
+    <aside className="sidebar" data-readonly={myRole === 'viewer'}>
+      {isMembersOpen ? <MembersDialog onClose={() => setIsMembersOpen(false)} /> : null}
       <div className="sidebar-header">
         <Menu
           className="menu-anchor workspace-anchor"
@@ -464,6 +478,7 @@ export default function Sidebar() {
             type="button"
             className="btn btn-ghost btn-icon btn-xs"
             aria-label="New project"
+            data-edit-only
             data-tooltip="New project"
             disabled={activeWorkspace === null}
             onClick={() => void handleCreateProject()}
@@ -483,7 +498,28 @@ export default function Sidebar() {
       </div>
 
       <div className="sidebar-footer">
-        <Logo size={20} withWordmark />
+        {profile !== null ? (
+          <Menu
+            side="top"
+            className="menu-anchor user-anchor"
+            items={[
+              { kind: 'label', label: profile.email },
+              { label: 'Sign out', icon: <LogOut size={15} />, onSelect: logout },
+            ]}
+            trigger={({ toggle }) => (
+              <button type="button" className="user-button" onClick={toggle} title={profile.email}>
+                {profile.picture !== undefined ? (
+                  <img className="user-avatar" src={profile.picture} alt="" referrerPolicy="no-referrer" />
+                ) : (
+                  <span className="user-avatar">{initial(profile.name)}</span>
+                )}
+                <span className="user-name">{profile.name}</span>
+              </button>
+            )}
+          />
+        ) : (
+          <Logo size={20} withWordmark />
+        )}
         <div className="segmented" role="group" aria-label="Theme">
           {THEME_OPTIONS.map((option) => (
             <button

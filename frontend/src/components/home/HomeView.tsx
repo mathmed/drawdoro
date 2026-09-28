@@ -194,6 +194,7 @@ export default function HomeView() {
   const isLoadingProject = useAppStore((state) => state.isLoadingProject)
   const openNewDiagram = useAppStore((state) => state.openNewDiagram)
   const createFolder = useAppStore((state) => state.createFolder)
+  const canEdit = useAppStore((state) => state.myRole !== 'viewer')
 
   if (isLoadingWorkspaces && workspaces.length === 0) {
     return (
@@ -240,7 +241,7 @@ export default function HomeView() {
                 : `${diagrams.length} diagram${diagrams.length === 1 ? '' : 's'} · ${folders.length} folder${folders.length === 1 ? '' : 's'}`}
             </p>
           </div>
-          <div className="home-actions">
+          <div className="home-actions" hidden={!canEdit}>
             <button type="button" className="btn btn-secondary" onClick={() => void handleNewFolder()}>
               <FolderPlus size={15} /> New folder
             </button>
@@ -261,9 +262,11 @@ export default function HomeView() {
               title="No diagrams yet"
               description="Create your first diagram to start drawing the architecture of this project."
               action={
-                <button type="button" className="btn btn-primary" onClick={() => openNewDiagram()}>
-                  <Plus size={15} /> Create diagram
-                </button>
+                canEdit ? (
+                  <button type="button" className="btn btn-primary" onClick={() => openNewDiagram()}>
+                    <Plus size={15} /> Create diagram
+                  </button>
+                ) : undefined
               }
             />
           </div>
@@ -271,9 +274,11 @@ export default function HomeView() {
           <>
             <div className="home-section-title">Recent diagrams</div>
             <div className="card-grid">
-              <button type="button" className="new-card" onClick={() => openNewDiagram()}>
-                <Plus size={20} /> New diagram
-              </button>
+              {canEdit ? (
+                <button type="button" className="new-card" onClick={() => openNewDiagram()}>
+                  <Plus size={20} /> New diagram
+                </button>
+              ) : null}
               {sorted.map((diagram) => (
                 <DiagramCard key={diagram.id} diagram={diagram} folderName={folderName(diagram.folder_id)} />
               ))}

@@ -19,6 +19,7 @@ import type { Folder } from '../../api/types'
 import { useAppStore } from '../../store/useAppStore'
 import { exportDiagram, type ExportFormat } from '../../utils/exportDiagram'
 import { modKey } from '../../utils/format'
+import PresenceAvatars from '../presence/PresenceAvatars'
 import Menu from '../ui/Menu'
 
 function folderPath(folders: Folder[], folderId: string | null): Folder[] {
@@ -103,7 +104,7 @@ export default function TopBar() {
   const activeDiagram = useAppStore((state) => state.activeDiagram)
   const folders = useAppStore((state) => state.folders)
   const editor = useAppStore((state) => state.editor)
-  const peers = useAppStore((state) => state.peers)
+  const hasPresence = useAppStore((state) => state.presence.users.length > 0)
   const isSidebarOpen = useAppStore((state) => state.isSidebarOpen)
   const isInspectorOpen = useAppStore((state) => state.isInspectorOpen)
   const toggleSidebar = useAppStore((state) => state.toggleSidebar)
@@ -156,13 +157,8 @@ export default function TopBar() {
 
       {activeDiagram !== null ? (
         <div className="topbar-actions">
-          {peers > 1 ? (
-            <span className="presence" title="People editing this diagram right now">
-              <span className="presence-dot" />
-              {peers} online
-            </span>
-          ) : null}
-          {peers > 1 ? <span className="topbar-divider" /> : null}
+          {hasPresence ? <PresenceAvatars /> : null}
+          {hasPresence ? <span className="topbar-divider" /> : null}
           <button
             type="button"
             className="btn btn-ghost btn-sm"

@@ -4,7 +4,7 @@ import type { TLShapeId } from 'tldraw'
 
 import { useComments } from '../../hooks/useComments'
 import { useAppStore } from '../../store/useAppStore'
-import { modKey, timeAgo } from '../../utils/format'
+import { initial, modKey, timeAgo } from '../../utils/format'
 import EmptyState from '../ui/EmptyState'
 
 export default function CommentsPanel() {
@@ -87,11 +87,11 @@ export default function CommentsPanel() {
             {comments.map((comment) => (
               <div key={comment.id} className="comment">
                 <div className="comment-avatar">
-                  <User size={14} />
+                  {comment.author_name !== null ? initial(comment.author_name) : <User size={14} />}
                 </div>
                 <div className="comment-body">
                   <div className="comment-meta">
-                    <span className="comment-author">Anonymous</span>
+                    <span className="comment-author">{comment.author_name ?? 'Anonymous'}</span>
                     <span>·</span>
                     <span title={new Date(comment.created_at).toLocaleString()}>{timeAgo(comment.created_at)}</span>
                   </div>

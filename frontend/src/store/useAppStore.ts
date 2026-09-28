@@ -1,6 +1,8 @@
 import type { Editor } from 'tldraw'
 import { create } from 'zustand'
 
+import { authConfig } from '../auth/config'
+
 import { createComment as apiCreateComment, listComments } from '../api/comments'
 import { getDocumentation, upsertDocumentation } from '../api/documentation'
 import {
@@ -22,6 +24,12 @@ import {
   listProjects,
   updateProject as apiUpdateProject,
 } from '../api/projects'
+import {
+  addMember as apiAddMember,
+  listMembers,
+  removeMember as apiRemoveMember,
+  updateMemberRole as apiUpdateMemberRole,
+} from '../api/members'
 import { createWorkspace as apiCreateWorkspace, listWorkspaces } from '../api/workspaces'
 import type {
   CanvasState,
@@ -34,8 +42,14 @@ import type {
   ShapeMetadata,
   ValidationResult,
   Workspace,
+  WorkspaceMember,
+  WorkspaceRole,
 } from '../api/types'
 import { buildArchitectureGraph, validateArchitecture } from '../utils/validateArchitecture'
+import type { Presence } from '../hooks/useRealtime'
+import { useAuthStore } from './useAuthStore'
+
+const EMPTY_PRESENCE: Presence = { users: [], you: null }
 
 export type InspectorTab = 'properties' | 'docs' | 'comments'
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
@@ -90,7 +104,10 @@ interface AppState {
   isPresentationMode: boolean
   semanticMetadata: Record<string, ShapeMetadata>
   validationResults: ValidationResult[]
-  peers: number
+  presence: Presence
+  members: WorkspaceMember[]
+  // The signed-in user's role in the active workspace; null when login is disabled.
+  myRole: WorkspaceRole | null
 
   loadWorkspaces: () => Promise<void>
   setActiveWorkspace: (workspace: Workspace) => Promise<void>
@@ -128,7 +145,11 @@ interface AppState {
   saveSemanticMetadata: () => Promise<void>
   runValidation: () => void
   closeValidation: () => void
-  setPeers: (n: number) => void
+  setPresence: (presence: Presence) => void
+  loadMembers: (workspaceId: string) => Promise<void>
+  addMember: (email: string, role: WorkspaceRole) => Promise<void>
+  updateMemberRole: (userId: string, role: WorkspaceRole) => Promise<void>
+  removeMember: (userId: string) => Promise<void>
 }
 
 export const useAppStore = create<AppState>((set, get) => {
@@ -199,7 +220,9 @@ export const useAppStore = create<AppState>((set, get) => {
     isPresentationMode: false,
     semanticMetadata: {},
     validationResults: [],
-    peers: 1,
+    presence: EMPTY_PRESENCE,
+    members: [],
+    myRole: null,
 
     loadWorkspaces: async () => {
       set({ isLoadingWorkspaces: true })
@@ -225,7 +248,10 @@ export const useAppStore = create<AppState>((set, get) => {
         activeProject: null,
         folders: [],
         diagrams: [],
+        members: [],
+        myRole: null,
       })
+      void get().loadMembers(workspace.id)
       const projects = await listProjects(workspace.id)
       if (get().activeWorkspace?.id !== workspace.id) {
         return
@@ -274,7 +300,7 @@ export const useAppStore = create<AppState>((set, get) => {
         semanticMetadata: {},
         validationResults: [],
         activeElementId: null,
-        peers: 1,
+        presence: EMPTY_PRESENCE,
         saveStatus: 'idle',
       })
     },
@@ -326,6 +352,7 @@ export const useAppStore = create<AppState>((set, get) => {
               comments,
               ...diagramContext(found),
             })
+            void get().loadMembers(workspace.id)
             return
           }
         }
@@ -516,6 +543,55 @@ export const useAppStore = create<AppState>((set, get) => {
 
     closeValidation: () => set({ isValidationOpen: false }),
 
-    setPeers: (n) => set({ peers: n }),
+    setPresence: (presence) => set({ presence }),
+
+    loadMembers: async (workspaceId) => {
+      if (!authConfig.enabled) {
+        set({ members: [], myRole: null })
+        return
+      }
+      const members = await listMembers(workspaceId)
+      if (get().activeWorkspace?.id !== workspaceId) {
+        return
+      }
+      const email = useAuthStore.getState().profile?.email.toLowerCase()
+      set({ members, myRole: members.find((member) => member.email === email)?.role ?? null })
+    },
+
+    addMember: async (email, role) => {
+      const { activeWorkspace } = get()
+      if (activeWorkspace === null) {
+        return
+      }
+      const member = await apiAddMember(activeWorkspace.id, email, role)
+      set({ members: [...get().members, member].sort((a, b) => a.name.localeCompare(b.name)) })
+    },
+
+    updateMemberRole: async (userId, role) => {
+      const { activeWorkspace } = get()
+      if (activeWorkspace === null) {
+        return
+      }
+      await apiUpdateMemberRole(activeWorkspace.id, userId, role)
+      await get().loadMembers(activeWorkspace.id)
+    },
+
+    removeMember: async (userId) => {
+      const { activeWorkspace } = get()
+      if (activeWorkspace === null) {
+        return
+      }
+      const myEmail = useAuthStore.getState().profile?.email.toLowerCase()
+      const isLeaving = get().members.some((member) => member.user_id === userId && member.email === myEmail)
+      await apiRemoveMember(activeWorkspace.id, userId)
+      if (!isLeaving) {
+        await get().loadMembers(activeWorkspace.id)
+        return
+      }
+      // Leaving drops access right away, so move to another workspace.
+      get().closeDiagram()
+      set({ activeWorkspace: null, projects: [], activeProject: null, folders: [], diagrams: [], members: [], myRole: null })
+      await get().loadWorkspaces()
+    },
   }
 })
