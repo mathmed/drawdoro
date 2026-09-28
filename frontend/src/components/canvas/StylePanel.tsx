@@ -259,19 +259,6 @@ function DrawdoroStylePanelContent() {
     },
     [editor],
   )
-  // tldraw always renders arrows with a clean stroke, so sloppiness would be a no-op for them.
-  const sloppinessApplies = useValue(
-    'sloppiness applies',
-    () => {
-      const selected = editor.getSelectedShapes()
-      if (editor.isIn('select') && selected.length > 0) {
-        return selected.some((shape) => shape.type !== 'arrow')
-      }
-      return !editor.isIn('arrow')
-    },
-    [editor],
-  )
-
   if (styles === null) {
     return null
   }
@@ -470,7 +457,6 @@ function DrawdoroStylePanelContent() {
               <Line width={2} dash="0.5 3.5" />
             </Option>
           </Section>
-          {sloppinessApplies ? (
           <Section title="Sloppiness">
             <Option active={dash === 'solid'} disabled={!isSolidLine} label="Architect — clean lines" onSelect={() => apply(DefaultDashStyle, 'solid')}>
               <Squiggle wobble={false} />
@@ -479,7 +465,6 @@ function DrawdoroStylePanelContent() {
               <Squiggle wobble />
             </Option>
           </Section>
-          ) : null}
         </>
       ) : null}
 
