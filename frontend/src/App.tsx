@@ -1,14 +1,18 @@
+import { Loader2 } from 'lucide-react'
 import { useEffect } from 'react'
 import { Route, Routes } from 'react-router-dom'
 
 import DialogHost from './components/ui/DialogHost'
 import Toaster from './components/ui/Toaster'
+import AuthCallback from './pages/AuthCallback'
 import DiagramPage from './pages/Diagram'
 import Home from './pages/Home'
+import Landing from './pages/Landing'
 import NotFound from './pages/NotFound'
 import { useAppStore } from './store/useAppStore'
+import { useAuthStore } from './store/useAuthStore'
 
-export default function App() {
+function SignedInApp() {
   const loadWorkspaces = useAppStore((state) => state.loadWorkspaces)
 
   useEffect(() => {
@@ -16,11 +20,40 @@ export default function App() {
   }, [loadWorkspaces])
 
   return (
+    <Routes>
+      <Route path="/" element={<Home />} />
+      <Route path="/diagrams/:id" element={<DiagramPage />} />
+      <Route path="*" element={<NotFound />} />
+    </Routes>
+  )
+}
+
+// Any route shows the landing page until the user signs in, then renders the app.
+function AuthGate() {
+  const status = useAuthStore((state) => state.status)
+
+  if (status === 'loading') {
+    return (
+      <div className="full-center">
+        <Loader2 size={16} className="spinner" />
+      </div>
+    )
+  }
+  return status === 'signed-in' ? <SignedInApp /> : <Landing />
+}
+
+export default function App() {
+  const initialize = useAuthStore((state) => state.initialize)
+
+  useEffect(() => {
+    void initialize()
+  }, [initialize])
+
+  return (
     <>
       <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/diagrams/:id" element={<DiagramPage />} />
-        <Route path="*" element={<NotFound />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
+        <Route path="*" element={<AuthGate />} />
       </Routes>
       <DialogHost />
       <Toaster />

@@ -12,4 +12,6 @@ class Comment(BaseModel):
     element_id: str
     content: str
     author_id: uuid.UUID | None = None
+    # Read-only projection of the author's current name; not stored on the comment.
+    author_name: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

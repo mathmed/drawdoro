@@ -119,6 +119,27 @@ def test_should_create_comment(client: TestClient) -> None:
         app.dependency_overrides.clear()
 
 
+def test_should_return_comment_author_name(client: TestClient) -> None:
+    diagram_id = uuid.uuid4()
+    comment = Comment(
+        diagram_id=diagram_id,
+        element_id="el1",
+        content="Nice!",
+        author_id=uuid.uuid4(),
+        author_name="Ana Souza",
+    )
+    mock_uc = AsyncMock(spec=CreateComment)
+    mock_uc.execute.return_value = comment
+    app.dependency_overrides[create_comment_factory] = lambda: mock_uc
+    try:
+        response = client.post(
+            f"/diagrams/{diagram_id}/comments", json={"element_id": "el1", "content": "Nice!"}
+        )
+        assert response.json()["author_name"] == "Ana Souza"
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_should_delete_comment(client: TestClient) -> None:
     diagram_id = uuid.uuid4()
     comment_id = uuid.uuid4()

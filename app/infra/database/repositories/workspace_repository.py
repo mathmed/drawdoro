@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.domain.contracts.workspace_repository import WorkspaceRepository
 from app.domain.entities.models.workspace import Workspace
 from app.infra.database.models.workspace import WorkspaceORM
+from app.infra.database.models.workspace_member import WorkspaceMemberORM
 
 
 class WorkspaceRepositoryImpl(WorkspaceRepository):
@@ -37,6 +38,23 @@ class WorkspaceRepositoryImpl(WorkspaceRepository):
     async def list_all(self) -> list[Workspace]:
         result = await self._session.execute(
             select(WorkspaceORM).where(WorkspaceORM.deleted_at.is_(None))
+        )
+        return [_to_domain(row) for row in result.scalars().all()]
+
+    async def list_for_user(self, user_id: uuid.UUID) -> list[Workspace]:
+        result = await self._session.execute(
+            select(WorkspaceORM)
+            .join(WorkspaceMemberORM, WorkspaceMemberORM.workspace_id == WorkspaceORM.id)
+            .where(WorkspaceMemberORM.user_id == user_id, WorkspaceORM.deleted_at.is_(None))
+        )
+        return [_to_domain(row) for row in result.scalars().all()]
+
+    async def list_without_members(self) -> list[Workspace]:
+        has_members = select(WorkspaceMemberORM.id).where(
+            WorkspaceMemberORM.workspace_id == WorkspaceORM.id
+        )
+        result = await self._session.execute(
+            select(WorkspaceORM).where(WorkspaceORM.deleted_at.is_(None), ~has_members.exists())
         )
         return [_to_domain(row) for row in result.scalars().all()]
 

@@ -165,3 +165,7 @@ cython_debug/
 # Claude Code
 .claude/settings.local.json
 .local_dev
+
+# Frontend local overrides (e.g. Cognito login for local testing)
+frontend/.env.local
+frontend/.env.*.local

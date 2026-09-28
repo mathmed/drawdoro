@@ -18,4 +18,5 @@ class CommentResponse(BaseModel):
     element_id: str
     content: str
     author_id: uuid.UUID | None
+    author_name: str | None
     created_at: datetime

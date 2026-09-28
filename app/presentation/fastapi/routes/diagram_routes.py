@@ -14,13 +14,18 @@ from app.presentation.factories.diagram_factories import (
     list_diagrams_factory,
     update_diagram_factory,
 )
+from app.presentation.fastapi.dependencies.workspace_access import require_workspace_access
 from app.presentation.fastapi.schemas.diagram_schemas import (
     CreateDiagramRequest,
     DiagramResponse,
     UpdateDiagramRequest,
 )
 
-router = APIRouter(prefix="/projects/{project_id}/diagrams", tags=["diagrams"])
+router = APIRouter(
+    prefix="/projects/{project_id}/diagrams",
+    tags=["diagrams"],
+    dependencies=[Depends(require_workspace_access)],
+)
 
 
 @router.get("", response_model=list[DiagramResponse])

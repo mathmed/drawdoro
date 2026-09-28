@@ -63,6 +63,32 @@ Health check: `curl http://localhost:8000/health`
 | `DRAWDORO_API_URL` | `http://localhost:8000` | Backend URL used by the MCP server |
 | `DATABASE_URL` | `postgresql+asyncpg://drawdoro:drawdoro@localhost:5432/drawdoro` | PostgreSQL async connection URL |
 | `VITE_API_URL` | `/api` | Frontend base URL for the backend. Defaults to the Vite dev proxy that forwards `/api` to `http://localhost:8000`. |
+| `AUTH_ENABLED` | `false` | Require a Cognito sign-in on every API route and WebSocket. Must be `true` when `ENV=production`. |
+| `COGNITO_REGION` | `us-east-1` | Region of the Cognito user pool |
+| `COGNITO_USER_POOL_ID` | - | User pool whose ID tokens the API accepts |
+| `COGNITO_CLIENT_ID` | - | App client id expected in the token audience |
+| `SERVICE_API_KEY` | - | Shared secret that lets trusted services (the MCP server) call the API via `X-API-Key` |
+| `DRAWDORO_API_KEY` | - | MCP server: value sent as `X-API-Key` (same as `SERVICE_API_KEY`) |
+| `VITE_COGNITO_DOMAIN` | - | Frontend: managed login domain; empty disables login |
+| `VITE_COGNITO_CLIENT_ID` | - | Frontend: public app client id (no secret) |
+| `VITE_COGNITO_IDENTITY_PROVIDER` | `Google` | Frontend: identity provider to skip the Cognito provider picker |
+
+## Authentication
+
+Sign-in uses an Amazon Cognito user pool with Google federation (authorization code + PKCE, no client
+secret). The API validates the Cognito **ID token** (`iss`, `aud`, `token_use`, `exp`) on every route
+except `/health`, creates the user in `users` on first sign-in, and the WebSocket reads it from `?token=`.
+Leave `AUTH_ENABLED=false` and the `VITE_COGNITO_*` variables empty to develop without logging in.
+
+Access is scoped by workspace membership (`workspace_members`): the creator of a workspace becomes its
+**owner**, and only members see it. **Viewers** read, **editors** also change content, and **owners** also
+manage members and rename or delete the workspace. Resources outside the user's workspaces answer 404.
+A workspace always keeps at least one owner. Workspaces that have no members (created before sign-in was
+enabled) are adopted by the first signed-in user who lists workspaces.
+
+The app client in the pool needs: no client secret, the *Authorization code grant*, scopes
+`openid email profile`, the Google identity provider enabled, callback URL `<app origin>/auth/callback`
+and sign-out URL `<app origin>` with no trailing slash (add the `http://localhost:3000` ones for local testing).
 
 ## Folder structure
 
@@ -94,7 +120,8 @@ frontend/                 React + Vite + TypeScript
     components/presentation/ Fullscreen presentation mode navigating frames
     components/semantic/  Shape properties panel and architecture validation modal
     components/ui/        Design-system primitives: modal, menu, dialogs, toasts, empty states
-    pages/                Home, Diagram, NotFound
+    pages/                Landing (sign-in), AuthCallback, Home, Diagram, NotFound
+    auth/                 Cognito managed login: PKCE flow, token storage and refresh
     api/                  Axios client and per-resource API functions
     store/                Zustand stores (app, theme, dialogs, toasts)
     styles/               Design tokens (light/dark) and component styles
@@ -110,6 +137,9 @@ mcp/                      Python MCP server
 
 | Method | Path | Description |
 |---|---|---|
+| GET | /me | Signed-in user (creates it on first sign-in) |
+| GET/POST | /workspaces/{id}/members | List members / add a member by email (owner) |
+| PUT/DELETE | /workspaces/{id}/members/{user_id} | Change a role (owner) / remove a member (owner, or yourself to leave) |
 | GET | /health | Health check |
 | GET/POST | /workspaces | List / create workspaces |
 | GET/PUT/DELETE | /workspaces/{id} | Get / update / delete workspace |

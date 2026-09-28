@@ -101,7 +101,7 @@ export default function DrawingCanvas({ diagram }: DrawingCanvasProps) {
   const setEditor = useAppStore((state) => state.setEditor)
   const isPresentationMode = useAppStore((state) => state.isPresentationMode)
   const editor = useAppStore((state) => state.editor)
-  const setPeers = useAppStore((state) => state.setPeers)
+  const setPresence = useAppStore((state) => state.setPresence)
   const theme = useThemeStore((state) => state.resolved)
 
   useSelectionShortcuts(editor)
@@ -110,10 +110,16 @@ export default function DrawingCanvas({ diagram }: DrawingCanvasProps) {
     editor?.user.updateUserPreferences({ colorScheme: theme })
   }, [editor, theme])
 
+  // Viewers get a read-only canvas: they can pan, zoom and select but not change shapes.
+  const isViewer = useAppStore((state) => state.myRole === 'viewer')
+  useEffect(() => {
+    editor?.updateInstanceState({ isReadonly: isViewer })
+  }, [editor, isViewer])
+
   const { sendUpdate } = useRealtime({
     diagramId: diagram.id,
     editor,
-    onPeersChange: setPeers,
+    onPresenceChange: setPresence,
   })
 
   function handleMount(mountedEditor: Editor): () => void {

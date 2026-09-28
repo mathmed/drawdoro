@@ -1,95 +1,109 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { loadSnapshot, type Editor, type TLStoreSnapshot } from 'tldraw'
 
+import { authConfig } from '../auth/config'
+import { getIdToken } from '../auth/session'
+
+export interface PresenceUser {
+  id: string
+  name: string
+}
+
+export interface Presence {
+  users: PresenceUser[]
+  // Which entry is this browser tab; null until the server says so.
+  you: string | null
+}
+
 interface RealtimeOptions {
   diagramId: string
   editor: Editor | null
-  onPeersChange: (count: number) => void
+  onPresenceChange: (presence: Presence) => void
 }
 
 interface RealtimeMessage {
   type: string
-  peers?: number
+  users?: PresenceUser[]
+  you?: string
   client_id?: string
   snapshot?: TLStoreSnapshot
 }
 
-export function useRealtime({ diagramId, editor, onPeersChange }: RealtimeOptions) {
+const RECONNECT_DELAY_MS = 2000
+
+export function useRealtime({ diagramId, editor, onPresenceChange }: RealtimeOptions) {
   const wsRef = useRef<WebSocket | null>(null)
   const clientId = useRef(crypto.randomUUID())
   const applyingRemote = useRef(false)
-  const closedByUs = useRef(false)
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Every (re)mount gets a new generation. Sockets and pending connects from an older one
+  // are ignored, so a stale socket can never reconnect behind the current one and leave a
+  // ghost session on the server.
+  const generation = useRef(0)
 
-  const connect = useCallback(() => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const ws = new WebSocket(
-      `${protocol}//${window.location.host}/api/ws/diagrams/${diagramId}`,
-    )
-
-    ws.onopen = () => console.log('[realtime] conectado')
-
-    ws.onmessage = (event) => {
-      const msg = JSON.parse(event.data) as RealtimeMessage
-
-      if (msg.type === 'peers' || msg.type === 'peer_joined' || msg.type === 'peer_left') {
-        onPeersChange(msg.peers ?? 1)
+  const connect = useCallback(
+    async (connectionGeneration: number) => {
+      // Browsers can't send headers on a WebSocket handshake, so the ID token goes in the URL.
+      const token = authConfig.enabled ? await getIdToken() : null
+      if (connectionGeneration !== generation.current) {
         return
       }
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+      const query = token === null ? '' : `?token=${encodeURIComponent(token)}`
+      const ws = new WebSocket(`${protocol}//${window.location.host}/api/ws/diagrams/${diagramId}${query}`)
 
-      if (
-        msg.type === 'update' &&
-        msg.client_id !== clientId.current &&
-        msg.snapshot !== undefined &&
-        editor !== null
-      ) {
-        const snapshot = msg.snapshot
-        const wasFocused = editor.getIsFocused()
-        applyingRemote.current = true
-        editor.store.mergeRemoteChanges(() => {
-          loadSnapshot(editor.store, snapshot)
-        })
-        applyingRemote.current = false
-        // A peer's edit must not steal keyboard focus from the local user.
-        if (wasFocused && !editor.getIsFocused()) {
-          editor.focus({ focusContainer: false })
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data) as RealtimeMessage
+
+        if (msg.type === 'presence') {
+          onPresenceChange({ users: msg.users ?? [], you: msg.you ?? null })
+          return
+        }
+
+        if (msg.type === 'update' && msg.client_id !== clientId.current && msg.snapshot !== undefined && editor !== null) {
+          const snapshot = msg.snapshot
+          const wasFocused = editor.getIsFocused()
+          applyingRemote.current = true
+          editor.store.mergeRemoteChanges(() => {
+            loadSnapshot(editor.store, snapshot)
+          })
+          applyingRemote.current = false
+          // A peer's edit must not steal keyboard focus from the local user.
+          if (wasFocused && !editor.getIsFocused()) {
+            editor.focus({ focusContainer: false })
+          }
         }
       }
-    }
 
-    ws.onclose = () => {
-      if (closedByUs.current) {
-        return
+      ws.onclose = () => {
+        if (connectionGeneration !== generation.current) {
+          return
+        }
+        // Dropped unexpectedly (server restart, network): try again shortly.
+        reconnectTimer.current = setTimeout(() => void connect(connectionGeneration), RECONNECT_DELAY_MS)
       }
-      // Reconectar apos 2s se nao for fechamento intencional
-      reconnectTimer.current = setTimeout(connect, 2000)
-    }
 
-    wsRef.current = ws
-  }, [diagramId, editor, onPeersChange])
+      wsRef.current = ws
+    },
+    [diagramId, editor, onPresenceChange],
+  )
 
-  // Enviar update quando o canvas muda
   const sendUpdate = useCallback((snapshot: object) => {
     if (wsRef.current?.readyState === WebSocket.OPEN && !applyingRemote.current) {
-      wsRef.current.send(
-        JSON.stringify({
-          type: 'update',
-          client_id: clientId.current,
-          snapshot,
-        }),
-      )
+      wsRef.current.send(JSON.stringify({ type: 'update', client_id: clientId.current, snapshot }))
     }
   }, [])
 
   useEffect(() => {
-    closedByUs.current = false
-    connect()
+    generation.current += 1
+    void connect(generation.current)
     return () => {
-      closedByUs.current = true
+      generation.current += 1
       if (reconnectTimer.current !== null) {
         clearTimeout(reconnectTimer.current)
       }
       wsRef.current?.close()
+      wsRef.current = null
     }
   }, [connect])
 

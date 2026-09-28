@@ -52,6 +52,7 @@ export interface Comment {
   element_id: string
   content: string
   author_id: string | null
+  author_name: string | null
   created_at: string
 }
 
@@ -76,4 +77,13 @@ export interface ValidationResult {
   severity: 'error' | 'warning'
   message: string
   shapeIds: string[]
+}
+
+export type WorkspaceRole = 'owner' | 'editor' | 'viewer'
+
+export interface WorkspaceMember {
+  user_id: string
+  name: string
+  email: string
+  role: WorkspaceRole
 }

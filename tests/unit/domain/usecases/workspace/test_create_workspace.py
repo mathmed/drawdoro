@@ -4,8 +4,10 @@ from unittest.mock import AsyncMock, create_autospec
 
 import pytest
 
+from app.domain.contracts.workspace_member_repository import WorkspaceMemberRepository
 from app.domain.contracts.workspace_repository import WorkspaceRepository
 from app.domain.entities.models.workspace import Workspace
+from app.domain.enums.workspace_role import WorkspaceRole
 from app.domain.usecases.workspace.create_workspace import CreateWorkspace, CreateWorkspaceParams
 
 
@@ -15,8 +17,13 @@ def repo() -> WorkspaceRepository:
 
 
 @pytest.fixture
-def sut(repo: WorkspaceRepository) -> CreateWorkspace:
-    return CreateWorkspace(repo)
+def members() -> WorkspaceMemberRepository:
+    return cast(WorkspaceMemberRepository, create_autospec(WorkspaceMemberRepository))
+
+
+@pytest.fixture
+def sut(repo: WorkspaceRepository, members: WorkspaceMemberRepository) -> CreateWorkspace:
+    return CreateWorkspace(repo, members)
 
 
 @pytest.fixture
@@ -43,3 +50,31 @@ async def test_should_generate_uuid_for_new_workspace(
     await sut.execute(params)
     created_arg: Workspace = repo.create.call_args[0][0]
     assert isinstance(created_arg.id, uuid.UUID)
+
+
+async def test_should_make_creator_the_owner(
+    sut: CreateWorkspace, repo: WorkspaceRepository, members: WorkspaceMemberRepository
+) -> None:
+    workspace = Workspace(name="Acme Corp", slug="acme")
+    creator_id = uuid.uuid4()
+    repo.create = AsyncMock(return_value=workspace)  # type: ignore[method-assign]
+    members.create = AsyncMock()  # type: ignore[method-assign]
+    await sut.execute(CreateWorkspaceParams(name="Acme Corp", slug="acme", creator_id=creator_id))
+    member = members.create.call_args[0][0]
+    assert (member.workspace_id, member.user_id, member.role) == (
+        workspace.id,
+        creator_id,
+        WorkspaceRole.OWNER,
+    )
+
+
+async def test_should_not_add_member_without_creator(
+    sut: CreateWorkspace,
+    repo: WorkspaceRepository,
+    members: WorkspaceMemberRepository,
+    params: CreateWorkspaceParams,
+) -> None:
+    repo.create = AsyncMock(return_value=Workspace(name="Acme Corp", slug="acme"))  # type: ignore[method-assign]
+    members.create = AsyncMock()  # type: ignore[method-assign]
+    await sut.execute(params)
+    members.create.assert_not_awaited()

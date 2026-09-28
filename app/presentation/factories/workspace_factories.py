@@ -6,12 +6,15 @@ from app.domain.usecases.workspace.delete_workspace import DeleteWorkspace
 from app.domain.usecases.workspace.get_workspace import GetWorkspace
 from app.domain.usecases.workspace.list_workspaces import ListWorkspaces
 from app.domain.usecases.workspace.update_workspace import UpdateWorkspace
+from app.infra.database.repositories.workspace_member_repository import (
+    WorkspaceMemberRepositoryImpl,
+)
 from app.infra.database.repositories.workspace_repository import WorkspaceRepositoryImpl
 from app.infra.database.session import get_session
 
 
 async def create_workspace_factory(session: AsyncSession = Depends(get_session)) -> CreateWorkspace:
-    return CreateWorkspace(WorkspaceRepositoryImpl(session))
+    return CreateWorkspace(WorkspaceRepositoryImpl(session), WorkspaceMemberRepositoryImpl(session))
 
 
 async def get_workspace_factory(session: AsyncSession = Depends(get_session)) -> GetWorkspace:
@@ -19,7 +22,7 @@ async def get_workspace_factory(session: AsyncSession = Depends(get_session)) ->
 
 
 async def list_workspaces_factory(session: AsyncSession = Depends(get_session)) -> ListWorkspaces:
-    return ListWorkspaces(WorkspaceRepositoryImpl(session))
+    return ListWorkspaces(WorkspaceRepositoryImpl(session), WorkspaceMemberRepositoryImpl(session))
 
 
 async def update_workspace_factory(session: AsyncSession = Depends(get_session)) -> UpdateWorkspace:

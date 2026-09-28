@@ -1,5 +1,8 @@
 import axios from 'axios'
 
+import { authConfig } from '../auth/config'
+import { getIdToken } from '../auth/session'
+import { useAuthStore } from '../store/useAuthStore'
 import { toast } from '../store/useToastStore'
 
 // In dev the app talks to the backend at http://localhost:8000. We default to the
@@ -28,7 +31,22 @@ function describeError(error: unknown): string {
   return `Request failed (${error.response.status}).`
 }
 
+apiClient.interceptors.request.use(async (config) => {
+  if (authConfig.enabled) {
+    const token = await getIdToken()
+    if (token !== null) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+  }
+  return config
+})
+
 apiClient.interceptors.response.use(undefined, (error: unknown) => {
+  // The session is gone (expired refresh token, user removed): send the user back to sign in.
+  if (axios.isAxiosError(error) && error.response?.status === 401 && authConfig.enabled) {
+    useAuthStore.getState().signOutLocally()
+    return Promise.reject(error)
+  }
   // A 404 on a read is an expected "not found yet" answer handled by the caller.
   const isExpectedMiss =
     axios.isAxiosError(error) && error.config?.method === 'get' && error.response?.status === 404
