@@ -1,64 +1,62 @@
+import { Loader2 } from 'lucide-react'
+
+import { useGlobalShortcuts } from '../../hooks/useGlobalShortcuts'
 import { useAppStore } from '../../store/useAppStore'
 import DrawingCanvas from '../canvas/DrawingCanvas'
-import CodePanel from '../code/CodePanel'
-import CommentsPanel from '../comments/CommentsPanel'
+import NewDiagramDialog from '../diagram/NewDiagramDialog'
+import HomeView from '../home/HomeView'
+import CommandPalette from '../palette/CommandPalette'
 import PresentationMode from '../presentation/PresentationMode'
+import ValidationModal from '../semantic/ValidationModal'
 import Sidebar from '../sidebar/Sidebar'
-import TemplateModal from '../templates/TemplateModal'
-import Toolbar from '../toolbar/Toolbar'
-import RightPanel from './RightPanel'
+import TopBar from '../topbar/TopBar'
+import Inspector from './Inspector'
 
 export default function AppLayout() {
   const activeDiagram = useAppStore((state) => state.activeDiagram)
-  const isDocsPanelOpen = useAppStore((state) => state.isDocsPanelOpen)
-  const isCodePanelOpen = useAppStore((state) => state.isCodePanelOpen)
-  const isTemplateModalOpen = useAppStore((state) => state.isTemplateModalOpen)
-  const isCommentsPanelOpen = useAppStore((state) => state.isCommentsPanelOpen)
+  const isLoadingDiagram = useAppStore((state) => state.isLoadingDiagram)
+  const isSidebarOpen = useAppStore((state) => state.isSidebarOpen)
+  const isInspectorOpen = useAppStore((state) => state.isInspectorOpen)
+  const isCommandPaletteOpen = useAppStore((state) => state.isCommandPaletteOpen)
+  const isValidationOpen = useAppStore((state) => state.isValidationOpen)
+  const validationResults = useAppStore((state) => state.validationResults)
+  const closeValidation = useAppStore((state) => state.closeValidation)
+  const newDiagramDialog = useAppStore((state) => state.newDiagramDialog)
   const isPresentationMode = useAppStore((state) => state.isPresentationMode)
 
+  useGlobalShortcuts()
+
+  const hasDiagram = activeDiagram !== null
+  const showChrome = !isPresentationMode
+
+  function renderStage() {
+    if (hasDiagram) {
+      return <DrawingCanvas key={activeDiagram.id} diagram={activeDiagram} />
+    }
+    if (isLoadingDiagram) {
+      return (
+        <div className="full-center">
+          <Loader2 size={16} className="spinner" /> Opening diagram…
+        </div>
+      )
+    }
+    return <HomeView />
+  }
+
   return (
-    <div
-      style={{
-        display: 'flex',
-        height: '100vh',
-        width: '100vw',
-        overflow: 'hidden',
-        background: '#0f1117',
-        color: '#e6edf3',
-      }}
-    >
-      {isPresentationMode ? null : <Sidebar />}
-      <main style={{ flex: 1, position: 'relative', minWidth: 0 }}>
-        {activeDiagram !== null ? (
-          <>
-            <DrawingCanvas key={activeDiagram.id} diagram={activeDiagram} />
-            {isPresentationMode ? null : <Toolbar />}
-            {!isPresentationMode && isCodePanelOpen ? <CodePanel /> : null}
-          </>
-        ) : (
-          <div
-            style={{
-              height: '100%',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8,
-              opacity: 0.7,
-            }}
-          >
-            <div style={{ fontSize: 40 }}>🗺️</div>
-            <div style={{ fontSize: 15 }}>Select or create a diagram to start drawing.</div>
-          </div>
-        )}
-      </main>
-      {activeDiagram !== null && !isPresentationMode && isDocsPanelOpen ? <RightPanel /> : null}
-      {activeDiagram !== null && !isPresentationMode && isCommentsPanelOpen ? (
-        <CommentsPanel />
-      ) : null}
-      {activeDiagram !== null && !isPresentationMode && isTemplateModalOpen ? (
-        <TemplateModal />
-      ) : null}
+    <div className="app">
+      {showChrome && isSidebarOpen ? <Sidebar /> : null}
+      <div className="main">
+        {showChrome ? <TopBar /> : null}
+        <div className="stage-area">
+          <div className="stage">{renderStage()}</div>
+        </div>
+      </div>
+      {showChrome && hasDiagram && isInspectorOpen ? <Inspector /> : null}
+
+      {isValidationOpen ? <ValidationModal results={validationResults} onClose={closeValidation} /> : null}
+      {newDiagramDialog !== null ? <NewDiagramDialog initialFolderId={newDiagramDialog.folderId} /> : null}
+      {isCommandPaletteOpen ? <CommandPalette /> : null}
       {isPresentationMode ? <PresentationMode /> : null}
     </div>
   )

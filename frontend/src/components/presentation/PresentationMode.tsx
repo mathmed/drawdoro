@@ -1,3 +1,4 @@
+import { ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { useEffect } from 'react'
 
 import { usePresentation } from '../../hooks/usePresentation'
@@ -8,10 +9,7 @@ export default function PresentationMode() {
   const isPresentationMode = useAppStore((state) => state.isPresentationMode)
   const exitPresentation = useAppStore((state) => state.exitPresentation)
 
-  const { frameCount, currentIndex, goToNext, goToPrevious } = usePresentation(
-    editor,
-    isPresentationMode,
-  )
+  const { frameCount, currentIndex, goToNext, goToPrevious } = usePresentation(editor, isPresentationMode)
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent): void {
@@ -40,59 +38,33 @@ export default function PresentationMode() {
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
   }, [exitPresentation])
 
-  const buttonStyle: React.CSSProperties = {
-    background: '#21262d',
-    color: '#e6edf3',
-    border: '1px solid #30363d',
-    borderRadius: 6,
-    padding: '6px 12px',
-    fontSize: 13,
-    cursor: 'pointer',
-  }
-
   return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        pointerEvents: 'none',
-        zIndex: 1000,
-      }}
-    >
-      <div
-        style={{
-          position: 'absolute',
-          bottom: 20,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          pointerEvents: 'auto',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-          background: 'rgba(22, 27, 34, 0.92)',
-          border: '1px solid #30363d',
-          borderRadius: 10,
-          padding: '8px 12px',
-          boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
-        }}
+    <div className="presentation-bar">
+      <button
+        type="button"
+        className="btn btn-ghost btn-icon"
+        aria-label="Previous frame"
+        onClick={goToPrevious}
+        disabled={frameCount === 0 || currentIndex === 0}
       >
-        <button type="button" onClick={goToPrevious} style={buttonStyle}>
-          ← Anterior
-        </button>
-        <span style={{ fontSize: 13, color: '#8b949e', minWidth: 90, textAlign: 'center' }}>
-          {frameCount === 0 ? 'no frames' : `frame ${currentIndex + 1} / ${frameCount}`}
-        </span>
-        <button type="button" onClick={goToNext} style={buttonStyle}>
-          Próximo →
-        </button>
-        <button
-          type="button"
-          onClick={exitPresentation}
-          style={{ ...buttonStyle, color: '#f85149' }}
-        >
-          ✕ Sair
-        </button>
-      </div>
+        <ChevronLeft size={18} />
+      </button>
+      <span className="presentation-counter">
+        {frameCount === 0 ? 'No frames — add frames to create slides' : `${currentIndex + 1} / ${frameCount}`}
+      </span>
+      <button
+        type="button"
+        className="btn btn-ghost btn-icon"
+        aria-label="Next frame"
+        onClick={goToNext}
+        disabled={frameCount === 0 || currentIndex === frameCount - 1}
+      >
+        <ChevronRight size={18} />
+      </button>
+      <span className="topbar-divider" style={{ margin: '0 2px' }} />
+      <button type="button" className="btn btn-ghost" onClick={exitPresentation}>
+        <X size={16} /> Exit
+      </button>
     </div>
   )
 }

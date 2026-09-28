@@ -44,8 +44,6 @@ async def create_diagram(
             name=body.name,
             folder_id=body.folder_id,
             canvas_state=body.canvas_state,
-            mermaid_source=body.mermaid_source,
-            d2_source=body.d2_source,
         )
     )
     return DiagramResponse.model_validate(diagram)
@@ -74,8 +72,6 @@ async def update_diagram(
             name=body.name,
             folder_id=body.folder_id,
             canvas_state=body.canvas_state,
-            mermaid_source=body.mermaid_source,
-            d2_source=body.d2_source,
             semantic_metadata=body.semantic_metadata,
         )
     )

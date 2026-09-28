@@ -1,37 +1,21 @@
+import { Database, Globe, ListOrdered, Monitor, MousePointerClick, Router, Server, Shapes, Zap } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import type { SemanticType } from '../../api/types'
 import { useDebounce } from '../../hooks/useDebounce'
 import { useAppStore } from '../../store/useAppStore'
+import EmptyState from '../ui/EmptyState'
 
-const SEMANTIC_TYPES: SemanticType[] = [
-  'service',
-  'database',
-  'queue',
-  'gateway',
-  'client',
-  'cache',
-  'external',
-  'custom',
+const SEMANTIC_TYPES: { value: SemanticType; icon: typeof Server }[] = [
+  { value: 'service', icon: Server },
+  { value: 'database', icon: Database },
+  { value: 'queue', icon: ListOrdered },
+  { value: 'gateway', icon: Router },
+  { value: 'client', icon: Monitor },
+  { value: 'cache', icon: Zap },
+  { value: 'external', icon: Globe },
+  { value: 'custom', icon: Shapes },
 ]
-
-const inputStyle: React.CSSProperties = {
-  background: '#0f1117',
-  color: '#e6edf3',
-  border: '1px solid #30363d',
-  borderRadius: 6,
-  padding: '6px 8px',
-  fontSize: 13,
-  width: '100%',
-  boxSizing: 'border-box',
-}
-
-const labelStyle: React.CSSProperties = {
-  fontSize: 12,
-  color: '#8b949e',
-  marginBottom: 4,
-  display: 'block',
-}
 
 export default function SemanticPanel() {
   const editor = useAppStore((state) => state.editor)
@@ -68,58 +52,69 @@ export default function SemanticPanel() {
 
   if (selectedId === null) {
     return (
-      <div style={{ padding: 16, color: '#8b949e', fontSize: 13 }}>
-        Select a shape on the canvas to edit its metadata.
-      </div>
+      <EmptyState
+        icon={<MousePointerClick size={20} />}
+        title="Select a shape"
+        description="Pick a single shape on the canvas to describe what it is. Types power the architecture validation."
+      />
     )
   }
 
   const meta = semanticMetadata[selectedId] ?? {}
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
-      <div>
-        <label style={labelStyle}>Type</label>
-        <select
-          style={inputStyle}
-          value={meta.type ?? ''}
-          onChange={(e) =>
-            updateShapeMetadata(selectedId, {
-              type: e.target.value === '' ? undefined : (e.target.value as SemanticType),
-            })
-          }
-        >
-          <option value="">— none —</option>
-          {SEMANTIC_TYPES.map((type) => (
-            <option key={type} value={type}>
-              {type}
-            </option>
+    <div className="panel-content scroll">
+      <div className="field">
+        <span className="field-label">Component type</span>
+        <div className="type-grid">
+          {SEMANTIC_TYPES.map(({ value, icon: Icon }) => (
+            <button
+              key={value}
+              type="button"
+              className="type-option"
+              aria-pressed={meta.type === value}
+              onClick={() => updateShapeMetadata(selectedId, { type: meta.type === value ? undefined : value })}
+            >
+              <Icon size={17} />
+              {value}
+            </button>
           ))}
-        </select>
+        </div>
       </div>
-      <div>
-        <label style={labelStyle}>Label</label>
+      <div className="field">
+        <label className="field-label" htmlFor="meta-label">
+          Label
+        </label>
         <input
-          style={inputStyle}
+          id="meta-label"
+          className="input"
+          placeholder="e.g. Orders API"
           value={meta.label ?? ''}
-          onChange={(e) => updateShapeMetadata(selectedId, { label: e.target.value })}
+          onChange={(event) => updateShapeMetadata(selectedId, { label: event.target.value })}
         />
       </div>
-      <div>
-        <label style={labelStyle}>Technology</label>
+      <div className="field">
+        <label className="field-label" htmlFor="meta-technology">
+          Technology
+        </label>
         <input
-          style={inputStyle}
+          id="meta-technology"
+          className="input"
+          placeholder="e.g. Python, PostgreSQL, Kafka"
           value={meta.technology ?? ''}
-          placeholder="Python, PostgreSQL, ..."
-          onChange={(e) => updateShapeMetadata(selectedId, { technology: e.target.value })}
+          onChange={(event) => updateShapeMetadata(selectedId, { technology: event.target.value })}
         />
       </div>
-      <div>
-        <label style={labelStyle}>Notes</label>
+      <div className="field">
+        <label className="field-label" htmlFor="meta-notes">
+          Notes
+        </label>
         <textarea
-          style={{ ...inputStyle, resize: 'vertical', minHeight: 60 }}
+          id="meta-notes"
+          className="textarea"
+          placeholder="Responsibilities, owners, SLAs…"
           value={meta.notes ?? ''}
-          onChange={(e) => updateShapeMetadata(selectedId, { notes: e.target.value })}
+          onChange={(event) => updateShapeMetadata(selectedId, { notes: event.target.value })}
         />
       </div>
     </div>

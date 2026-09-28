@@ -11,8 +11,6 @@ class CreateDiagramParams(InputData):
     name: str
     folder_id: uuid.UUID | None = None
     canvas_state: dict[str, Any] | None = None
-    mermaid_source: str | None = None
-    d2_source: str | None = None
 
 
 class CreateDiagram(Usecase[CreateDiagramParams, Diagram]):
@@ -25,7 +23,5 @@ class CreateDiagram(Usecase[CreateDiagramParams, Diagram]):
             name=params.name,
             folder_id=params.folder_id,
             canvas_state=params.canvas_state,
-            mermaid_source=params.mermaid_source,
-            d2_source=params.d2_source,
         )
         return await self._repo.create(diagram)

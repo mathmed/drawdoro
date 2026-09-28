@@ -7,14 +7,12 @@ from fastapi.testclient import TestClient
 from app.domain.entities.models.diagram import Diagram
 from app.domain.entities.models.folder import Folder
 from app.domain.entities.models.project import Project
-from app.domain.entities.models.template import Template
 from app.domain.entities.models.workspace import Workspace
 from app.domain.usecases.comment.list_comments import ListComments
 from app.domain.usecases.diagram.list_diagrams import ListDiagrams
 from app.domain.usecases.documentation.get_documentation_page import GetDocumentationPage
 from app.domain.usecases.folder.list_folders import ListFolders
 from app.domain.usecases.project.list_projects import ListProjects
-from app.domain.usecases.template.list_templates import ListTemplates
 from app.domain.usecases.workspace.list_workspaces import ListWorkspaces
 from app.main.main import app
 from app.presentation.factories.comment_factories import list_comments_factory
@@ -22,7 +20,6 @@ from app.presentation.factories.diagram_factories import list_diagrams_factory
 from app.presentation.factories.documentation_factories import get_documentation_page_factory
 from app.presentation.factories.folder_factories import list_folders_factory
 from app.presentation.factories.project_factories import list_projects_factory
-from app.presentation.factories.template_factories import list_templates_factory
 from app.presentation.factories.workspace_factories import list_workspaces_factory
 
 
@@ -99,17 +96,6 @@ def test_should_return_200_for_list_comments(client: TestClient) -> None:
     app.dependency_overrides[list_comments_factory] = lambda: mock_uc
     try:
         response = client.get(f"/diagrams/{diagram_id}/comments")
-        assert response.status_code == 200
-    finally:
-        app.dependency_overrides.clear()
-
-
-def test_should_return_200_for_list_templates(client: TestClient) -> None:
-    mock_uc = AsyncMock(spec=ListTemplates)
-    mock_uc.execute.return_value = [Template(name="T")]
-    app.dependency_overrides[list_templates_factory] = lambda: mock_uc
-    try:
-        response = client.get("/templates")
         assert response.status_code == 200
     finally:
         app.dependency_overrides.clear()

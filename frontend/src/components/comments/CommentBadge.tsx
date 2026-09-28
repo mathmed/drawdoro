@@ -1,3 +1,4 @@
+import { MessageSquare } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { TLShapeId } from 'tldraw'
 
@@ -11,14 +12,12 @@ interface BadgePosition {
 }
 
 // Overlay drawn on top of the canvas: for every element that has comments it
-// places a small badge near the shape's top-right corner, recomputed whenever the
+// places a small pin near the shape's top-right corner, recomputed whenever the
 // tldraw store changes (camera panning/zooming, shape edits).
 export default function CommentBadge() {
   const editor = useAppStore((state) => state.editor)
   const comments = useAppStore((state) => state.comments)
-  const setActiveElement = useAppStore((state) => state.setActiveElement)
-  const isCommentsPanelOpen = useAppStore((state) => state.isCommentsPanelOpen)
-  const toggleCommentsPanel = useAppStore((state) => state.toggleCommentsPanel)
+  const commentOnElement = useAppStore((state) => state.commentOnElement)
 
   const [, forceRender] = useState(0)
 
@@ -49,49 +48,19 @@ export default function CommentBadge() {
     positions.push({ elementId, count, x: point.x, y: point.y })
   }
 
-  function handleClick(elementId: string): void {
-    setActiveElement(elementId)
-    if (!isCommentsPanelOpen) {
-      toggleCommentsPanel()
-    }
-  }
-
   return (
-    <div
-      style={{
-        position: 'absolute',
-        inset: 0,
-        pointerEvents: 'none',
-        zIndex: 200,
-        overflow: 'hidden',
-      }}
-    >
+    <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 200, overflow: 'hidden' }}>
       {positions.map((position) => (
         <button
           key={position.elementId}
           type="button"
-          onClick={() => handleClick(position.elementId)}
-          style={{
-            position: 'absolute',
-            left: position.x - 10,
-            top: position.y - 10,
-            pointerEvents: 'auto',
-            background: '#db6d28',
-            color: '#0f1117',
-            border: '1px solid #0f1117',
-            borderRadius: 12,
-            minWidth: 20,
-            height: 20,
-            padding: '0 6px',
-            fontSize: 11,
-            fontWeight: 700,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
+          className="comment-pin"
+          aria-label={`${position.count} comment${position.count === 1 ? '' : 's'}`}
+          onClick={() => commentOnElement(position.elementId)}
+          style={{ left: position.x, top: position.y }}
         >
-          💬 {position.count}
+          <MessageSquare size={11} strokeWidth={2.5} />
+          {position.count}
         </button>
       ))}
     </div>

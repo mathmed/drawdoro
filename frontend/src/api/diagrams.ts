@@ -5,8 +5,6 @@ export interface UpdateDiagramInput {
   name: string
   folder_id: string | null
   canvas_state: CanvasState | null
-  mermaid_source: string | null
-  d2_source: string | null
   semantic_metadata?: SemanticMetadata | null
 }
 
@@ -47,4 +45,8 @@ export async function updateDiagram(
     input,
   )
   return data
+}
+
+export async function deleteDiagram(projectId: string, diagramId: string): Promise<void> {
+  await apiClient.delete(`/projects/${projectId}/diagrams/${diagramId}`)
 }

@@ -13,8 +13,6 @@ class Diagram(BaseModel):
     folder_id: uuid.UUID | None = None
     name: str
     canvas_state: dict[str, Any] | None = None
-    mermaid_source: str | None = None
-    d2_source: str | None = None
     semantic_metadata: dict[str, Any] | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

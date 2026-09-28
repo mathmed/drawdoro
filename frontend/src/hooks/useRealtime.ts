@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react'
-import type { Editor, TLStoreSnapshot } from 'tldraw'
+import { loadSnapshot, type Editor, type TLStoreSnapshot } from 'tldraw'
 
 interface RealtimeOptions {
   diagramId: string
@@ -44,11 +44,16 @@ export function useRealtime({ diagramId, editor, onPeersChange }: RealtimeOption
         editor !== null
       ) {
         const snapshot = msg.snapshot
+        const wasFocused = editor.getIsFocused()
         applyingRemote.current = true
         editor.store.mergeRemoteChanges(() => {
-          editor.store.loadSnapshot(snapshot)
+          loadSnapshot(editor.store, snapshot)
         })
         applyingRemote.current = false
+        // A peer's edit must not steal keyboard focus from the local user.
+        if (wasFocused && !editor.getIsFocused()) {
+          editor.focus({ focusContainer: false })
+        }
       }
     }
 
