@@ -1,3 +1,52 @@
+diff --git a/node_modules/tldraw/dist-cjs/lib/shapes/arrow/ArrowPath.js b/node_modules/tldraw/dist-cjs/lib/shapes/arrow/ArrowPath.js
+index 91b918d..999ccd8 100644
+--- a/node_modules/tldraw/dist-cjs/lib/shapes/arrow/ArrowPath.js
++++ b/node_modules/tldraw/dist-cjs/lib/shapes/arrow/ArrowPath.js
+@@ -28,15 +28,15 @@ var import_getElbowArrowInfo = require("./elbow/getElbowArrowInfo");
+ function getArrowBodyPath(shape, info, opts) {
+   switch (info.type) {
+     case "straight":
+-      return new import_PathBuilder.PathBuilder().moveTo(info.start.point.x, info.start.point.y, { offset: 0, roundness: 0 }).lineTo(info.end.point.x, info.end.point.y, { offset: 0, roundness: 0 }).toSvg(opts);
++      return new import_PathBuilder.PathBuilder().moveTo(info.start.point.x, info.start.point.y, { roundness: 0 }).lineTo(info.end.point.x, info.end.point.y, { roundness: 0 }).toSvg(opts);
+     case "arc":
+-      return new import_PathBuilder.PathBuilder().moveTo(info.start.point.x, info.start.point.y, { offset: 0, roundness: 0 }).circularArcTo(
++      return new import_PathBuilder.PathBuilder().moveTo(info.start.point.x, info.start.point.y, { roundness: 0 }).circularArcTo(
+         info.bodyArc.radius,
+         !!info.bodyArc.largeArcFlag,
+         !!info.bodyArc.sweepFlag,
+         info.end.point.x,
+         info.end.point.y,
+-        { offset: 0, roundness: 0 }
++        { roundness: 0 }
+       ).toSvg(opts);
+     case "elbow": {
+       const path = new import_PathBuilder.PathBuilder();
+diff --git a/node_modules/tldraw/dist-cjs/lib/shapes/arrow/ArrowShapeUtil.js b/node_modules/tldraw/dist-cjs/lib/shapes/arrow/ArrowShapeUtil.js
+index 98079f6..cda5c8c 100644
+--- a/node_modules/tldraw/dist-cjs/lib/shapes/arrow/ArrowShapeUtil.js
++++ b/node_modules/tldraw/dist-cjs/lib/shapes/arrow/ArrowShapeUtil.js
+@@ -670,8 +670,8 @@ class ArrowShapeUtil extends import_editor.ShapeUtil {
+                 style: "draw",
+                 randomSeed: shape.id,
+                 strokeWidth: 1,
+-                passes: 1,
+-                offset: 0,
++                passes: 2,
++                offset: strokeWidth * 2,
+                 roundness: strokeWidth * 2,
+                 props: { strokeWidth: void 0 }
+               } : { style: "solid", strokeWidth: 1, props: { strokeWidth: void 0 } }
+@@ -868,7 +868,9 @@ const ArrowSvg = (0, import_editor.track)(function ArrowSvg2({
+                   style: shape.props.dash,
+                   strokeWidth,
+                   forceSolid: isForceSolid,
+-                  randomSeed: shape.id
++                  randomSeed: shape.id,
++                  passes: 2,
++                  offset: strokeWidth * 2
+                 })
+               ]
+             }
 diff --git a/node_modules/tldraw/dist-cjs/lib/shapes/arrow/arrowheads.js b/node_modules/tldraw/dist-cjs/lib/shapes/arrow/arrowheads.js
 index fb527b1..4dbe893 100644
 --- a/node_modules/tldraw/dist-cjs/lib/shapes/arrow/arrowheads.js
@@ -28,7 +77,7 @@ index fb527b1..4dbe893 100644
        break;
      }
 diff --git a/node_modules/tldraw/dist-cjs/lib/shapes/shared/PathBuilder.js b/node_modules/tldraw/dist-cjs/lib/shapes/shared/PathBuilder.js
-index 762117a..d8e3aeb 100644
+index 762117a..d282952 100644
 --- a/node_modules/tldraw/dist-cjs/lib/shapes/shared/PathBuilder.js
 +++ b/node_modules/tldraw/dist-cjs/lib/shapes/shared/PathBuilder.js
 @@ -413,7 +413,7 @@ class PathBuilder {
@@ -36,10 +85,59 @@ index 762117a..d8e3aeb 100644
        strokeWidth,
        randomSeed,
 -      offset: defaultOffset = strokeWidth / 3,
-+      offset: defaultOffset = strokeWidth * 0.9,
++      offset: defaultOffset = strokeWidth * 3.5,
        roundness: defaultRoundness = strokeWidth * 2,
        passes = 2,
        onlyFilled = false
+diff --git a/node_modules/tldraw/dist-esm/lib/shapes/arrow/ArrowPath.mjs b/node_modules/tldraw/dist-esm/lib/shapes/arrow/ArrowPath.mjs
+index ed9bbaf..db41d65 100644
+--- a/node_modules/tldraw/dist-esm/lib/shapes/arrow/ArrowPath.mjs
++++ b/node_modules/tldraw/dist-esm/lib/shapes/arrow/ArrowPath.mjs
+@@ -4,15 +4,15 @@ import { getRouteHandlePath } from "./elbow/getElbowArrowInfo.mjs";
+ function getArrowBodyPath(shape, info, opts) {
+   switch (info.type) {
+     case "straight":
+-      return new PathBuilder().moveTo(info.start.point.x, info.start.point.y, { offset: 0, roundness: 0 }).lineTo(info.end.point.x, info.end.point.y, { offset: 0, roundness: 0 }).toSvg(opts);
++      return new PathBuilder().moveTo(info.start.point.x, info.start.point.y, { roundness: 0 }).lineTo(info.end.point.x, info.end.point.y, { roundness: 0 }).toSvg(opts);
+     case "arc":
+-      return new PathBuilder().moveTo(info.start.point.x, info.start.point.y, { offset: 0, roundness: 0 }).circularArcTo(
++      return new PathBuilder().moveTo(info.start.point.x, info.start.point.y, { roundness: 0 }).circularArcTo(
+         info.bodyArc.radius,
+         !!info.bodyArc.largeArcFlag,
+         !!info.bodyArc.sweepFlag,
+         info.end.point.x,
+         info.end.point.y,
+-        { offset: 0, roundness: 0 }
++        { roundness: 0 }
+       ).toSvg(opts);
+     case "elbow": {
+       const path = new PathBuilder();
+diff --git a/node_modules/tldraw/dist-esm/lib/shapes/arrow/ArrowShapeUtil.mjs b/node_modules/tldraw/dist-esm/lib/shapes/arrow/ArrowShapeUtil.mjs
+index 295f3ac..6c0e4a3 100644
+--- a/node_modules/tldraw/dist-esm/lib/shapes/arrow/ArrowShapeUtil.mjs
++++ b/node_modules/tldraw/dist-esm/lib/shapes/arrow/ArrowShapeUtil.mjs
+@@ -686,8 +686,8 @@ class ArrowShapeUtil extends ShapeUtil {
+                 style: "draw",
+                 randomSeed: shape.id,
+                 strokeWidth: 1,
+-                passes: 1,
+-                offset: 0,
++                passes: 2,
++                offset: strokeWidth * 2,
+                 roundness: strokeWidth * 2,
+                 props: { strokeWidth: void 0 }
+               } : { style: "solid", strokeWidth: 1, props: { strokeWidth: void 0 } }
+@@ -884,7 +884,9 @@ const ArrowSvg = track(function ArrowSvg2({
+                   style: shape.props.dash,
+                   strokeWidth,
+                   forceSolid: isForceSolid,
+-                  randomSeed: shape.id
++                  randomSeed: shape.id,
++                  passes: 2,
++                  offset: strokeWidth * 2
+                 })
+               ]
+             }
 diff --git a/node_modules/tldraw/dist-esm/lib/shapes/arrow/arrowheads.mjs b/node_modules/tldraw/dist-esm/lib/shapes/arrow/arrowheads.mjs
 index 0e5a12d..0224e1d 100644
 --- a/node_modules/tldraw/dist-esm/lib/shapes/arrow/arrowheads.mjs
@@ -70,7 +168,7 @@ index 0e5a12d..0224e1d 100644
        break;
      }
 diff --git a/node_modules/tldraw/dist-esm/lib/shapes/shared/PathBuilder.mjs b/node_modules/tldraw/dist-esm/lib/shapes/shared/PathBuilder.mjs
-index 0a352e4..58abb42 100644
+index 0a352e4..634fa74 100644
 --- a/node_modules/tldraw/dist-esm/lib/shapes/shared/PathBuilder.mjs
 +++ b/node_modules/tldraw/dist-esm/lib/shapes/shared/PathBuilder.mjs
 @@ -405,7 +405,7 @@ class PathBuilder {
@@ -78,7 +176,7 @@ index 0a352e4..58abb42 100644
        strokeWidth,
        randomSeed,
 -      offset: defaultOffset = strokeWidth / 3,
-+      offset: defaultOffset = strokeWidth * 0.9,
++      offset: defaultOffset = strokeWidth * 3.5,
        roundness: defaultRoundness = strokeWidth * 2,
        passes = 2,
        onlyFilled = false
