@@ -18,10 +18,22 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     cors_origins: list[str] = []
     database_url: str = "postgresql+asyncpg://drawdoro:drawdoro@localhost:5432/drawdoro"
+    auth_enabled: bool = True
+    cognito_region: str = "us-east-1"
+    cognito_user_pool_id: str = ""
+    cognito_client_id: str = ""
+    # Lets trusted services (the MCP server) call the API without a user session.
+    service_api_key: str = ""
 
     @property
     def is_production(self) -> bool:
         return self.env == Environment.PRODUCTION
+
+    @property
+    def cognito_issuer(self) -> str:
+        return (
+            f"https://cognito-idp.{self.cognito_region}.amazonaws.com/{self.cognito_user_pool_id}"
+        )
 
 
 @lru_cache

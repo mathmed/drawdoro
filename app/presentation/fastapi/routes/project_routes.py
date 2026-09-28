@@ -14,13 +14,18 @@ from app.presentation.factories.project_factories import (
     list_projects_factory,
     update_project_factory,
 )
+from app.presentation.fastapi.dependencies.workspace_access import require_workspace_access
 from app.presentation.fastapi.schemas.project_schemas import (
     CreateProjectRequest,
     ProjectResponse,
     UpdateProjectRequest,
 )
 
-router = APIRouter(prefix="/workspaces/{workspace_id}/projects", tags=["projects"])
+router = APIRouter(
+    prefix="/workspaces/{workspace_id}/projects",
+    tags=["projects"],
+    dependencies=[Depends(require_workspace_access)],
+)
 
 
 @router.get("", response_model=list[ProjectResponse])

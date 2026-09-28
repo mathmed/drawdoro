@@ -14,13 +14,18 @@ from app.presentation.factories.folder_factories import (
     list_folders_factory,
     update_folder_factory,
 )
+from app.presentation.fastapi.dependencies.workspace_access import require_workspace_access
 from app.presentation.fastapi.schemas.folder_schemas import (
     CreateFolderRequest,
     FolderResponse,
     UpdateFolderRequest,
 )
 
-router = APIRouter(prefix="/projects/{project_id}/folders", tags=["folders"])
+router = APIRouter(
+    prefix="/projects/{project_id}/folders",
+    tags=["folders"],
+    dependencies=[Depends(require_workspace_access)],
+)
 
 
 @router.get("", response_model=list[FolderResponse])

@@ -14,12 +14,17 @@ from app.presentation.factories.documentation_factories import (
     get_documentation_page_factory,
     upsert_documentation_page_factory,
 )
+from app.presentation.fastapi.dependencies.workspace_access import require_workspace_access
 from app.presentation.fastapi.schemas.documentation_schemas import (
     DocumentationPageResponse,
     UpsertDocumentationPageRequest,
 )
 
-router = APIRouter(prefix="/diagrams/{diagram_id}/documentation", tags=["documentation"])
+router = APIRouter(
+    prefix="/diagrams/{diagram_id}/documentation",
+    tags=["documentation"],
+    dependencies=[Depends(require_workspace_access)],
+)
 
 
 @router.get("", response_model=DocumentationPageResponse)
