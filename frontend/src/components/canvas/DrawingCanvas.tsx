@@ -125,7 +125,13 @@ export default function DrawingCanvas({ diagram }: DrawingCanvasProps) {
   function handleMount(mountedEditor: Editor): () => void {
     setEditor(mountedEditor)
     // tldraw follows the browser language by default; pin it so its menus match the app's English UI.
-    mountedEditor.user.updateUserPreferences({ colorScheme: useThemeStore.getState().resolved, locale: 'en' })
+    // isPasteAtCursorMode makes Ctrl/Cmd+V drop the pasted shapes at the pointer instead of on top
+    // of the originals; tldraw falls back to the last known pointer position when it left the canvas.
+    mountedEditor.user.updateUserPreferences({
+      colorScheme: useThemeStore.getState().resolved,
+      locale: 'en',
+      isPasteAtCursorMode: true,
+    })
 
     if (diagram.canvas_state !== null) {
       // store.loadSnapshot would also wipe the session record (focus, tool state), which left

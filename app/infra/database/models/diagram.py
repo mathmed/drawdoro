@@ -19,6 +19,9 @@ class DiagramORM(Base):
     name: Mapped[str] = mapped_column(String(255))
     canvas_state: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     semantic_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    share_token: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, unique=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
     deleted_at: Mapped[datetime | None] = mapped_column(nullable=True)

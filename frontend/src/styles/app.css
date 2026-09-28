@@ -1420,6 +1420,16 @@ button.validation-item:hover {
   box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.25);
 }
 
+/* tldraw paints a white halo (text-shadow outline) behind canvas text to keep it legible over
+   shapes; on our flat theme it reads as an unwanted white border, so drop it for shape text
+   and labels. Cursor nametags keep their own outline for contrast over other users' shapes. */
+.tl-text-wrapper,
+.tl-arrow-label,
+.tl-rich-text,
+.tl-text-label__inner {
+  text-shadow: none;
+}
+
 /* Independent label size on geo shapes (see DrawdoroGeoShapeUtil) */
 .dd-font {
   display: contents;
@@ -1758,4 +1768,117 @@ button.validation-item:hover {
 
 .presence-avatar[data-you='true'] {
   box-shadow: 0 0 0 1.5px var(--accent);
+}
+
+/* Share link dialog */
+.share-link-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.share-link-row .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.share-link-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* Guest gate (shared link, signed out) */
+.share-gate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 420px;
+  margin: 12vh auto 0;
+  padding: 0 24px;
+  text-align: center;
+}
+
+.share-gate-title {
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.share-gate-description {
+  font-size: 14.5px;
+  color: var(--text-muted);
+}
+
+.share-gate-form {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.share-gate-form .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.share-gate-signin {
+  margin-top: 4px;
+}
+
+/* Shared read-only view */
+.share-view {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.share-view-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  height: var(--topbar-height);
+  padding: 0 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.share-view-name {
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.share-view-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--bg-muted);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.share-view-viewer {
+  margin-left: auto;
+  font-size: 12.5px;
+  color: var(--text-subtle);
+}
+
+.share-view-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
 }

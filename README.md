@@ -151,7 +151,9 @@ mcp/                      Python MCP server
 | GET/PUT/DELETE | /projects/{id}/diagrams/{id} | Get / update / delete diagram |
 | GET/PUT | /diagrams/{id}/documentation | Get / update documentation page |
 | GET/POST | /diagrams/{id}/comments | List / create comments |
-| WS | /ws/diagrams/{id} | Real-time collaboration: broadcasts canvas updates, cursors and peer count to everyone connected to the same diagram |
+| POST | /diagrams/{id}/share | Generate (or return) the diagram's shareable link token |
+| GET | /share/{share_token} | Public: open a shared diagram by token, no sign-in required (used by guests) |
+| WS | /ws/diagrams/{id} | Real-time collaboration: broadcasts canvas updates, cursors and peer count to everyone connected to the same diagram. Guests join with `?share=<token>&name=<name>` as read-only viewers |
 
 All routes except `/health` return `501 Not Implemented` until infra is wired.
 

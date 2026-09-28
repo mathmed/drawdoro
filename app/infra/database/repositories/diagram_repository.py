@@ -37,6 +37,29 @@ class DiagramRepositoryImpl(DiagramRepository):
         orm = result.scalar_one_or_none()
         return _to_domain(orm) if orm else None
 
+    async def get_by_share_token(self, share_token: str) -> Diagram | None:
+        result = await self._session.execute(
+            select(DiagramORM).where(
+                DiagramORM.share_token == share_token,
+                DiagramORM.deleted_at.is_(None),
+            )
+        )
+        orm = result.scalar_one_or_none()
+        return _to_domain(orm) if orm else None
+
+    async def set_share_token(self, diagram_id: uuid.UUID, share_token: str) -> Diagram:
+        result = await self._session.execute(
+            select(DiagramORM).where(
+                DiagramORM.id == diagram_id,
+                DiagramORM.deleted_at.is_(None),
+            )
+        )
+        orm = result.scalar_one()
+        orm.share_token = share_token
+        await self._session.commit()
+        await self._session.refresh(orm)
+        return _to_domain(orm)
+
     async def list_by_project(self, project_id: uuid.UUID) -> list[Diagram]:
         result = await self._session.execute(
             select(DiagramORM).where(
@@ -91,6 +114,7 @@ def _to_domain(orm: DiagramORM) -> Diagram:
         name=orm.name,
         canvas_state=orm.canvas_state,
         semantic_metadata=orm.semantic_metadata,
+        share_token=orm.share_token,
         created_at=orm.created_at,
         updated_at=orm.updated_at,
         deleted_at=orm.deleted_at,
