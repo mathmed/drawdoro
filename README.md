@@ -62,7 +62,7 @@
 | app/domain/usecases/workspace/get\_workspace.py                          |       14 |        4 |     71% |     18-21 |
 | app/domain/usecases/workspace/list\_workspaces.py                        |       21 |        0 |    100% |           |
 | app/domain/usecases/workspace/update\_workspace.py                       |       16 |        6 |     62% |     20-25 |
-| app/domain/usecases/workspace\_member/add\_workspace\_member.py          |       21 |        0 |    100% |           |
+| app/domain/usecases/workspace\_member/add\_workspace\_member.py          |       22 |        0 |    100% |           |
 | app/domain/usecases/workspace\_member/list\_workspace\_members.py        |       10 |        0 |    100% |           |
 | app/domain/usecases/workspace\_member/remove\_workspace\_member.py       |       24 |        0 |    100% |           |
 | app/domain/usecases/workspace\_member/update\_workspace\_member\_role.py |       19 |        0 |    100% |           |
@@ -97,7 +97,7 @@
 | app/presentation/factories/presence\_factories.py                        |        5 |        0 |    100% |           |
 | app/presentation/factories/project\_factories.py                         |       19 |        0 |    100% |           |
 | app/presentation/factories/workspace\_factories.py                       |       20 |        0 |    100% |           |
-| app/presentation/factories/workspace\_member\_factories.py               |       17 |        4 |     76% |20, 26, 32, 38 |
+| app/presentation/factories/workspace\_member\_factories.py               |       18 |        4 |     78% |21, 27, 37, 43 |
 | app/presentation/fastapi/configs/configs.py                              |       21 |        0 |    100% |           |
 | app/presentation/fastapi/dependencies/agent\_presence.py                 |       16 |        0 |    100% |           |
 | app/presentation/fastapi/dependencies/current\_user.py                   |       15 |        0 |    100% |           |
@@ -123,7 +123,7 @@
 | app/presentation/fastapi/schemas/user\_schemas.py                        |        4 |        0 |    100% |           |
 | app/presentation/fastapi/schemas/workspace\_member\_schemas.py           |        8 |        0 |    100% |           |
 | app/presentation/fastapi/schemas/workspace\_schemas.py                   |        7 |        0 |    100% |           |
-| **TOTAL**                                                                | **1911** |  **239** | **87%** |           |
+| **TOTAL**                                                                | **1913** |  **239** | **88%** |           |
 
 
 ## Setup coverage badge
