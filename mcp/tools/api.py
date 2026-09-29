@@ -10,6 +10,7 @@ JsonObject = dict[str, Any]
 
 class HttpMethod(StrEnum):
     GET = "GET"
+    POST = "POST"
     PUT = "PUT"
 
 
@@ -22,6 +23,9 @@ class DrawdoroApi:
 
     def get_list(self, path: str) -> list[JsonObject]:
         return cast(list[JsonObject], self._request(HttpMethod.GET, path).json())
+
+    def post(self, path: str, body: JsonObject) -> JsonObject:
+        return cast(JsonObject, self._request(HttpMethod.POST, path, body).json())
 
     def put(self, path: str, body: JsonObject) -> JsonObject:
         return cast(JsonObject, self._request(HttpMethod.PUT, path, body).json())

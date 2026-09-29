@@ -33,6 +33,18 @@ def test_should_send_put_body_as_json() -> None:
     assert sent == [b'{"name":"New"}']
 
 
+def test_should_send_post_body_as_json() -> None:
+    sent: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(request)
+        return httpx.Response(201, json={"id": "abc"})
+
+    sut = DrawdoroApi(httpx.Client(base_url=BASE_URL, transport=httpx.MockTransport(handler)))
+    assert sut.post("/things", {"name": "New"}) == {"id": "abc"}
+    assert (sent[0].method, sent[0].content) == ("POST", b'{"name":"New"}')
+
+
 def test_should_raise_tool_error_with_status_and_detail_on_http_error() -> None:
     sut = api_answering(httpx.Response(404, json={"detail": "Diagram abc not found"}))
     with pytest.raises(ToolError, match="returned 404 for GET /things/abc: Diagram abc not found"):

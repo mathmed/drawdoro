@@ -1,17 +1,30 @@
+from collections.abc import Callable
+
 import httpx
 from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 from settings import Settings, Transport
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 from tools.api import DrawdoroApi
+from tools.comments import CommentTools
 from tools.diagrams import DiagramTools
+from tools.documentation import DocumentationTools
+from tools.folders import FolderTools
 from tools.projects import ProjectTools
+from tools.workspaces import WorkspaceTools
 
 API_TIMEOUT_SECONDS = 30
-# The server holds the service API key, so only local clients may reach it over HTTP.
-LOCAL_ONLY = TransportSecuritySettings(
-    allowed_hosts=["127.0.0.1:*", "localhost:*", "[::1]:*"],
-    allowed_origins=["http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"],
-)
+LOCAL_HOSTS = ("127.0.0.1", "localhost", "[::1]")
+# Sent to the client on connect; agents read it to know when and how to use the tools.
+INSTRUCTIONS = """Drawdoro holds software architecture diagrams, organised as
+workspace -> project -> folders (optional, nestable) -> diagram. Each diagram is a tldraw canvas
+with an optional Markdown documentation page and comments anchored to its shapes.
+
+When the user shares a Drawdoro link, call open_link with it: /diagrams/<id> links open the
+editable diagram, /share/<token> links a read-only copy. Given only names, find ids with
+list_workspaces, list_projects, list_folders and list_diagrams, then read with get_diagram.
+Before update_diagram, read the diagram with get_diagram and send the complete canvas_state back."""
 
 
 def create_api(settings: Settings, transport: httpx.BaseTransport | None = None) -> DrawdoroApi:
@@ -27,15 +40,53 @@ def create_api(settings: Settings, transport: httpx.BaseTransport | None = None)
     return DrawdoroApi(client)
 
 
+def create_transport_security(settings: Settings) -> TransportSecuritySettings:
+    # The server holds the service API key: only localhost and the hosts explicitly routed to it
+    # may reach it, which also blocks DNS rebinding from browsers.
+    local_hosts = [f"{host}:*" for host in LOCAL_HOSTS]
+    public_hosts = [pattern for host in settings.allowed_hosts for pattern in (host, f"{host}:*")]
+    return TransportSecuritySettings(
+        allowed_hosts=local_hosts + public_hosts,
+        allowed_origins=[f"http://{host}" for host in local_hosts]
+        + [f"https://{host}" for host in public_hosts],
+    )
+
+
+async def health(_: Request) -> JSONResponse:
+    return JSONResponse({"status": "ok"})
+
+
 def create_server(api: DrawdoroApi) -> MCPServer:
-    server = MCPServer("drawdoro", description="MCP server for the Drawdoro diagramming tool")
+    server = MCPServer(
+        "drawdoro",
+        description="MCP server for the Drawdoro diagramming tool",
+        instructions=INSTRUCTIONS,
+    )
+    workspaces = WorkspaceTools(api)
     projects = ProjectTools(api)
+    folders = FolderTools(api)
     diagrams = DiagramTools(api)
-    server.tool()(projects.list_projects)
-    server.tool()(projects.get_project)
-    server.tool()(diagrams.list_diagrams)
-    server.tool()(diagrams.get_diagram)
-    server.tool()(diagrams.update_diagram)
+    documentation = DocumentationTools(api)
+    comments = CommentTools(api)
+    tools: list[Callable[..., object]] = [
+        workspaces.list_workspaces,
+        projects.list_projects,
+        projects.get_project,
+        projects.create_project,
+        folders.list_folders,
+        folders.create_folder,
+        diagrams.list_diagrams,
+        diagrams.get_diagram,
+        diagrams.open_link,
+        diagrams.create_diagram,
+        diagrams.update_diagram,
+        documentation.get_documentation,
+        documentation.update_documentation,
+        comments.list_comments,
+    ]
+    for tool in tools:
+        server.tool()(tool)
+    server.custom_route("/health", methods=["GET"])(health)
     return server
 
 
@@ -45,11 +96,13 @@ def main() -> None:
     if settings.transport == Transport.STDIO:
         server.run(transport="stdio")
         return
+    # Stateless: the tools are plain request/response, so restarts and extra replicas lose nothing.
     server.run(
         transport="streamable-http",
         host=settings.host,
         port=settings.port,
-        transport_security=LOCAL_ONLY,
+        stateless_http=True,
+        transport_security=create_transport_security(settings),
     )
 
 

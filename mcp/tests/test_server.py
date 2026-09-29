@@ -8,7 +8,22 @@ from settings import Settings
 
 from mcp import Client
 
-TOOL_NAMES = {"list_projects", "get_project", "list_diagrams", "get_diagram", "update_diagram"}
+TOOL_NAMES = {
+    "list_workspaces",
+    "list_projects",
+    "get_project",
+    "create_project",
+    "list_folders",
+    "create_folder",
+    "list_diagrams",
+    "get_diagram",
+    "open_link",
+    "create_diagram",
+    "update_diagram",
+    "get_documentation",
+    "update_documentation",
+    "list_comments",
+}
 
 
 class FakeDrawdoro:
@@ -47,6 +62,15 @@ async def test_should_register_every_tool_with_a_description(sut: MCPServer) -> 
 
 
 @pytest.mark.anyio
+async def test_should_tell_agents_how_to_open_links(sut: MCPServer) -> None:
+    async with Client(sut) as client:
+        instructions = client.instructions
+    assert instructions is not None
+    assert "open_link" in instructions
+    assert "list_workspaces" in instructions
+
+
+@pytest.mark.anyio
 async def test_should_call_api_with_service_key(sut: MCPServer, api: FakeDrawdoro) -> None:
     workspace_id = uuid.uuid4()
     async with Client(sut) as client:
@@ -59,9 +83,8 @@ async def test_should_call_api_with_service_key(sut: MCPServer, api: FakeDrawdor
 
 @pytest.mark.anyio
 async def test_should_show_api_errors_to_the_model(sut: MCPServer) -> None:
-    arguments = {"project_id": str(uuid.uuid4()), "diagram_id": str(uuid.uuid4())}
     async with Client(sut) as client:
-        result = await client.call_tool("get_diagram", arguments)
+        result = await client.call_tool("get_diagram", {"diagram_id": str(uuid.uuid4())})
     assert result.is_error
     text = " ".join(getattr(item, "text", "") for item in result.content)
     assert "404" in text
@@ -70,9 +93,8 @@ async def test_should_show_api_errors_to_the_model(sut: MCPServer) -> None:
 
 @pytest.mark.anyio
 async def test_should_reject_ids_that_are_not_uuids(sut: MCPServer, api: FakeDrawdoro) -> None:
-    arguments = {"project_id": str(uuid.uuid4()), "diagram_id": "../../workspaces"}
     async with Client(sut) as client:
-        result = await client.call_tool("get_diagram", arguments)
+        result = await client.call_tool("get_diagram", {"diagram_id": "../../workspaces"})
     assert result.is_error
     assert api.requests == []
 

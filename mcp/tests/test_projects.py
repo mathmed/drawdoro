@@ -29,3 +29,12 @@ def test_should_get_project_of_workspace(sut: ProjectTools, api: MagicMock) -> N
     api.get_object.return_value = {"id": str(project_id)}
     assert sut.get_project(workspace_id, project_id) == {"id": str(project_id)}
     api.get_object.assert_called_once_with(f"/workspaces/{workspace_id}/projects/{project_id}")
+
+
+def test_should_create_project_in_workspace(sut: ProjectTools, api: MagicMock) -> None:
+    workspace_id = uuid.uuid4()
+    api.post.return_value = {"id": "p1"}
+    assert sut.create_project(workspace_id, "Payments") == {"id": "p1"}
+    api.post.assert_called_once_with(
+        f"/workspaces/{workspace_id}/projects", {"name": "Payments", "description": ""}
+    )

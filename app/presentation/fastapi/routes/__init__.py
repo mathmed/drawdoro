@@ -1,5 +1,6 @@
 from .auth_routes import router as auth_router
 from .comment_routes import router as comment_router
+from .diagram_routes import diagram_by_id_router
 from .diagram_routes import router as diagram_router
 from .documentation_routes import router as documentation_router
 from .folder_routes import router as folder_router
@@ -22,6 +23,7 @@ protected_routers = [
     project_router,
     folder_router,
     diagram_router,
+    diagram_by_id_router,
     documentation_router,
     comment_router,
     share_router,

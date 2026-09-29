@@ -151,3 +151,17 @@ def test_should_delete_comment(client: TestClient) -> None:
         assert response.status_code == 204
     finally:
         app.dependency_overrides.clear()
+
+
+def test_should_get_diagram_by_id_alone(client: TestClient) -> None:
+    diagram = Diagram(project_id=uuid.uuid4(), name="From a link")
+    mock_uc = AsyncMock(spec=GetDiagram)
+    mock_uc.execute.return_value = diagram
+    app.dependency_overrides[get_diagram_factory] = lambda: mock_uc
+    try:
+        response = client.get(f"/diagrams/{diagram.id}")
+        assert response.status_code == 200
+        assert response.json()["project_id"] == str(diagram.project_id)
+        assert mock_uc.execute.await_args.args[0].diagram_id == diagram.id
+    finally:
+        app.dependency_overrides.clear()

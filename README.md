@@ -74,6 +74,7 @@ Health check: `curl http://localhost:8000/health`
 | `DRAWDORO_MCP_TRANSPORT` | `stdio` | MCP server transport: `stdio` or `streamable-http` |
 | `DRAWDORO_MCP_HOST` | `127.0.0.1` | MCP server bind address when using `streamable-http` |
 | `DRAWDORO_MCP_PORT` | `8001` | MCP server port when using `streamable-http` |
+| `DRAWDORO_MCP_ALLOWED_HOSTS` | - | MCP server: comma-separated hostnames accepted over HTTP besides localhost (the `Host` header; any other gets 421) |
 | `VITE_COGNITO_DOMAIN` | - | Frontend: managed login domain; empty disables login |
 | `VITE_COGNITO_CLIENT_ID` | - | Frontend: public app client id (no secret) |
 | `VITE_COGNITO_IDENTITY_PROVIDER` | `Google` | Frontend: identity provider to skip the Cognito provider picker |
@@ -155,6 +156,7 @@ mcp/                      Python MCP server
 | GET/POST | /projects/{id}/folders | List / create folders |
 | GET/PUT/DELETE | /projects/{id}/folders/{id} | Get / update / delete folder |
 | GET/POST | /projects/{id}/diagrams | List / create diagrams |
+| GET | /diagrams/{id} | Get a diagram by its id alone, as in the editor link `/diagrams/<id>` (used by the MCP server's `open_link`) |
 | GET/PUT/DELETE | /projects/{id}/diagrams/{id} | Get / update / delete diagram. Every saved update is pushed to open editors as `diagram_updated`; editor tabs send `X-Client-Id` so they skip the echo of their own saves |
 | GET/PUT | /diagrams/{id}/documentation | Get / update documentation page |
 | GET/POST | /diagrams/{id}/comments | List / create comments |
@@ -174,7 +176,19 @@ All routes except `/health` return `501 Not Implemented` until infra is wired.
 
 ## MCP server
 
-The MCP server exposes Drawdoro tools to AI coding agents: `list_projects`, `get_project`, `list_diagrams`, `get_diagram` and `update_diagram`. Configure the backend URL with `DRAWDORO_API_URL` (default: `http://localhost:8000`). When the API has `AUTH_ENABLED=true`, set `DRAWDORO_API_KEY` to the API's `SERVICE_API_KEY`.
+The MCP server exposes Drawdoro tools to AI coding agents:
+
+| Area | Tools |
+|---|---|
+| Navigation | `list_workspaces`, `list_projects`, `get_project`, `list_folders`, `list_diagrams` (ids and names only, no canvas) |
+| Diagrams | `open_link` (editor `/diagrams/<id>` or read-only `/share/<token>` links), `get_diagram`, `create_diagram`, `update_diagram` |
+| Organisation | `create_project`, `create_folder` |
+| Documentation and comments | `get_documentation`, `update_documentation`, `list_comments` |
+
+There are no delete tools, and nothing manages workspaces or members. On connect the server sends instructions
+telling the agent to call `open_link` when it sees a Drawdoro link.
+
+Configure the backend URL with `DRAWDORO_API_URL` (default: `http://localhost:8000`). When the API has `AUTH_ENABLED=true`, set `DRAWDORO_API_KEY` to the API's `SERVICE_API_KEY`.
 
 `update_diagram` only changes the fields you pass; the others keep their current values.
 
@@ -187,6 +201,8 @@ claude mcp add drawdoro -e DRAWDORO_API_URL=http://localhost:8000 -- uv run --di
 ```
 
 `make dev` also starts it over HTTP at `http://localhost:8001/mcp` (`DRAWDORO_MCP_TRANSPORT=streamable-http`). The port is bound to localhost only, because the server holds the service API key and has no auth of its own.
+Over HTTP the server is stateless and answers `GET /health`; to serve it behind a proxy, list the public hostname in
+`DRAWDORO_MCP_ALLOWED_HOSTS`.
 
 ```sh
 claude mcp add --transport http drawdoro http://localhost:8001/mcp

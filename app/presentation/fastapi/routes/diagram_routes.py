@@ -31,6 +31,13 @@ router = APIRouter(
     dependencies=[Depends(require_workspace_access)],
 )
 
+# Links carry only the diagram id (/diagrams/<id>), so clients such as the MCP server open it here.
+diagram_by_id_router = APIRouter(
+    prefix="/diagrams",
+    tags=["diagrams"],
+    dependencies=[Depends(require_workspace_access)],
+)
+
 
 @router.get("", response_model=list[DiagramResponse])
 async def list_diagrams(
@@ -104,3 +111,16 @@ async def delete_diagram(
     use_case: DeleteDiagram = Depends(delete_diagram_factory),
 ) -> None:
     await use_case.execute(DeleteDiagramParams(diagram_id=diagram_id))
+
+
+@diagram_by_id_router.get(
+    "/{diagram_id}",
+    response_model=DiagramResponse,
+    dependencies=[Depends(track_agent_activity)],
+)
+async def get_diagram_by_id(
+    diagram_id: uuid.UUID,
+    use_case: GetDiagram = Depends(get_diagram_factory),
+) -> DiagramResponse:
+    diagram = await use_case.execute(GetDiagramParams(diagram_id=diagram_id))
+    return DiagramResponse.model_validate(diagram)

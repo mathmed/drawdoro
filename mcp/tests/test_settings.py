@@ -8,6 +8,7 @@ ENV_VARS = (
     "DRAWDORO_MCP_TRANSPORT",
     "DRAWDORO_MCP_HOST",
     "DRAWDORO_MCP_PORT",
+    "DRAWDORO_MCP_ALLOWED_HOSTS",
 )
 
 
@@ -25,6 +26,7 @@ def test_should_use_defaults_when_env_is_empty() -> None:
         transport=Transport.STDIO,
         host="127.0.0.1",
         port=8001,
+        allowed_hosts=(),
     )
 
 
@@ -35,6 +37,7 @@ def test_should_read_values_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DRAWDORO_MCP_TRANSPORT", "streamable-http")
     monkeypatch.setenv("DRAWDORO_MCP_HOST", "0.0.0.0")
     monkeypatch.setenv("DRAWDORO_MCP_PORT", "9000")
+    monkeypatch.setenv("DRAWDORO_MCP_ALLOWED_HOSTS", "drawdoro.example, mcp.example ,")
     assert Settings.from_env() == Settings(
         api_url="http://api:8000",
         api_key="svc-key",
@@ -42,6 +45,7 @@ def test_should_read_values_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
         transport=Transport.STREAMABLE_HTTP,
         host="0.0.0.0",
         port=9000,
+        allowed_hosts=("drawdoro.example", "mcp.example"),
     )
 
 

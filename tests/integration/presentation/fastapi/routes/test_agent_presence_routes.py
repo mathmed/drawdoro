@@ -35,11 +35,16 @@ def wait_until_gone(diagram_id: str, timeout: float = 2.0) -> bool:
     return False
 
 
+@pytest.mark.parametrize("by_link", [False, True])
 def test_should_show_agent_to_open_editors_while_it_works(
-    diagram: Diagram, monkeypatch: pytest.MonkeyPatch
+    diagram: Diagram, monkeypatch: pytest.MonkeyPatch, by_link: bool
 ) -> None:
     monkeypatch.setattr(track_agent_activity, "AGENT_PRESENCE_SECONDS", 0.2)
-    path = f"/projects/{diagram.project_id}/diagrams/{diagram.id}"
+    path = (
+        f"/diagrams/{diagram.id}"
+        if by_link
+        else f"/projects/{diagram.project_id}/diagrams/{diagram.id}"
+    )
     # The context manager keeps one event loop alive, so the agent's expiry timer can run.
     with TestClient(app) as client, client.websocket_connect(f"/ws/diagrams/{diagram.id}") as ws:
         assert CLAUDE not in ws.receive_json()["users"]

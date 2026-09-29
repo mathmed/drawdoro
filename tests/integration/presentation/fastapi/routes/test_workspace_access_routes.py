@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.common.settings import Settings, get_settings
 from app.domain.entities.models.comment import Comment
+from app.domain.entities.models.diagram import Diagram
 from app.domain.entities.models.project import Project
 from app.domain.entities.models.user import User
 from app.domain.entities.models.workspace import Workspace
@@ -17,6 +18,7 @@ from app.domain.errors.domain_errors import ForbiddenError, NotFoundError
 from app.domain.usecases.auth.authenticate_user import AuthenticateUser
 from app.domain.usecases.auth.authorize_workspace_access import AuthorizeWorkspaceAccess
 from app.domain.usecases.comment.create_comment import CreateComment
+from app.domain.usecases.diagram.get_diagram import GetDiagram
 from app.domain.usecases.project.list_projects import ListProjects
 from app.domain.usecases.workspace.list_workspaces import ListWorkspaces
 from app.domain.usecases.workspace_member.add_workspace_member import AddWorkspaceMember
@@ -31,6 +33,7 @@ from app.presentation.factories.auth_factories import (
     authorize_workspace_access_factory,
 )
 from app.presentation.factories.comment_factories import create_comment_factory
+from app.presentation.factories.diagram_factories import get_diagram_factory
 from app.presentation.factories.project_factories import list_projects_factory
 from app.presentation.factories.workspace_factories import list_workspaces_factory
 from app.presentation.factories.workspace_member_factories import (
@@ -139,3 +142,21 @@ def test_should_record_signed_in_user_as_comment_author(client: TestClient) -> N
         client.post(f"/diagrams/{diagram_id}/comments", headers=AUTH, json=body).status_code == 201
     )
     assert creating.execute.await_args.args[0].author_id == USER.id
+
+
+def test_should_authorize_diagram_links_through_the_diagram(
+    client: TestClient, authorize: AsyncMock
+) -> None:
+    diagram = Diagram(project_id=uuid.uuid4(), name="Linked")
+    getting = AsyncMock(spec=GetDiagram)
+    getting.execute.return_value = diagram
+    app.dependency_overrides[get_diagram_factory] = lambda: getting
+    assert client.get(f"/diagrams/{diagram.id}", headers=AUTH).status_code == 200
+    params = authorize.execute.await_args.args[0]
+    assert (params.diagram_id, params.project_id, params.required_role) == (
+        diagram.id,
+        None,
+        WorkspaceRole.VIEWER,
+    )
+    authorize.execute.side_effect = NotFoundError("Diagram not found")
+    assert client.get(f"/diagrams/{diagram.id}", headers=AUTH).status_code == 404

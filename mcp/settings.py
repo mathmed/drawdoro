@@ -18,6 +18,8 @@ class Settings:
     transport: Transport = Transport.STDIO
     host: str = "127.0.0.1"
     port: int = 8001
+    # Public hostnames accepted over HTTP besides localhost, e.g. the one routed by the ingress.
+    allowed_hosts: tuple[str, ...] = ()
 
     @classmethod
     def from_env(cls) -> Self:
@@ -29,4 +31,9 @@ class Settings:
             transport=Transport(os.environ.get("DRAWDORO_MCP_TRANSPORT", defaults.transport)),
             host=os.environ.get("DRAWDORO_MCP_HOST", defaults.host),
             port=int(os.environ.get("DRAWDORO_MCP_PORT", defaults.port)),
+            allowed_hosts=_split(os.environ.get("DRAWDORO_MCP_ALLOWED_HOSTS", "")),
         )
+
+
+def _split(value: str) -> tuple[str, ...]:
+    return tuple(item.strip() for item in value.split(",") if item.strip())
