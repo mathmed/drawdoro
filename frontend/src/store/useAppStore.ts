@@ -38,6 +38,7 @@ import type {
   DocumentationPage,
   Folder,
   Project,
+  PushedDiagram,
   SemanticMetadata,
   ShapeMetadata,
   ValidationResult,
@@ -45,6 +46,7 @@ import type {
   WorkspaceMember,
   WorkspaceRole,
 } from '../api/types'
+import { isOlder } from '../utils/freshness'
 import { buildArchitectureGraph, validateArchitecture } from '../utils/validateArchitecture'
 import type { Presence } from '../hooks/useRealtime'
 import { useAuthStore } from './useAuthStore'
@@ -126,6 +128,8 @@ interface AppState {
   renameDiagram: (name: string, diagram?: Diagram) => Promise<void>
   deleteDiagram: (diagram: Diagram) => Promise<void>
   saveCanvasState: (state: CanvasState) => Promise<void>
+  // Returns false when the pushed diagram is not the one open or is older than the local copy.
+  applyPushedDiagram: (diagram: PushedDiagram) => boolean
   saveDocumentation: (content: string) => Promise<void>
   setEditor: (editor: Editor | null) => void
   toggleSidebar: () => void
@@ -170,9 +174,13 @@ export const useAppStore = create<AppState>((set, get) => {
         semantic_metadata: diagram.semantic_metadata ?? null,
         ...patch,
       })
+      // A newer copy may have been pushed by another writer while this save was in flight.
+      const keepNewest = (item: Diagram) =>
+        item.id === updated.id && !isOlder(updated.updated_at, item.updated_at) ? updated : item
+      const current = get().activeDiagram
       set({
-        activeDiagram: get().activeDiagram?.id === updated.id ? updated : get().activeDiagram,
-        diagrams: get().diagrams.map((item) => (item.id === updated.id ? updated : item)),
+        activeDiagram: current === null ? null : keepNewest(current),
+        diagrams: get().diagrams.map(keepNewest),
       })
       pendingSaves -= 1
       if (pendingSaves === 0) {
@@ -459,6 +467,26 @@ export const useAppStore = create<AppState>((set, get) => {
 
     saveCanvasState: async (state) => {
       await persistDiagram({ canvas_state: state })
+    },
+
+    applyPushedDiagram: (pushed) => {
+      const current = get().activeDiagram
+      if (current?.id !== pushed.id || isOlder(pushed.updated_at, current.updated_at)) {
+        return false
+      }
+      // Panel edits still waiting for their debounced save survive unless someone else
+      // actually changed the metadata.
+      const metadataChanged =
+        JSON.stringify(pushed.semantic_metadata ?? null) !== JSON.stringify(current.semantic_metadata ?? null)
+      const updated = { ...current, ...pushed }
+      set({
+        activeDiagram: updated,
+        diagrams: get().diagrams.map((item) => (item.id === updated.id ? updated : item)),
+        ...(metadataChanged
+          ? { semanticMetadata: (pushed.semantic_metadata as Record<string, ShapeMetadata> | null) ?? {} }
+          : {}),
+      })
+      return true
     },
 
     saveDocumentation: async (content) => {

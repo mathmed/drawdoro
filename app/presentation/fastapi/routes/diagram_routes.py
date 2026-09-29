@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header
 
 from app.domain.usecases.diagram.create_diagram import CreateDiagram, CreateDiagramParams
 from app.domain.usecases.diagram.delete_diagram import DeleteDiagram, DeleteDiagramParams
@@ -14,12 +14,16 @@ from app.presentation.factories.diagram_factories import (
     list_diagrams_factory,
     update_diagram_factory,
 )
+from app.presentation.fastapi.dependencies.agent_presence import track_agent_activity
 from app.presentation.fastapi.dependencies.workspace_access import require_workspace_access
 from app.presentation.fastapi.schemas.diagram_schemas import (
     CreateDiagramRequest,
     DiagramResponse,
     UpdateDiagramRequest,
 )
+
+# Editor tabs send their realtime client id so they can recognise the echo of their own saves.
+CLIENT_ID_MAX_LENGTH = 64
 
 router = APIRouter(
     prefix="/projects/{project_id}/diagrams",
@@ -54,7 +58,11 @@ async def create_diagram(
     return DiagramResponse.model_validate(diagram)
 
 
-@router.get("/{diagram_id}", response_model=DiagramResponse)
+@router.get(
+    "/{diagram_id}",
+    response_model=DiagramResponse,
+    dependencies=[Depends(track_agent_activity)],
+)
 async def get_diagram(
     project_id: uuid.UUID,
     diagram_id: uuid.UUID,
@@ -64,11 +72,16 @@ async def get_diagram(
     return DiagramResponse.model_validate(diagram)
 
 
-@router.put("/{diagram_id}", response_model=DiagramResponse)
+@router.put(
+    "/{diagram_id}",
+    response_model=DiagramResponse,
+    dependencies=[Depends(track_agent_activity)],
+)
 async def update_diagram(
     project_id: uuid.UUID,
     diagram_id: uuid.UUID,
     body: UpdateDiagramRequest,
+    x_client_id: str | None = Header(default=None, max_length=CLIENT_ID_MAX_LENGTH),
     use_case: UpdateDiagram = Depends(update_diagram_factory),
 ) -> DiagramResponse:
     diagram = await use_case.execute(
@@ -78,6 +91,7 @@ async def update_diagram(
             folder_id=body.folder_id,
             canvas_state=body.canvas_state,
             semantic_metadata=body.semantic_metadata,
+            origin_client_id=x_client_id,
         )
     )
     return DiagramResponse.model_validate(diagram)

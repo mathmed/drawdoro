@@ -102,6 +102,7 @@ export default function DrawingCanvas({ diagram }: DrawingCanvasProps) {
   const isPresentationMode = useAppStore((state) => state.isPresentationMode)
   const editor = useAppStore((state) => state.editor)
   const setPresence = useAppStore((state) => state.setPresence)
+  const applyPushedDiagram = useAppStore((state) => state.applyPushedDiagram)
   const theme = useThemeStore((state) => state.resolved)
 
   useSelectionShortcuts(editor)
@@ -120,6 +121,7 @@ export default function DrawingCanvas({ diagram }: DrawingCanvasProps) {
     diagramId: diagram.id,
     editor,
     onPresenceChange: setPresence,
+    onDiagramPushed: applyPushedDiagram,
   })
 
   function handleMount(mountedEditor: Editor): () => void {

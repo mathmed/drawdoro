@@ -10,6 +10,8 @@ from app.domain.usecases.diagram.share_diagram import ShareDiagram
 from app.domain.usecases.diagram.update_diagram import UpdateDiagram
 from app.infra.database.repositories.diagram_repository import DiagramRepositoryImpl
 from app.infra.database.session import get_session
+from app.infra.realtime.connection_manager import manager
+from app.infra.realtime.realtime_diagram_update_notifier import RealtimeDiagramUpdateNotifier
 
 
 async def create_diagram_factory(session: AsyncSession = Depends(get_session)) -> CreateDiagram:
@@ -25,7 +27,7 @@ async def list_diagrams_factory(session: AsyncSession = Depends(get_session)) ->
 
 
 async def update_diagram_factory(session: AsyncSession = Depends(get_session)) -> UpdateDiagram:
-    return UpdateDiagram(DiagramRepositoryImpl(session))
+    return UpdateDiagram(DiagramRepositoryImpl(session), RealtimeDiagramUpdateNotifier(manager))
 
 
 async def delete_diagram_factory(session: AsyncSession = Depends(get_session)) -> DeleteDiagram:

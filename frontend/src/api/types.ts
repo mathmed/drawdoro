@@ -38,6 +38,12 @@ export interface Diagram {
   updated_at?: string
 }
 
+// Pushed over the realtime socket to open editors after every saved change to a diagram.
+export type PushedDiagram = Pick<
+  Diagram,
+  'id' | 'name' | 'folder_id' | 'canvas_state' | 'semantic_metadata' | 'updated_at'
+>
+
 export interface DocumentationPage {
   id: string
   diagram_id: string

@@ -83,6 +83,7 @@ tests/integration/ HTTP tests with TestClient
 
 - **`__init__.py`**: only create when it exports symbols. Never empty.
 - **Comments**: no docstrings. Comments only when code is genuinely confusing.
+  - Exception: MCP tool functions (`mcp/tools/`) have docstrings, because the MCP SDK sends the docstring to the agent as the tool description. Describe the tool and each parameter (`Args:`).
 - **Enums**: always use `enum.StrEnum` for fixed sets of strings.
 - **Data structures**: always use `BaseModel` or `dataclass`. Use `dict` only as last resort.
 - **Identifiers**: every identifier in English.

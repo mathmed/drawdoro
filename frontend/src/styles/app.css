@@ -1770,6 +1770,11 @@ button.validation-item:hover {
   box-shadow: 0 0 0 1.5px var(--accent);
 }
 
+/* An AI agent working on the diagram through the MCP server */
+.presence-agent {
+  background: #d97757;
+}
+
 /* Share link dialog */
 .share-link-row {
   display: flex;

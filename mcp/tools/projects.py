@@ -1,21 +1,25 @@
-import os
+import uuid
 
-import httpx
-
-API_URL = os.environ.get("DRAWDORO_API_URL", "http://localhost:8000")
-# Required when the API has authentication enabled (matches SERVICE_API_KEY there).
-HEADERS = {"X-API-Key": key} if (key := os.environ.get("DRAWDORO_API_KEY")) else {}
+from tools.api import DrawdoroApi, JsonObject
 
 
-def list_projects(workspace_id: str) -> list:
-    with httpx.Client(base_url=API_URL, headers=HEADERS) as client:
-        response = client.get(f"/workspaces/{workspace_id}/projects")
-        response.raise_for_status()
-        return list(response.json())
+class ProjectTools:
+    def __init__(self, api: DrawdoroApi) -> None:
+        self._api = api
 
+    def list_projects(self, workspace_id: uuid.UUID) -> list[JsonObject]:
+        """List the projects of a workspace.
 
-def get_project(workspace_id: str, project_id: str) -> dict:
-    with httpx.Client(base_url=API_URL, headers=HEADERS) as client:
-        response = client.get(f"/workspaces/{workspace_id}/projects/{project_id}")
-        response.raise_for_status()
-        return dict(response.json())
+        Args:
+            workspace_id: Workspace that owns the projects.
+        """
+        return self._api.get_list(f"/workspaces/{workspace_id}/projects")
+
+    def get_project(self, workspace_id: uuid.UUID, project_id: uuid.UUID) -> JsonObject:
+        """Get one project of a workspace.
+
+        Args:
+            workspace_id: Workspace that owns the project.
+            project_id: Project to fetch.
+        """
+        return self._api.get_object(f"/workspaces/{workspace_id}/projects/{project_id}")

@@ -56,13 +56,22 @@ services:
 
   mcp:
     container_name: drawdoro-mcp
-    image: python:3.12-slim
+    image: ghcr.io/astral-sh/uv:python3.14-bookworm-slim
     working_dir: /app
-    command: sh -c "pip install --quiet uv && uv run python server.py"
+    command: uv run --locked --no-dev python server.py
+    ports:
+      # Local only: the server holds the service API key and has no auth of its own.
+      - "127.0.0.1:8001:8001"
     volumes:
       - ../mcp:/app
     environment:
       - DRAWDORO_API_URL=http://api:8000
+      - DRAWDORO_API_KEY=${SERVICE_API_KEY:-}
+      - DRAWDORO_MCP_TRANSPORT=streamable-http
+      - DRAWDORO_MCP_HOST=0.0.0.0
+      - DRAWDORO_MCP_PORT=8001
+      # Keeps the container's venv out of the mounted mcp/.venv used on the host.
+      - UV_PROJECT_ENVIRONMENT=/opt/venv
     depends_on:
       - api
     networks:

@@ -1,3 +1,4 @@
+import asyncio
 import json
 from typing import cast
 from unittest.mock import AsyncMock
@@ -36,8 +37,8 @@ async def test_should_count_people_not_tabs(sut: ConnectionManager) -> None:
     await sut.connect(make_ws(), "room", Participant(name="Ana", user_id="user-ana"))
     await sut.connect(make_ws(), "room", BRUNO)
     assert sut.participants("room") == [
-        {"id": "user-ana", "name": "Ana"},
-        {"id": "user-bruno", "name": "Bruno"},
+        {"id": "user-ana", "name": "Ana", "kind": "person"},
+        {"id": "user-bruno", "name": "Bruno", "kind": "person"},
     ]
 
 
@@ -98,4 +99,52 @@ async def test_should_announce_again_after_dropping_a_dead_socket(sut: Connectio
     await sut.connect(dead, "room", ANA)
     await sut.connect(alive, "room", BRUNO)
     await sut.broadcast_presence("room")
-    assert sent(alive)[-1]["users"] == [{"id": "user-bruno", "name": "Bruno"}]
+    assert sent(alive)[-1]["users"] == [{"id": "user-bruno", "name": "Bruno", "kind": "person"}]
+
+
+CLAUDE = {"id": "agent:Claude", "name": "Claude", "kind": "agent"}
+
+
+def last_presence_users(ws: WebSocket) -> list[dict[str, str]]:
+    return cast(list[dict[str, str]], sent(ws)[-1]["users"])
+
+
+async def test_should_list_active_agent_after_people(sut: ConnectionManager) -> None:
+    await sut.connect(make_ws(), "room", BRUNO)
+    await sut.mark_agent_active("room", "Claude", seconds=60)
+    assert sut.participants("room") == [
+        {"id": "user-bruno", "name": "Bruno", "kind": "person"},
+        CLAUDE,
+    ]
+
+
+async def test_should_announce_agent_when_it_arrives(sut: ConnectionManager) -> None:
+    ws = make_ws()
+    await sut.connect(ws, "room", ANA)
+    await sut.mark_agent_active("room", "Claude", seconds=60)
+    assert CLAUDE in last_presence_users(ws)
+
+
+async def test_should_not_announce_agent_again_while_it_is_listed(sut: ConnectionManager) -> None:
+    ws = make_ws()
+    await sut.connect(ws, "room", ANA)
+    await sut.mark_agent_active("room", "Claude", seconds=60)
+    await sut.mark_agent_active("room", "Claude", seconds=60)
+    assert len(sent(ws)) == 1
+
+
+async def test_should_remove_agent_when_it_goes_quiet(sut: ConnectionManager) -> None:
+    ws = make_ws()
+    await sut.connect(ws, "room", ANA)
+    await sut.mark_agent_active("room", "Claude", seconds=0.01)
+    await asyncio.sleep(0.05)
+    assert CLAUDE not in sut.participants("room")
+    assert CLAUDE not in last_presence_users(ws)
+
+
+async def test_should_keep_agent_listed_while_it_stays_active(sut: ConnectionManager) -> None:
+    await sut.mark_agent_active("room", "Claude", seconds=0.1)
+    await asyncio.sleep(0.06)
+    await sut.mark_agent_active("room", "Claude", seconds=0.1)
+    await asyncio.sleep(0.06)
+    assert sut.participants("room") == [CLAUDE]

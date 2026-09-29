@@ -1,4 +1,4 @@
-.PHONY: setup dev dev-build run build test test-unit hooks check-code format-code frontend db
+.PHONY: setup dev dev-build run build test test-unit test-mcp hooks check-code format-code frontend db
 
 # Install uv (if missing), project dependencies and git hooks
 setup:
@@ -41,6 +41,10 @@ test:
 # Run only the fast unit tests
 test-unit:
 	uv run pytest tests/unit
+
+# Run the MCP server tests and type check (separate uv project in mcp/)
+test-mcp:
+	cd mcp && uv run pytest && uv run mypy .
 
 # Run all quality checks (ruff, mypy, bandit, vulture, xenon, pip-audit)
 hooks:

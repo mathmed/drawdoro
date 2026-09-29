@@ -47,6 +47,7 @@ Health check: `curl http://localhost:8000/health`
 | `make build` | Build the production Docker image |
 | `make test` | Run all tests with coverage |
 | `make test-unit` | Run only the unit tests |
+| `make test-mcp` | Run the MCP server tests and type check |
 | `make hooks` | Run all quality checks (ruff, mypy, bandit, vulture, xenon, pip-audit) |
 | `make format-code` | Fix lint issues and format the code |
 | `make migrate` | Apply database migrations (requires running DB) |
@@ -69,6 +70,10 @@ Health check: `curl http://localhost:8000/health`
 | `COGNITO_CLIENT_ID` | - | App client id expected in the token audience |
 | `SERVICE_API_KEY` | - | Shared secret that lets trusted services (the MCP server) call the API via `X-API-Key` |
 | `DRAWDORO_API_KEY` | - | MCP server: value sent as `X-API-Key` (same as `SERVICE_API_KEY`) |
+| `DRAWDORO_AGENT_NAME` | `Claude` | MCP server: name shown in the diagram's presence avatars while the agent works on it; empty hides it |
+| `DRAWDORO_MCP_TRANSPORT` | `stdio` | MCP server transport: `stdio` or `streamable-http` |
+| `DRAWDORO_MCP_HOST` | `127.0.0.1` | MCP server bind address when using `streamable-http` |
+| `DRAWDORO_MCP_PORT` | `8001` | MCP server port when using `streamable-http` |
 | `VITE_COGNITO_DOMAIN` | - | Frontend: managed login domain; empty disables login |
 | `VITE_COGNITO_CLIENT_ID` | - | Frontend: public app client id (no secret) |
 | `VITE_COGNITO_IDENTITY_PROVIDER` | `Google` | Frontend: identity provider to skip the Cognito provider picker |
@@ -129,8 +134,10 @@ frontend/                 React + Vite + TypeScript
     utils/                Pure helpers (validation, export, shape selection/connection)
     shapes/               tldraw shape extensions (rounded edges, custom stroke colours)
 mcp/                      Python MCP server
-  server.py               Entry point
-  tools/                  MCP tools (diagrams, projects)
+  server.py               Entry point: builds the server and registers the tools
+  settings.py             Settings read from DRAWDORO_* env vars
+  tools/                  MCP tools (diagrams, projects) and the API client
+  tests/                  MCP tests (`make test-mcp`)
 ```
 
 ## API routes (placeholder)
@@ -148,12 +155,12 @@ mcp/                      Python MCP server
 | GET/POST | /projects/{id}/folders | List / create folders |
 | GET/PUT/DELETE | /projects/{id}/folders/{id} | Get / update / delete folder |
 | GET/POST | /projects/{id}/diagrams | List / create diagrams |
-| GET/PUT/DELETE | /projects/{id}/diagrams/{id} | Get / update / delete diagram |
+| GET/PUT/DELETE | /projects/{id}/diagrams/{id} | Get / update / delete diagram. Every saved update is pushed to open editors as `diagram_updated`; editor tabs send `X-Client-Id` so they skip the echo of their own saves |
 | GET/PUT | /diagrams/{id}/documentation | Get / update documentation page |
 | GET/POST | /diagrams/{id}/comments | List / create comments |
 | POST | /diagrams/{id}/share | Generate (or return) the diagram's shareable link token |
 | GET | /share/{share_token} | Public: open a shared diagram by token, no sign-in required (used by guests) |
-| WS | /ws/diagrams/{id} | Real-time collaboration: broadcasts canvas updates, cursors and peer count to everyone connected to the same diagram. Guests join with `?share=<token>&name=<name>` as read-only viewers |
+| WS | /ws/diagrams/{id} | Real-time collaboration: broadcasts canvas updates, cursors, peer count and saved changes (`diagram_updated`, including those made through the API or the MCP server) to everyone connected to the same diagram. An agent that reads or saves the diagram through the MCP server (`X-Agent-Name`, honoured only with the service key when auth is on) is listed in the presence for 60s after its last call. Guests join with `?share=<token>&name=<name>` as read-only viewers |
 
 All routes except `/health` return `501 Not Implemented` until infra is wired.
 
@@ -167,9 +174,20 @@ All routes except `/health` return `501 Not Implemented` until infra is wired.
 
 ## MCP server
 
-The MCP server exposes Drawdoro tools to AI coding agents. Configure the backend URL with the `DRAWDORO_API_URL` env var (default: `http://localhost:8000`).
+The MCP server exposes Drawdoro tools to AI coding agents: `list_projects`, `get_project`, `list_diagrams`, `get_diagram` and `update_diagram`. Configure the backend URL with `DRAWDORO_API_URL` (default: `http://localhost:8000`). When the API has `AUTH_ENABLED=true`, set `DRAWDORO_API_KEY` to the API's `SERVICE_API_KEY`.
+
+`update_diagram` only changes the fields you pass; the others keep their current values.
+
+While the agent reads or saves a diagram, people with it open see it in the presence avatars (as `DRAWDORO_AGENT_NAME`, default `Claude`) until 60s after its last call.
+
+Locally it runs over stdio, so the MCP client starts it. For example, with Claude Code:
 
 ```sh
-cd mcp
-uv run python server.py
+claude mcp add drawdoro -e DRAWDORO_API_URL=http://localhost:8000 -- uv run --directory mcp python server.py
+```
+
+`make dev` also starts it over HTTP at `http://localhost:8001/mcp` (`DRAWDORO_MCP_TRANSPORT=streamable-http`). The port is bound to localhost only, because the server holds the service API key and has no auth of its own.
+
+```sh
+claude mcp add --transport http drawdoro http://localhost:8001/mcp
 ```

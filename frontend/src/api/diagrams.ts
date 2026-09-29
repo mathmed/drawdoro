@@ -1,4 +1,5 @@
 import apiClient from './client'
+import { TAB_CLIENT_ID } from './tabClientId'
 import type { CanvasState, Diagram, SemanticMetadata } from './types'
 
 export interface UpdateDiagramInput {
@@ -43,6 +44,7 @@ export async function updateDiagram(
   const { data } = await apiClient.put<Diagram>(
     `/projects/${projectId}/diagrams/${diagramId}`,
     input,
+    { headers: { 'X-Client-Id': TAB_CLIENT_ID } },
   )
   return data
 }

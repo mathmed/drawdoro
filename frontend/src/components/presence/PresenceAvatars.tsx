@@ -1,3 +1,5 @@
+import { Sparkles } from 'lucide-react'
+
 import type { PresenceUser } from '../../hooks/useRealtime'
 import { useAppStore } from '../../store/useAppStore'
 import { initial } from '../../utils/format'
@@ -14,8 +16,22 @@ function colorFor(id: string): string {
   return `hsl(${Math.round((hash * 137.508) % 360)} 62% 50%)`
 }
 
+function labelFor(user: PresenceUser, isYou: boolean): string {
+  if (user.kind === 'agent') {
+    return `${user.name} (AI agent)`
+  }
+  return isYou ? `${user.name} (you)` : user.name
+}
+
 function Avatar({ user, isYou }: { user: PresenceUser; isYou: boolean }) {
-  const label = isYou ? `${user.name} (you)` : user.name
+  const label = labelFor(user, isYou)
+  if (user.kind === 'agent') {
+    return (
+      <span className="presence-avatar presence-agent" data-tooltip={label} aria-label={label}>
+        <Sparkles size={14} strokeWidth={2.25} aria-hidden />
+      </span>
+    )
+  }
   return (
     <span
       className="presence-avatar"
@@ -40,7 +56,7 @@ export default function PresenceAvatars() {
   }
   const visible = people.slice(0, MAX_VISIBLE)
   const hidden = people.slice(MAX_VISIBLE)
-  const label = people.map((user) => (user.id === presence.you ? `${user.name} (you)` : user.name)).join(', ')
+  const label = people.map((user) => labelFor(user, user.id === presence.you)).join(', ')
 
   return (
     <div className="presence-stack" role="group" aria-label={`In this diagram: ${label}`}>
