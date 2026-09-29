@@ -34,6 +34,7 @@ from app.domain.usecases.workspace_member.update_workspace_member_role import (
 WORKSPACE_ID = uuid.uuid4()
 OWNER_ID = uuid.uuid4()
 MEMBER_ID = uuid.uuid4()
+APP_NAME = "Acme Draw"
 
 
 def member(user_id: uuid.UUID, role: WorkspaceRole) -> WorkspaceMember:
@@ -78,7 +79,7 @@ async def test_should_add_member_who_already_signed_in(
 ) -> None:
     newcomer = User(email="bia@x.com", name="Bia")
     users.get_by_email = AsyncMock(return_value=newcomer)  # type: ignore[method-assign]
-    sut = AddWorkspaceMember(members, users)
+    sut = AddWorkspaceMember(members, users, APP_NAME)
     added = await sut.execute(
         AddWorkspaceMemberParams(
             workspace_id=WORKSPACE_ID, email=" Bia@X.com ", role=WorkspaceRole.VIEWER
@@ -91,8 +92,8 @@ async def test_should_add_member_who_already_signed_in(
 async def test_should_reject_unknown_email(
     members: WorkspaceMemberRepository, users: UserRepository
 ) -> None:
-    with pytest.raises(NotFoundError):
-        await AddWorkspaceMember(members, users).execute(
+    with pytest.raises(NotFoundError, match="ghost@x.com hasn't signed in to Acme Draw yet"):
+        await AddWorkspaceMember(members, users, APP_NAME).execute(
             AddWorkspaceMemberParams(
                 workspace_id=WORKSPACE_ID, email="ghost@x.com", role=WorkspaceRole.EDITOR
             )
@@ -104,7 +105,7 @@ async def test_should_reject_duplicate_member(
 ) -> None:
     users.get_by_email = AsyncMock(return_value=User(id=MEMBER_ID, email="m@x.com", name="M"))  # type: ignore[method-assign]
     with pytest.raises(ConflictError):
-        await AddWorkspaceMember(members, users).execute(
+        await AddWorkspaceMember(members, users, APP_NAME).execute(
             AddWorkspaceMemberParams(
                 workspace_id=WORKSPACE_ID, email="m@x.com", role=WorkspaceRole.EDITOR
             )

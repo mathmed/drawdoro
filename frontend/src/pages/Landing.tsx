@@ -4,6 +4,7 @@ import { useLocation } from 'react-router-dom'
 
 import { startLogin } from '../auth/session'
 import Logo from '../components/ui/Logo'
+import { branding } from '../config/branding'
 
 const FEATURES = [
   { icon: Workflow, title: 'Draw architecture', description: 'An infinite canvas with shapes that snap together and smart connecting arrows.' },
@@ -22,7 +23,7 @@ function GoogleMark() {
   )
 }
 
-// First screen for signed-out visitors: what Drawdoro is, and the single way in.
+// First screen for signed-out visitors: what the product is, and the single way in.
 export default function Landing() {
   const location = useLocation()
   const [isRedirecting, setIsRedirecting] = useState(false)
@@ -43,7 +44,7 @@ export default function Landing() {
           <span className="landing-eyebrow">Internal architecture workspace</span>
           <h1 className="landing-title">Design systems visually. Keep everyone on the same page.</h1>
           <p className="landing-description">
-            Drawdoro brings architecture diagrams, documentation and team discussion together in one
+            {branding.name} brings architecture diagrams, documentation and team discussion together in one
             collaborative canvas.
           </p>
           <button type="button" className="btn btn-lg google-button" onClick={handleSignIn} disabled={isRedirecting}>

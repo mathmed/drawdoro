@@ -58,27 +58,55 @@ Health check: `curl http://localhost:8000/health`
 | Variable | Default | Description |
 |---|---|---|
 | `APP_PORT` | - | Host port for `make dev` |
+| `APP_NAME` | `Drawdoro` | Product name used by the API (OpenAPI title, messages) and the MCP server; `make dev` also passes it to the frontend as `VITE_APP_NAME`. See [White-label](#white-label) |
+| `APP_SLUG` | `drawdoro` | `make dev` only: prefix of the container names and local Postgres user/password/database |
 | `ENV` | `development` | `development`, `test` or `production`. Production logs JSON. |
 | `LOG_LEVEL` | `INFO` | Python logging level |
 | `CORS_ORIGINS` | `[]` | JSON list of allowed origins |
-| `DRAWDORO_API_URL` | `http://localhost:8000` | Backend URL used by the MCP server |
 | `DATABASE_URL` | `postgresql+asyncpg://drawdoro:drawdoro@localhost:5432/drawdoro` | PostgreSQL async connection URL |
+| `VITE_APP_NAME` | `Drawdoro` | Frontend: product name shown in the UI and the page title |
+| `VITE_APP_SLUG` | slug of `VITE_APP_NAME` | Frontend: prefix of the browser storage keys (`<slug>:session`, `<slug>:theme`...). Changing it signs everyone out |
 | `VITE_API_URL` | `/api` | Frontend base URL for the backend. Defaults to the Vite dev proxy that forwards `/api` to `http://localhost:8000`. |
 | `AUTH_ENABLED` | `false` | Require a Cognito sign-in on every API route and WebSocket. Must be `true` when `ENV=production`. |
 | `COGNITO_REGION` | `us-east-1` | Region of the Cognito user pool |
 | `COGNITO_USER_POOL_ID` | - | User pool whose ID tokens the API accepts |
 | `COGNITO_CLIENT_ID` | - | App client id expected in the token audience |
 | `SERVICE_API_KEY` | - | Shared secret that lets trusted services (the MCP server) call the API via `X-API-Key` |
-| `DRAWDORO_API_KEY` | - | MCP server: value sent as `X-API-Key` (same as `SERVICE_API_KEY`) |
-| `DRAWDORO_FRONTEND_URL` | `http://localhost:3000` | MCP server: frontend whose `/render` page `render_diagram` opens in a headless Chromium |
-| `DRAWDORO_AGENT_NAME` | `Claude` | MCP server: name shown in the diagram's presence avatars while the agent works on it; empty hides it |
-| `DRAWDORO_MCP_TRANSPORT` | `stdio` | MCP server transport: `stdio` or `streamable-http` |
-| `DRAWDORO_MCP_HOST` | `127.0.0.1` | MCP server bind address when using `streamable-http` |
-| `DRAWDORO_MCP_PORT` | `8001` | MCP server port when using `streamable-http` |
-| `DRAWDORO_MCP_ALLOWED_HOSTS` | - | MCP server: comma-separated hostnames accepted over HTTP besides localhost (the `Host` header; any other gets 421) |
+| `MCP_API_URL` | `http://localhost:8000` | MCP server: backend URL |
+| `MCP_API_KEY` | - | MCP server: value sent as `X-API-Key` (same as `SERVICE_API_KEY`) |
+| `MCP_FRONTEND_URL` | `http://localhost:3000` | MCP server: frontend whose `/render` page `render_diagram` opens in a headless Chromium |
+| `MCP_AGENT_NAME` | `Claude` | MCP server: name shown in the diagram's presence avatars while the agent works on it; empty hides it |
+| `MCP_TRANSPORT` | `stdio` | MCP server transport: `stdio` or `streamable-http` |
+| `MCP_HOST` | `127.0.0.1` | MCP server bind address when using `streamable-http` |
+| `MCP_PORT` | `8001` | MCP server port when using `streamable-http` |
+| `MCP_ALLOWED_HOSTS` | - | MCP server: comma-separated hostnames accepted over HTTP besides localhost (the `Host` header; any other gets 421) |
 | `VITE_COGNITO_DOMAIN` | - | Frontend: managed login domain; empty disables login |
 | `VITE_COGNITO_CLIENT_ID` | - | Frontend: public app client id (no secret) |
 | `VITE_COGNITO_IDENTITY_PROVIDER` | `Google` | Frontend: identity provider to skip the Cognito provider picker |
+
+The MCP server still reads the former `DRAWDORO_*` names (`DRAWDORO_API_URL`, `DRAWDORO_MCP_PORT`...) when the
+`MCP_*` one is not set, so existing setups keep working. In Kubernetes, a Service named `mcp` would make the kubelet
+inject `MCP_PORT=tcp://...`; name the Service otherwise or set `enableServiceLinks: false`.
+
+## White-label
+
+The product name is configuration, not code, so a fork can rebrand the app and still take upstream changes with
+`git merge` without conflicts. Code identifiers (classes, shape utils, tldraw ids, the `window.renderDiagram` hook
+used by `render_diagram`, package names) are brand-neutral; everything people or agents read comes from:
+
+| Where | Setting | Used for |
+|---|---|---|
+| API | `APP_NAME` (`app/common/settings.py`) | OpenAPI title, error messages such as "hasn't signed in to <name> yet" |
+| MCP server | `APP_NAME` (`mcp/settings.py`) | Server name (slug of the name), description, instructions sent to agents, API error messages |
+| Frontend | `VITE_APP_NAME` (`frontend/src/config/branding.ts`) | Page title, logo wordmark, landing, home, 404 and members texts |
+| Frontend | `VITE_APP_SLUG` (`frontend/src/config/branding.ts`) | Prefix of the localStorage/sessionStorage keys |
+| Docker compose | `APP_NAME`, `APP_SLUG` (root `.env`) | Passes the name to the three services; names the containers and local database |
+
+`VITE_*` variables are read at build time, so set them where the frontend is built (`frontend/.env`, the shell or the
+Docker build). For example, a fork called CondoDraw sets `APP_NAME=CondoDraw` for the API and the MCP server and
+`VITE_APP_NAME=CondoDraw` for the frontend build; the storage slug then becomes `condodraw`. Deployment files (manifests,
+workflows, web server config) and the logo artwork (`frontend/public/favicon.svg`, `components/ui/Logo.tsx`) stay
+per fork.
 
 ## Authentication
 
@@ -135,9 +163,10 @@ frontend/                 React + Vite + TypeScript
     hooks/                Reusable hooks (shortcuts, realtime, comments, presentation)
     utils/                Pure helpers (validation, export, shape selection/connection)
     shapes/               tldraw shape extensions (rounded edges, custom stroke colours)
+    config/               White-label branding (product name, storage key prefix)
 mcp/                      Python MCP server
   server.py               Entry point: builds the server and registers the tools
-  settings.py             Settings read from DRAWDORO_* env vars
+  settings.py             Settings read from APP_NAME and MCP_* env vars
   tools/                  MCP tools (diagrams, projects) and the API client
   tests/                  MCP tests (`make test-mcp`)
 ```
@@ -177,7 +206,7 @@ All routes except `/health` return `501 Not Implemented` until infra is wired.
 
 ## MCP server
 
-The MCP server exposes Drawdoro tools to AI coding agents:
+The MCP server exposes the app's tools to AI coding agents:
 
 | Area | Tools |
 |---|---|
@@ -188,9 +217,9 @@ The MCP server exposes Drawdoro tools to AI coding agents:
 
 Nothing deletes workspaces, projects, folders or diagrams (`edit_shapes` only deletes shapes inside a canvas), and
 nothing manages members. On connect the server sends instructions telling the agent to call `open_link` when it sees
-a Drawdoro link, and to prefer the compact tools below over whole canvases.
+a link to the app (named after `APP_NAME`), and to prefer the compact tools below over whole canvases.
 
-Configure the backend URL with `DRAWDORO_API_URL` (default: `http://localhost:8000`). When the API has `AUTH_ENABLED=true`, set `DRAWDORO_API_KEY` to the API's `SERVICE_API_KEY`.
+Configure the backend URL with `MCP_API_URL` (default: `http://localhost:8000`). When the API has `AUTH_ENABLED=true`, set `MCP_API_KEY` to the API's `SERVICE_API_KEY`.
 
 `update_diagram` only changes the fields you pass; the others keep their current values. A canvas is tens of KB of
 tldraw JSON, so agents mostly use three tools that avoid moving it around:
@@ -200,20 +229,20 @@ tldraw JSON, so agents mostly use three tools that avoid moving it around:
   `expected_updated_at` guard against overwriting someone else's save. Deleting a shape also deletes its children and
   arrow bindings.
 - `render_diagram`: a PNG of the whole canvas, some shapes or a region. The MCP server opens the frontend's `/render`
-  page (`DRAWDORO_FRONTEND_URL`) in a headless Chromium, so the image matches the editor exactly. Locally, install the
+  page (`MCP_FRONTEND_URL`) in a headless Chromium, so the image matches the editor exactly. Locally, install the
   browser once with `cd mcp && uv run playwright install --only-shell chromium` and keep the frontend running.
 
-While the agent reads or saves a diagram, people with it open see it in the presence avatars (as `DRAWDORO_AGENT_NAME`, default `Claude`) until 60s after its last call.
+While the agent reads or saves a diagram, people with it open see it in the presence avatars (as `MCP_AGENT_NAME`, default `Claude`) until 60s after its last call.
 
 Locally it runs over stdio, so the MCP client starts it. For example, with Claude Code:
 
 ```sh
-claude mcp add drawdoro -e DRAWDORO_API_URL=http://localhost:8000 -- uv run --directory mcp python server.py
+claude mcp add drawdoro -e MCP_API_URL=http://localhost:8000 -- uv run --directory mcp python server.py
 ```
 
-`make dev` also starts it over HTTP at `http://localhost:8001/mcp` (`DRAWDORO_MCP_TRANSPORT=streamable-http`). The port is bound to localhost only, because the server holds the service API key and has no auth of its own.
+`make dev` also starts it over HTTP at `http://localhost:8001/mcp` (`MCP_TRANSPORT=streamable-http`). The port is bound to localhost only, because the server holds the service API key and has no auth of its own.
 Over HTTP the server is stateless and answers `GET /health`; to serve it behind a proxy, list the public hostname in
-`DRAWDORO_MCP_ALLOWED_HOSTS`.
+`MCP_ALLOWED_HOSTS`.
 
 ```sh
 claude mcp add --transport http drawdoro http://localhost:8001/mcp

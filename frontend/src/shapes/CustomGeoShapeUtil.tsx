@@ -235,7 +235,7 @@ function fitLabel(editor: Editor, shape: TLGeoShape, fontPx: number): TLGeoShape
   }
 }
 
-export class DrawdoroGeoShapeUtil extends GeoShapeUtil {
+export class CustomGeoShapeUtil extends GeoShapeUtil {
   override onBeforeCreate(shape: TLGeoShape) {
     const base = super.onBeforeCreate(shape) ?? shape
     const fontPx = fontSizeOf(base)
@@ -387,7 +387,7 @@ interface NextShapeDefaults {
   fontSize: number | null
 }
 
-const NEXT_KEY = 'drawdoroNextGeo'
+const NEXT_KEY = 'nextGeoDefaults'
 
 export function getNextDefaults(editor: Editor): NextShapeDefaults {
   const stored = editor.getInstanceState().meta[NEXT_KEY] as Partial<NextShapeDefaults> | undefined

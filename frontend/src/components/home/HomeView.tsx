@@ -15,6 +15,7 @@ import {
 import { useNavigate } from 'react-router-dom'
 
 import type { Diagram } from '../../api/types'
+import { branding } from '../../config/branding'
 import { useAppStore } from '../../store/useAppStore'
 import { confirmDialog, promptDialog } from '../../store/useDialogStore'
 import { slugify, timeAgo } from '../../utils/format'
@@ -47,7 +48,7 @@ function WelcomeHero() {
     <div className="home scroll">
       <div className="hero">
         <Logo size={56} />
-        <h1 className="hero-title">Welcome to Drawdoro</h1>
+        <h1 className="hero-title">Welcome to {branding.name}</h1>
         <p className="hero-description">
           Architecture diagrams, documentation and decisions — together in one place.
         </p>

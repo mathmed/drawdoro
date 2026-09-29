@@ -1,7 +1,7 @@
 import uuid
 
 from pydantic import BaseModel
-from tools.api import DrawdoroApi, JsonObject
+from tools.api import BackendApi, JsonObject
 
 
 class NewFolder(BaseModel):
@@ -10,7 +10,7 @@ class NewFolder(BaseModel):
 
 
 class FolderTools:
-    def __init__(self, api: DrawdoroApi) -> None:
+    def __init__(self, api: BackendApi) -> None:
         self._api = api
 
     def list_folders(self, project_id: uuid.UUID) -> list[JsonObject]:

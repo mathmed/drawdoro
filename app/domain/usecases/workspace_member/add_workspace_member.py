@@ -16,15 +16,18 @@ class AddWorkspaceMemberParams(InputData):
 
 
 class AddWorkspaceMember(Usecase[AddWorkspaceMemberParams, WorkspaceMemberDetails]):
-    def __init__(self, members: WorkspaceMemberRepository, users: UserRepository) -> None:
+    def __init__(
+        self, members: WorkspaceMemberRepository, users: UserRepository, app_name: str
+    ) -> None:
         self._members = members
         self._users = users
+        self._app_name = app_name
 
     async def execute(self, params: AddWorkspaceMemberParams) -> WorkspaceMemberDetails:
         # Users only exist after their first sign-in, so invitations need that to happen first.
         user = await self._users.get_by_email(params.email.strip().lower())
         if user is None:
-            raise NotFoundError(f"{params.email} hasn't signed in to Drawdoro yet")
+            raise NotFoundError(f"{params.email} hasn't signed in to {self._app_name} yet")
         if await self._members.get(params.workspace_id, user.id) is not None:
             raise ConflictError(f"{params.email} is already a member of this workspace")
         await self._members.create(

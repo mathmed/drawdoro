@@ -14,9 +14,10 @@ class HttpMethod(StrEnum):
     PUT = "PUT"
 
 
-class DrawdoroApi:
-    def __init__(self, client: httpx.Client) -> None:
+class BackendApi:
+    def __init__(self, client: httpx.Client, app_name: str) -> None:
         self._client = client
+        self._app_name = app_name
 
     def get_object(self, path: str) -> JsonObject:
         return cast(JsonObject, self._request(HttpMethod.GET, path).json())
@@ -41,11 +42,11 @@ class DrawdoroApi:
             status = exc.response.status_code
             detail = _error_detail(exc.response)
             raise ToolError(
-                f"Drawdoro API returned {status} for {method} {path}: {detail}"
+                f"{self._app_name} API returned {status} for {method} {path}: {detail}"
             ) from exc
         except httpx.RequestError as exc:
             raise ToolError(
-                f"Could not reach the Drawdoro API at {self._client.base_url}: {exc}"
+                f"Could not reach the {self._app_name} API at {self._client.base_url}: {exc}"
             ) from exc
         return response
 

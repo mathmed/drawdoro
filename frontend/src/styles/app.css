@@ -1271,7 +1271,7 @@ button.breadcrumb:hover {
   display: none;
 }
 
-/* Custom stroke colours on geo shapes (see DrawdoroGeoShapeUtil) */
+/* Custom stroke colours on geo shapes (see CustomGeoShapeUtil) */
 .dd-geo,
 .dd-custom-stroke {
   display: contents;
@@ -1430,7 +1430,7 @@ button.validation-item:hover {
   text-shadow: none;
 }
 
-/* Independent label size on geo shapes (see DrawdoroGeoShapeUtil) */
+/* Independent label size on geo shapes (see CustomGeoShapeUtil) */
 .dd-font {
   display: contents;
 }

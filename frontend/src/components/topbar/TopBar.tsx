@@ -17,6 +17,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import type { Folder } from '../../api/types'
+import { branding } from '../../config/branding'
 import { useAppStore } from '../../store/useAppStore'
 import { exportDiagram, type ExportFormat } from '../../utils/exportDiagram'
 import { modKey } from '../../utils/format'
@@ -137,7 +138,7 @@ export default function TopBar() {
 
       <nav className="breadcrumbs" aria-label="Breadcrumb">
         {activeDiagram === null ? (
-          <span className="page-title">{activeProject?.name ?? 'Drawdoro'}</span>
+          <span className="page-title">{activeProject?.name ?? branding.name}</span>
         ) : (
           <>
             {activeProject !== null ? (

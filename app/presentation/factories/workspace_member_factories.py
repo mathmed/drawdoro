@@ -1,6 +1,7 @@
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.settings import get_settings
 from app.domain.usecases.workspace_member.add_workspace_member import AddWorkspaceMember
 from app.domain.usecases.workspace_member.list_workspace_members import ListWorkspaceMembers
 from app.domain.usecases.workspace_member.remove_workspace_member import RemoveWorkspaceMember
@@ -23,7 +24,11 @@ async def list_workspace_members_factory(
 async def add_workspace_member_factory(
     session: AsyncSession = Depends(get_session),
 ) -> AddWorkspaceMember:
-    return AddWorkspaceMember(WorkspaceMemberRepositoryImpl(session), UserRepositoryImpl(session))
+    return AddWorkspaceMember(
+        WorkspaceMemberRepositoryImpl(session),
+        UserRepositoryImpl(session),
+        get_settings().app_name,
+    )
 
 
 async def update_workspace_member_role_factory(
