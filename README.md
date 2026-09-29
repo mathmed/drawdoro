@@ -6,8 +6,11 @@
 |------------------------------------------------------------------------- | -------: | -------: | ------: | --------: |
 | app/common/logger.py                                                     |       16 |        0 |    100% |           |
 | app/common/settings.py                                                   |       28 |        0 |    100% |           |
+| app/domain/constants/presence.py                                         |        1 |        0 |    100% |           |
+| app/domain/contracts/agent\_presence.py                                  |        3 |        0 |    100% |           |
 | app/domain/contracts/comment\_repository.py                              |        4 |        0 |    100% |           |
 | app/domain/contracts/diagram\_repository.py                              |        4 |        0 |    100% |           |
+| app/domain/contracts/diagram\_update\_notifier.py                        |        3 |        0 |    100% |           |
 | app/domain/contracts/documentation\_page\_repository.py                  |        4 |        0 |    100% |           |
 | app/domain/contracts/folder\_repository.py                               |        4 |        0 |    100% |           |
 | app/domain/contracts/project\_repository.py                              |        4 |        0 |    100% |           |
@@ -40,7 +43,7 @@
 | app/domain/usecases/diagram/get\_diagram\_by\_share\_token.py            |       13 |        0 |    100% |           |
 | app/domain/usecases/diagram/list\_diagrams.py                            |       10 |        1 |     90% |        17 |
 | app/domain/usecases/diagram/share\_diagram.py                            |       19 |        0 |    100% |           |
-| app/domain/usecases/diagram/update\_diagram.py                           |       22 |        8 |     64% |     23-30 |
+| app/domain/usecases/diagram/update\_diagram.py                           |       27 |        0 |    100% |           |
 | app/domain/usecases/documentation/get\_documentation\_page.py            |       14 |        4 |     71% |     18-21 |
 | app/domain/usecases/documentation/upsert\_documentation\_page.py         |       11 |        2 |     82% |     18-19 |
 | app/domain/usecases/folder/create\_folder.py                             |       12 |        2 |     83% |     19-22 |
@@ -48,6 +51,7 @@
 | app/domain/usecases/folder/get\_folder.py                                |       14 |        4 |     71% |     18-21 |
 | app/domain/usecases/folder/list\_folders.py                              |       10 |        1 |     90% |        17 |
 | app/domain/usecases/folder/update\_folder.py                             |       17 |        6 |     65% |     20-25 |
+| app/domain/usecases/presence/track\_agent\_activity.py                   |       10 |        0 |    100% |           |
 | app/domain/usecases/project/create\_project.py                           |       12 |        0 |    100% |           |
 | app/domain/usecases/project/delete\_project.py                           |       13 |        0 |    100% |           |
 | app/domain/usecases/project/get\_project.py                              |       14 |        4 |     71% |     18-21 |
@@ -81,24 +85,28 @@
 | app/infra/database/repositories/workspace\_member\_repository.py         |       40 |       21 |     48% |19-26, 29-35, 43-52, 55-62, 65-68, 71-77, 81 |
 | app/infra/database/repositories/workspace\_repository.py                 |       46 |       27 |     41% |18-26, 29-36, 39-42, 45-50, 53-59, 62-73, 76-84, 88 |
 | app/infra/database/session.py                                            |        9 |        0 |    100% |           |
-| app/infra/realtime/connection\_manager.py                                |       49 |        0 |    100% |           |
+| app/infra/realtime/connection\_manager.py                                |       71 |        0 |    100% |           |
+| app/infra/realtime/realtime\_agent\_presence.py                          |        8 |        0 |    100% |           |
+| app/infra/realtime/realtime\_diagram\_update\_notifier.py                |       17 |        0 |    100% |           |
 | app/main/main.py                                                         |        6 |        0 |    100% |           |
 | app/presentation/factories/auth\_factories.py                            |       23 |        0 |    100% |           |
 | app/presentation/factories/comment\_factories.py                         |       13 |        0 |    100% |           |
-| app/presentation/factories/diagram\_factories.py                         |       25 |        0 |    100% |           |
+| app/presentation/factories/diagram\_factories.py                         |       27 |        0 |    100% |           |
 | app/presentation/factories/documentation\_factories.py                   |       10 |        0 |    100% |           |
 | app/presentation/factories/folder\_factories.py                          |       19 |        0 |    100% |           |
+| app/presentation/factories/presence\_factories.py                        |        5 |        0 |    100% |           |
 | app/presentation/factories/project\_factories.py                         |       19 |        0 |    100% |           |
 | app/presentation/factories/workspace\_factories.py                       |       20 |        0 |    100% |           |
 | app/presentation/factories/workspace\_member\_factories.py               |       17 |        4 |     76% |20, 26, 32, 38 |
 | app/presentation/fastapi/configs/configs.py                              |       21 |        0 |    100% |           |
+| app/presentation/fastapi/dependencies/agent\_presence.py                 |       16 |        0 |    100% |           |
 | app/presentation/fastapi/dependencies/current\_user.py                   |       15 |        0 |    100% |           |
 | app/presentation/fastapi/dependencies/workspace\_access.py               |       31 |        2 |     94% |     26-28 |
 | app/presentation/fastapi/handlers/domain\_error\_handler.py              |       10 |        0 |    100% |           |
 | app/presentation/fastapi/middlewares/request\_logging\_middleware.py     |       11 |        0 |    100% |           |
 | app/presentation/fastapi/routes/auth\_routes.py                          |       11 |        0 |    100% |           |
 | app/presentation/fastapi/routes/comment\_routes.py                       |       22 |        0 |    100% |           |
-| app/presentation/fastapi/routes/diagram\_routes.py                       |       30 |        0 |    100% |           |
+| app/presentation/fastapi/routes/diagram\_routes.py                       |       32 |        0 |    100% |           |
 | app/presentation/fastapi/routes/documentation\_routes.py                 |       16 |        0 |    100% |           |
 | app/presentation/fastapi/routes/folder\_routes.py                        |       30 |        0 |    100% |           |
 | app/presentation/fastapi/routes/health\_routes.py                        |        5 |        0 |    100% |           |
@@ -115,7 +123,7 @@
 | app/presentation/fastapi/schemas/user\_schemas.py                        |        4 |        0 |    100% |           |
 | app/presentation/fastapi/schemas/workspace\_member\_schemas.py           |        8 |        0 |    100% |           |
 | app/presentation/fastapi/schemas/workspace\_schemas.py                   |        7 |        0 |    100% |           |
-| **TOTAL**                                                                | **1812** |  **247** | **86%** |           |
+| **TOTAL**                                                                | **1906** |  **239** | **87%** |           |
 
 
 ## Setup coverage badge
