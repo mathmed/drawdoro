@@ -49,6 +49,8 @@ services:
       - ../frontend:/app
     environment:
       - VITE_API_URL=http://api:8000
+      # The MCP container opens /render by this service name; Vite blocks unknown hosts.
+      - __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=frontend
     depends_on:
       - api
     networks:
@@ -58,22 +60,27 @@ services:
     container_name: drawdoro-mcp
     image: ghcr.io/astral-sh/uv:python3.14-bookworm-slim
     working_dir: /app
-    command: uv run --locked --no-dev python server.py
+    # render_diagram needs a headless Chromium; the volume keeps it between restarts.
+    command: sh -c "uv run --locked --no-dev playwright install --with-deps --only-shell chromium && uv run --locked --no-dev python server.py"
     ports:
       # Local only: the server holds the service API key and has no auth of its own.
       - "127.0.0.1:8001:8001"
-    volumes:
-      - ../mcp:/app
     environment:
       - DRAWDORO_API_URL=http://api:8000
       - DRAWDORO_API_KEY=${SERVICE_API_KEY:-}
       - DRAWDORO_MCP_TRANSPORT=streamable-http
       - DRAWDORO_MCP_HOST=0.0.0.0
       - DRAWDORO_MCP_PORT=8001
+      - DRAWDORO_FRONTEND_URL=http://frontend:3000
+      - PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
       # Keeps the container's venv out of the mounted mcp/.venv used on the host.
       - UV_PROJECT_ENVIRONMENT=/opt/venv
+    volumes:
+      - ../mcp:/app
+      - playwright_browsers:/opt/ms-playwright
     depends_on:
       - api
+      - frontend
     networks:
       - drawdoro_network
 
@@ -83,3 +90,4 @@ networks:
 
 volumes:
   postgres_data:
+  playwright_browsers:

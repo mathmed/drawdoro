@@ -1,16 +1,25 @@
 import re
 import uuid
-from datetime import datetime
-from typing import Any
+from datetime import UTC, datetime
+from typing import Annotated, Any
 from urllib.parse import urlparse
 
 from mcp.server.mcpserver.exceptions import ToolError
-from pydantic import BaseModel
+from pydantic import AfterValidator, BaseModel
 from tools.api import DrawdoroApi, JsonObject
+from tools.canvas import Canvas, ShapeOutline
 
 EDITOR_LINK = re.compile(r"/diagrams/(?P<diagram_id>[^/]+)/?$")
 # Share tokens come from secrets.token_urlsafe, so anything else is not a Drawdoro link.
 SHARE_LINK = re.compile(r"/share/(?P<token>[A-Za-z0-9_-]+)/?$")
+
+
+def _assume_utc(value: datetime) -> datetime:
+    # The API sends naive timestamps; without an offset they are not valid JSON Schema date-times.
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
+UtcDatetime = Annotated[datetime, AfterValidator(_assume_utc)]
 
 
 class DiagramSummary(BaseModel):
@@ -18,7 +27,28 @@ class DiagramSummary(BaseModel):
     project_id: uuid.UUID
     folder_id: uuid.UUID | None
     name: str
-    updated_at: datetime
+    updated_at: UtcDatetime
+
+
+class DiagramSaved(BaseModel):
+    id: uuid.UUID
+    name: str
+    updated_at: UtcDatetime
+    records: int
+
+
+class ShapeEdits(DiagramSaved):
+    created: list[str]
+    changed: list[str]
+    deleted: list[str]
+
+
+class DiagramOutline(BaseModel):
+    id: uuid.UUID
+    project_id: uuid.UUID
+    name: str
+    updated_at: UtcDatetime
+    shapes: list[ShapeOutline]
 
 
 class NewDiagram(BaseModel):
@@ -49,7 +79,7 @@ class DiagramTools:
     def list_diagrams(self, project_id: uuid.UUID) -> list[DiagramSummary]:
         """List the diagrams of a project by id, name and folder, without their content.
 
-        Use get_diagram to read the canvas of one of them.
+        Use get_diagram_outline or get_diagram to read the canvas of one of them.
 
         Args:
             project_id: Project whose diagrams to list.
@@ -62,12 +92,34 @@ class DiagramTools:
 
         canvas_state is a tldraw store snapshot ({"store": {<record id>: <record>}, "schema": ...});
         the text of each shape lives in its props.richText. semantic_metadata maps shape ids to
-        architecture metadata (type, label, technology, notes).
+        architecture metadata (type, label, technology, notes). The snapshot is large: to find
+        shapes and read their text, get_diagram_outline is much smaller.
 
         Args:
             diagram_id: Diagram to fetch; in a Drawdoro link it is the part after /diagrams/.
         """
         return self._api.get_object(f"/diagrams/{diagram_id}")
+
+    def get_diagram_outline(self, diagram_id: uuid.UUID) -> DiagramOutline:
+        """Get a compact outline of a diagram: every shape with its position, size, colour and text.
+
+        Shapes come in reading order (top to bottom, then left to right) with rounded coordinates
+        and plain text; fields a shape does not have are left out. Arrows name the shapes they
+        connect in start and end. Use it to find the ids to pass to edit_shapes and
+        render_diagram, and get_diagram when you need the exact tldraw records.
+
+        Args:
+            diagram_id: Diagram to outline.
+        """
+        diagram = self.get_diagram(diagram_id)
+        summary = DiagramSummary.model_validate(diagram)
+        return DiagramOutline(
+            id=summary.id,
+            project_id=summary.project_id,
+            name=summary.name,
+            updated_at=summary.updated_at,
+            shapes=Canvas(diagram.get("canvas_state")).outline(),
+        )
 
     def open_link(self, url: str) -> JsonObject:
         """Open the diagram behind a Drawdoro link.
@@ -120,10 +172,11 @@ class DiagramTools:
         folder_id: uuid.UUID | None = None,
         canvas_state: dict[str, Any] | None = None,
         semantic_metadata: dict[str, Any] | None = None,
-    ) -> JsonObject:
+    ) -> DiagramSaved:
         """Update a diagram. Only the fields you pass change; omitted ones keep their current values.
 
-        People with the diagram open see the change right away.
+        People with the diagram open see the change right away. To change only some shapes,
+        prefer edit_shapes: it sends those records instead of the whole canvas.
 
         Args:
             diagram_id: Diagram to update.
@@ -143,5 +196,66 @@ class DiagramTools:
             semantic_metadata=semantic_metadata,
         )
         updated = current.model_copy(update=changes.model_dump(exclude_none=True))
-        path = f"/projects/{current.project_id}/diagrams/{diagram_id}"
-        return self._api.put(path, updated.model_dump(mode="json", exclude={"project_id"}))
+        saved = self._save(diagram_id, updated)
+        store = (updated.canvas_state or {}).get("store", {})
+        return DiagramSaved.model_validate(saved | {"records": len(store)})
+
+    def edit_shapes(
+        self,
+        diagram_id: uuid.UUID,
+        upsert: list[dict[str, Any]] | None = None,
+        delete: list[str] | None = None,
+        expected_updated_at: datetime | None = None,
+    ) -> ShapeEdits:
+        """Create, change or delete some records of a diagram without sending the whole canvas.
+
+        Deletions run first, so deleting an id and upserting it again replaces that record whole.
+        People with the diagram open see the change right away. Check the result with
+        render_diagram.
+
+        Args:
+            diagram_id: Diagram to edit.
+            upsert: tldraw records to create or change, each with its "id". An id already in the
+                diagram is changed with JSON Merge Patch: objects merge key by key, null removes a
+                key, lists and plain values replace the stored ones. So {"id": "shape:a",
+                "props": {"w": 200}} only changes the width, and {"id": "shape:a", "meta":
+                {"fontSize": 20}} only the label size. A new shape needs its "type" and complete
+                "props" (copy them from an existing shape of the same type); typeName, parentId
+                (the first page), index (above every shape), x, y, rotation, isLocked, opacity and
+                meta are filled in when missing. Any other new record must be complete.
+            delete: Ids of records to delete. Deleting a shape also deletes the shapes inside it
+                and the arrow bindings attached to it.
+            expected_updated_at: updated_at of the diagram when you read it. If it was saved after
+                that, nothing changes and the call fails, so you can read it again first.
+        """
+        if not upsert and not delete:
+            raise ToolError("Pass the records to upsert, the ids to delete, or both")
+        diagram = self.get_diagram(diagram_id)
+        updated_at = DiagramSummary.model_validate(diagram).updated_at
+        if expected_updated_at is not None and updated_at != _assume_utc(expected_updated_at):
+            raise ToolError(
+                f"The diagram was saved at {updated_at.isoformat()}, after the version you read; "
+                "read it again before editing"
+            )
+        current = StoredDiagram.model_validate(diagram)
+        canvas = Canvas(current.canvas_state)
+        deleted = canvas.delete(delete or [])
+        created, changed = canvas.upsert(upsert or [])
+        saved = self._save(
+            diagram_id, current.model_copy(update={"canvas_state": canvas.to_snapshot()})
+        )
+        return ShapeEdits.model_validate(
+            saved
+            | {
+                "records": canvas.record_count(),
+                "created": created,
+                "changed": changed,
+                "deleted": deleted,
+            }
+        )
+
+    def _save(self, diagram_id: uuid.UUID, diagram: StoredDiagram) -> JsonObject:
+        path = f"/projects/{diagram.project_id}/diagrams/{diagram_id}"
+        saved = self._api.put(path, diagram.model_dump(mode="json", exclude={"project_id"}))
+        # Echoing the saved canvas back would cost the agent as much as sending it.
+        return {key: saved[key] for key in ("id", "name", "updated_at")}

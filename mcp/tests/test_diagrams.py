@@ -1,11 +1,12 @@
 import uuid
+from datetime import UTC, datetime
 from typing import Any, cast
 from unittest.mock import MagicMock, create_autospec
 
 import pytest
 from mcp.server.mcpserver.exceptions import ToolError
 from tools.api import DrawdoroApi
-from tools.diagrams import DiagramSummary, DiagramTools
+from tools.diagrams import DiagramSaved, DiagramSummary, DiagramTools, ShapeEdits
 
 PROJECT_ID = uuid.uuid4()
 DIAGRAM_ID = uuid.uuid4()
@@ -31,7 +32,7 @@ def current_diagram() -> dict[str, Any]:
 def api() -> MagicMock:
     mock = cast(MagicMock, create_autospec(DrawdoroApi, instance=True))
     mock.get_object.return_value = current_diagram()
-    mock.put.side_effect = lambda _, body: body
+    mock.put.side_effect = lambda _, body: current_diagram() | body
     mock.post.side_effect = lambda _, body: body
     return mock
 
@@ -117,19 +118,29 @@ def test_should_apply_every_given_field_when_updating_diagram(
     sut: DiagramTools, api: MagicMock
 ) -> None:
     new_folder_id = uuid.uuid4()
-    result = sut.update_diagram(
+    sut.update_diagram(
         DIAGRAM_ID,
         name="Checkout v2",
         folder_id=new_folder_id,
         canvas_state={"shapes": []},
         semantic_metadata={},
     )
-    assert result == {
+    assert api.put.call_args.args[1] == {
         "name": "Checkout v2",
         "folder_id": str(new_folder_id),
         "canvas_state": {"shapes": []},
         "semantic_metadata": {},
     }
+
+
+def test_should_answer_update_without_echoing_the_canvas(sut: DiagramTools) -> None:
+    result = sut.update_diagram(DIAGRAM_ID, canvas_state={"store": {"shape:a": {}}, "schema": {}})
+    assert result == DiagramSaved(
+        id=DIAGRAM_ID,
+        name="Checkout",
+        updated_at=datetime(2026, 9, 1, tzinfo=UTC),
+        records=1,
+    )
 
 
 def test_should_keep_null_fields_null_when_updating_diagram(
@@ -143,3 +154,71 @@ def test_should_keep_null_fields_null_when_updating_diagram(
         "canvas_state": None,
         "semantic_metadata": {"owner": "payments"},
     }
+
+
+@pytest.fixture
+def api_with_canvas(api: MagicMock, canvas_state: dict[str, Any]) -> MagicMock:
+    api.get_object.return_value = current_diagram() | {"canvas_state": canvas_state}
+    return api
+
+
+def test_should_save_only_the_edited_records_into_the_canvas(
+    sut: DiagramTools, api_with_canvas: MagicMock, canvas_state: dict[str, Any]
+) -> None:
+    result = sut.edit_shapes(
+        DIAGRAM_ID,
+        upsert=[{"id": "shape:api", "meta": {"fontSize": 20}}],
+        delete=["shape:line"],
+    )
+    body = api_with_canvas.put.call_args.args[1]
+    assert api_with_canvas.put.call_args.args[0] == IN_PROJECT
+    assert body["name"] == "Checkout"
+    assert body["semantic_metadata"] == {"owner": "payments"}
+    store = body["canvas_state"]["store"]
+    assert store["shape:api"]["meta"]["fontSize"] == 20
+    assert "shape:line" not in store
+    assert store["shape:db"] == canvas_state["store"]["shape:db"]
+    assert body["canvas_state"]["schema"] == canvas_state["schema"]
+    assert result == ShapeEdits(
+        id=DIAGRAM_ID,
+        name="Checkout",
+        updated_at=datetime(2026, 9, 1, tzinfo=UTC),
+        records=len(canvas_state["store"]) - 1,
+        created=[],
+        changed=["shape:api"],
+        deleted=["shape:line"],
+    )
+
+
+@pytest.mark.parametrize(
+    "expected_updated_at",
+    [datetime(2026, 9, 1, tzinfo=UTC), datetime(2026, 9, 1)],
+)
+def test_should_edit_when_the_diagram_is_still_the_version_read(
+    sut: DiagramTools, api_with_canvas: MagicMock, expected_updated_at: datetime
+) -> None:
+    sut.edit_shapes(DIAGRAM_ID, delete=["shape:line"], expected_updated_at=expected_updated_at)
+    api_with_canvas.put.assert_called_once()
+
+
+def test_should_not_edit_a_diagram_saved_after_it_was_read(
+    sut: DiagramTools, api_with_canvas: MagicMock
+) -> None:
+    with pytest.raises(ToolError, match="read it again"):
+        sut.edit_shapes(
+            DIAGRAM_ID, delete=["shape:line"], expected_updated_at=datetime(2026, 8, 31, tzinfo=UTC)
+        )
+    api_with_canvas.put.assert_not_called()
+
+
+def test_should_ask_for_something_to_edit(sut: DiagramTools, api: MagicMock) -> None:
+    with pytest.raises(ToolError):
+        sut.edit_shapes(DIAGRAM_ID)
+    api.get_object.assert_not_called()
+
+
+def test_should_outline_a_diagram(sut: DiagramTools, api_with_canvas: MagicMock) -> None:
+    outline = sut.get_diagram_outline(DIAGRAM_ID)
+    api_with_canvas.get_object.assert_called_once_with(BY_ID)
+    assert (outline.id, outline.name, outline.project_id) == (DIAGRAM_ID, "Checkout", PROJECT_ID)
+    assert [shape.id for shape in outline.shapes][:2] == ["shape:frame", "shape:inside"]

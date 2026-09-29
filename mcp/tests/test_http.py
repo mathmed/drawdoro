@@ -6,6 +6,7 @@ from server import create_api, create_server, create_transport_security
 from settings import Settings
 from starlette.applications import Starlette
 from starlette.testclient import TestClient
+from tools.render import BrowserRenderer
 
 PUBLIC_HOST = "drawdoro.example"
 INITIALIZE = {
@@ -25,7 +26,7 @@ MCP_HEADERS = {"Accept": "application/json, text/event-stream"}
 def sut() -> Starlette:
     settings = Settings(api_url="http://drawdoro.test", allowed_hosts=(PUBLIC_HOST,))
     api = create_api(settings, transport=httpx.MockTransport(lambda _: httpx.Response(200)))
-    return create_server(api).streamable_http_app(
+    return create_server(api, BrowserRenderer(settings.frontend_url)).streamable_http_app(
         stateless_http=True, transport_security=create_transport_security(settings)
     )
 

@@ -70,6 +70,7 @@ Health check: `curl http://localhost:8000/health`
 | `COGNITO_CLIENT_ID` | - | App client id expected in the token audience |
 | `SERVICE_API_KEY` | - | Shared secret that lets trusted services (the MCP server) call the API via `X-API-Key` |
 | `DRAWDORO_API_KEY` | - | MCP server: value sent as `X-API-Key` (same as `SERVICE_API_KEY`) |
+| `DRAWDORO_FRONTEND_URL` | `http://localhost:3000` | MCP server: frontend whose `/render` page `render_diagram` opens in a headless Chromium |
 | `DRAWDORO_AGENT_NAME` | `Claude` | MCP server: name shown in the diagram's presence avatars while the agent works on it; empty hides it |
 | `DRAWDORO_MCP_TRANSPORT` | `stdio` | MCP server transport: `stdio` or `streamable-http` |
 | `DRAWDORO_MCP_HOST` | `127.0.0.1` | MCP server bind address when using `streamable-http` |
@@ -126,7 +127,7 @@ frontend/                 React + Vite + TypeScript
     components/presentation/ Fullscreen presentation mode navigating frames
     components/semantic/  Shape properties panel and architecture validation modal
     components/ui/        Design-system primitives: modal, menu, dialogs, toasts, empty states
-    pages/                Landing (sign-in), AuthCallback, Home, Diagram, NotFound
+    pages/                Landing (sign-in), AuthCallback, Home, Diagram, SharedDiagram, Render (MCP export), NotFound
     auth/                 Cognito managed login: PKCE flow, token storage and refresh
     api/                  Axios client and per-resource API functions
     store/                Zustand stores (app, theme, dialogs, toasts)
@@ -181,16 +182,26 @@ The MCP server exposes Drawdoro tools to AI coding agents:
 | Area | Tools |
 |---|---|
 | Navigation | `list_workspaces`, `list_projects`, `get_project`, `list_folders`, `list_diagrams` (ids and names only, no canvas) |
-| Diagrams | `open_link` (editor `/diagrams/<id>` or read-only `/share/<token>` links), `get_diagram`, `create_diagram`, `update_diagram` |
+| Diagrams | `open_link` (editor `/diagrams/<id>` or read-only `/share/<token>` links), `get_diagram`, `get_diagram_outline`, `create_diagram`, `update_diagram`, `edit_shapes`, `render_diagram` |
 | Organisation | `create_project`, `create_folder` |
 | Documentation and comments | `get_documentation`, `update_documentation`, `list_comments` |
 
-There are no delete tools, and nothing manages workspaces or members. On connect the server sends instructions
-telling the agent to call `open_link` when it sees a Drawdoro link.
+Nothing deletes workspaces, projects, folders or diagrams (`edit_shapes` only deletes shapes inside a canvas), and
+nothing manages members. On connect the server sends instructions telling the agent to call `open_link` when it sees
+a Drawdoro link, and to prefer the compact tools below over whole canvases.
 
 Configure the backend URL with `DRAWDORO_API_URL` (default: `http://localhost:8000`). When the API has `AUTH_ENABLED=true`, set `DRAWDORO_API_KEY` to the API's `SERVICE_API_KEY`.
 
-`update_diagram` only changes the fields you pass; the others keep their current values.
+`update_diagram` only changes the fields you pass; the others keep their current values. A canvas is tens of KB of
+tldraw JSON, so agents mostly use three tools that avoid moving it around:
+
+- `get_diagram_outline`: every shape with its position, size, colour and plain text, in reading order.
+- `edit_shapes`: creates, changes (JSON Merge Patch) or deletes only the given records, with an optional
+  `expected_updated_at` guard against overwriting someone else's save. Deleting a shape also deletes its children and
+  arrow bindings.
+- `render_diagram`: a PNG of the whole canvas, some shapes or a region. The MCP server opens the frontend's `/render`
+  page (`DRAWDORO_FRONTEND_URL`) in a headless Chromium, so the image matches the editor exactly. Locally, install the
+  browser once with `cd mcp && uv run playwright install --only-shell chromium` and keep the frontend running.
 
 While the agent reads or saves a diagram, people with it open see it in the presence avatars (as `DRAWDORO_AGENT_NAME`, default `Claude`) until 60s after its last call.
 
