@@ -13,6 +13,8 @@ class Transport(StrEnum):
 class Settings:
     api_url: str = "http://localhost:8000"
     api_key: str = ""
+    # render_diagram opens this frontend's /render page in a headless browser.
+    frontend_url: str = "http://localhost:3000"
     # Shown to people with the diagram open while the agent works on it; empty hides it.
     agent_name: str = "Claude"
     transport: Transport = Transport.STDIO
@@ -27,6 +29,7 @@ class Settings:
         return cls(
             api_url=os.environ.get("DRAWDORO_API_URL", defaults.api_url),
             api_key=os.environ.get("DRAWDORO_API_KEY", defaults.api_key),
+            frontend_url=os.environ.get("DRAWDORO_FRONTEND_URL", defaults.frontend_url),
             agent_name=os.environ.get("DRAWDORO_AGENT_NAME", defaults.agent_name),
             transport=Transport(os.environ.get("DRAWDORO_MCP_TRANSPORT", defaults.transport)),
             host=os.environ.get("DRAWDORO_MCP_HOST", defaults.host),

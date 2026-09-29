@@ -12,6 +12,7 @@ from tools.diagrams import DiagramTools
 from tools.documentation import DocumentationTools
 from tools.folders import FolderTools
 from tools.projects import ProjectTools
+from tools.render import BrowserRenderer, Renderer, RenderTools
 from tools.workspaces import WorkspaceTools
 
 API_TIMEOUT_SECONDS = 30
@@ -23,8 +24,12 @@ with an optional Markdown documentation page and comments anchored to its shapes
 
 When the user shares a Drawdoro link, call open_link with it: /diagrams/<id> links open the
 editable diagram, /share/<token> links a read-only copy. Given only names, find ids with
-list_workspaces, list_projects, list_folders and list_diagrams, then read with get_diagram.
-Before update_diagram, read the diagram with get_diagram and send the complete canvas_state back."""
+list_workspaces, list_projects, list_folders and list_diagrams.
+
+Canvases are large, so prefer the compact tools: get_diagram_outline to read shapes and their text,
+edit_shapes to create, change or delete only the records that change, and render_diagram to look
+at the result as an image (check it after every edit). Use get_diagram and update_diagram, which
+carry the complete canvas_state, only to rebuild a diagram wholesale."""
 
 
 def create_api(settings: Settings, transport: httpx.BaseTransport | None = None) -> DrawdoroApi:
@@ -56,7 +61,7 @@ async def health(_: Request) -> JSONResponse:
     return JSONResponse({"status": "ok"})
 
 
-def create_server(api: DrawdoroApi) -> MCPServer:
+def create_server(api: DrawdoroApi, renderer: Renderer) -> MCPServer:
     server = MCPServer(
         "drawdoro",
         description="MCP server for the Drawdoro diagramming tool",
@@ -66,6 +71,7 @@ def create_server(api: DrawdoroApi) -> MCPServer:
     projects = ProjectTools(api)
     folders = FolderTools(api)
     diagrams = DiagramTools(api)
+    render = RenderTools(api, renderer)
     documentation = DocumentationTools(api)
     comments = CommentTools(api)
     tools: list[Callable[..., object]] = [
@@ -77,9 +83,12 @@ def create_server(api: DrawdoroApi) -> MCPServer:
         folders.create_folder,
         diagrams.list_diagrams,
         diagrams.get_diagram,
+        diagrams.get_diagram_outline,
         diagrams.open_link,
         diagrams.create_diagram,
         diagrams.update_diagram,
+        diagrams.edit_shapes,
+        render.render_diagram,
         documentation.get_documentation,
         documentation.update_documentation,
         comments.list_comments,
@@ -92,7 +101,7 @@ def create_server(api: DrawdoroApi) -> MCPServer:
 
 def main() -> None:
     settings = Settings.from_env()
-    server = create_server(create_api(settings))
+    server = create_server(create_api(settings), BrowserRenderer(settings.frontend_url))
     if settings.transport == Transport.STDIO:
         server.run(transport="stdio")
         return

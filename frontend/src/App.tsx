@@ -9,6 +9,7 @@ import DiagramPage from './pages/Diagram'
 import Home from './pages/Home'
 import Landing from './pages/Landing'
 import NotFound from './pages/NotFound'
+import RenderDiagramPage from './pages/RenderDiagram'
 import SharedDiagramPage from './pages/SharedDiagram'
 import { useAppStore } from './store/useAppStore'
 import { useAuthStore } from './store/useAuthStore'
@@ -56,6 +57,8 @@ export default function App() {
         <Route path="/auth/callback" element={<AuthCallback />} />
         {/* Public: the share link works signed-in or as a guest, so it sits outside the AuthGate. */}
         <Route path="/share/:token" element={<SharedDiagramPage />} />
+        {/* Public too: the MCP server's headless browser hands it a canvas to export as PNG. */}
+        <Route path="/render" element={<RenderDiagramPage />} />
         <Route path="*" element={<AuthGate />} />
       </Routes>
       <DialogHost />

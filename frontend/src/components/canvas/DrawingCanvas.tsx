@@ -1,7 +1,6 @@
 import { useEffect } from 'react'
 import {
   ArrowShapeKindStyle,
-  ArrowShapeUtil,
   DefaultContextMenu,
   DefaultContextMenuContent,
   loadSnapshot,
@@ -21,12 +20,13 @@ import { useRealtime } from '../../hooks/useRealtime'
 import { useSelectionShortcuts } from '../../hooks/useSelectionShortcuts'
 import { useAppStore } from '../../store/useAppStore'
 import { useThemeStore } from '../../store/useThemeStore'
-import { DrawdoroGeoShapeUtil, registerGeoDefaults } from '../../shapes/DrawdoroGeoShapeUtil'
+import { registerGeoDefaults } from '../../shapes/DrawdoroGeoShapeUtil'
 import { canRunSelection, runSelection, SELECTION_COMMANDS } from '../../utils/shapeSelection'
 import CommentBadge from '../comments/CommentBadge'
 import ConnectHandles from './ConnectHandles'
 import StylePanel, { MenuPanelWithStyles } from './StylePanel'
 import RichTextToolbar, { textOptions } from './RichTextToolbar'
+import { shapeUtils } from './shapeUtils'
 import Toolbar, { toolOverrides } from './Toolbar'
 
 interface DrawingCanvasProps {
@@ -75,18 +75,6 @@ function CustomContextMenu(props: TLUiContextMenuProps) {
     </DefaultContextMenu>
   )
 }
-
-// Elbow arrows snap to the four side anchors of a shape; the wider radii make that snapping
-// kick in before the pointer has to land exactly on the anchor.
-const shapeUtils = [
-  DrawdoroGeoShapeUtil,
-  ArrowShapeUtil.configure({
-    elbowArrowPointSnapDistance: 36,
-    elbowArrowEdgeSnapDistance: 28,
-    elbowArrowCenterSnapDistance: 32,
-    arcArrowCenterSnapDistance: 24,
-  }),
-]
 
 const components: TLComponents = {
   ContextMenu: CustomContextMenu,

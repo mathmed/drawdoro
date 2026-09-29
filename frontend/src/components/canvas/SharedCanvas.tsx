@@ -1,34 +1,17 @@
 import { useState } from 'react'
-import {
-  ArrowShapeUtil,
-  loadSnapshot,
-  Tldraw,
-  type Editor,
-  type TLComponents,
-  type TLStoreSnapshot,
-} from 'tldraw'
+import { loadSnapshot, Tldraw, type Editor, type TLComponents, type TLStoreSnapshot } from 'tldraw'
 import 'tldraw/tldraw.css'
 
 import type { SharedDiagram } from '../../api/diagrams'
 import { useRealtime, type Presence } from '../../hooks/useRealtime'
 import { useThemeStore } from '../../store/useThemeStore'
-import { DrawdoroGeoShapeUtil } from '../../shapes/DrawdoroGeoShapeUtil'
+import { shapeUtils } from './shapeUtils'
 
 interface SharedCanvasProps {
   diagram: SharedDiagram
   shareToken: string
   guestName?: string
 }
-
-const shapeUtils = [
-  DrawdoroGeoShapeUtil,
-  ArrowShapeUtil.configure({
-    elbowArrowPointSnapDistance: 36,
-    elbowArrowEdgeSnapDistance: 28,
-    elbowArrowCenterSnapDistance: 32,
-    arcArrowCenterSnapDistance: 24,
-  }),
-]
 
 // Guests never edit, so tldraw's editing chrome is hidden entirely.
 const components: TLComponents = {
