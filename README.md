@@ -106,7 +106,7 @@
 | app/presentation/fastapi/middlewares/request\_logging\_middleware.py     |       11 |        0 |    100% |           |
 | app/presentation/fastapi/routes/auth\_routes.py                          |       11 |        0 |    100% |           |
 | app/presentation/fastapi/routes/comment\_routes.py                       |       22 |        0 |    100% |           |
-| app/presentation/fastapi/routes/diagram\_routes.py                       |       32 |        0 |    100% |           |
+| app/presentation/fastapi/routes/diagram\_routes.py                       |       37 |        0 |    100% |           |
 | app/presentation/fastapi/routes/documentation\_routes.py                 |       16 |        0 |    100% |           |
 | app/presentation/fastapi/routes/folder\_routes.py                        |       30 |        0 |    100% |           |
 | app/presentation/fastapi/routes/health\_routes.py                        |        5 |        0 |    100% |           |
@@ -123,7 +123,7 @@
 | app/presentation/fastapi/schemas/user\_schemas.py                        |        4 |        0 |    100% |           |
 | app/presentation/fastapi/schemas/workspace\_member\_schemas.py           |        8 |        0 |    100% |           |
 | app/presentation/fastapi/schemas/workspace\_schemas.py                   |        7 |        0 |    100% |           |
-| **TOTAL**                                                                | **1906** |  **239** | **87%** |           |
+| **TOTAL**                                                                | **1911** |  **239** | **87%** |           |
 
 
 ## Setup coverage badge
