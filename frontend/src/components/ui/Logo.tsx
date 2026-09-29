@@ -1,16 +1,18 @@
 import { useId } from 'react'
 
+import { branding } from '../../config/branding'
+
 interface LogoProps {
   size?: number
   withWordmark?: boolean
 }
 
-// Drawdoro mark: two blocks joined by an elbow connector. Keep in sync with public/favicon.svg.
+// Product mark: two blocks joined by an elbow connector. Keep in sync with public/favicon.svg.
 export default function Logo({ size = 24, withWordmark = false }: LogoProps) {
   const gradientId = useId()
   return (
     <span className="logo">
-      <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden={withWordmark} role={withWordmark ? undefined : 'img'} aria-label={withWordmark ? undefined : 'Drawdoro'}>
+      <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden={withWordmark} role={withWordmark ? undefined : 'img'} aria-label={withWordmark ? undefined : branding.name}>
         <defs>
           <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
             <stop offset="0" stopColor="#5b5bd6" />
@@ -29,7 +31,7 @@ export default function Logo({ size = 24, withWordmark = false }: LogoProps) {
           strokeLinejoin="round"
         />
       </svg>
-      {withWordmark ? <span className="logo-wordmark">Drawdoro</span> : null}
+      {withWordmark ? <span className="logo-wordmark">{branding.name}</span> : null}
     </span>
   )
 }

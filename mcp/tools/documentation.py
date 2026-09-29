@@ -1,7 +1,7 @@
 import uuid
 
 from pydantic import BaseModel
-from tools.api import DrawdoroApi, JsonObject
+from tools.api import BackendApi, JsonObject
 
 
 class DocumentationContent(BaseModel):
@@ -9,7 +9,7 @@ class DocumentationContent(BaseModel):
 
 
 class DocumentationTools:
-    def __init__(self, api: DrawdoroApi) -> None:
+    def __init__(self, api: BackendApi) -> None:
         self._api = api
 
     def get_documentation(self, diagram_id: uuid.UUID) -> JsonObject:

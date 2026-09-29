@@ -2,6 +2,7 @@ import { LogOut, Trash2, UserPlus } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 
 import type { WorkspaceRole } from '../../api/types'
+import { branding } from '../../config/branding'
 import { useAppStore } from '../../store/useAppStore'
 import { useAuthStore } from '../../store/useAuthStore'
 import { confirmDialog } from '../../store/useDialogStore'
@@ -89,7 +90,7 @@ export default function MembersDialog({ onClose }: { onClose: () => void }) {
           </button>
         </form>
       ) : null}
-      {isOwner ? <p className="field-hint">People need to sign in to Drawdoro once before they can be added.</p> : null}
+      {isOwner ? <p className="field-hint">People need to sign in to {branding.name} once before they can be added.</p> : null}
 
       <ul className="member-list">
         {members.map((member) => {

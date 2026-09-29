@@ -1,5 +1,5 @@
 [project]
-name = "drawdoro"
+name = "backend"
 description = "Architecture diagramming and documentation tool"
 authors = []
 version = "0.1.0"

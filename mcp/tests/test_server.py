@@ -46,7 +46,7 @@ DIAGRAM: dict[str, Any] = {
 }
 
 
-class FakeDrawdoro:
+class FakeBackend:
     def __init__(self) -> None:
         self.requests: list[httpx.Request] = []
 
@@ -67,14 +67,16 @@ class FakeRenderer:
 
 
 @pytest.fixture
-def api() -> FakeDrawdoro:
-    return FakeDrawdoro()
+def api() -> FakeBackend:
+    return FakeBackend()
 
 
 @pytest.fixture
-def sut(api: FakeDrawdoro) -> MCPServer:
-    settings = Settings(api_url="http://drawdoro.test", api_key="svc-key")
-    return create_server(create_api(settings, transport=httpx.MockTransport(api)), FakeRenderer())
+def sut(api: FakeBackend) -> MCPServer:
+    settings = Settings(api_url="http://api.test", api_key="svc-key")
+    return create_server(
+        settings, create_api(settings, transport=httpx.MockTransport(api)), FakeRenderer()
+    )
 
 
 @pytest.mark.anyio
@@ -99,8 +101,17 @@ async def test_should_tell_agents_how_to_open_links(sut: MCPServer) -> None:
     assert "list_workspaces" in instructions
 
 
+def test_should_name_the_server_after_the_app() -> None:
+    settings = Settings(app_name="Acme Draw", api_url="http://api.test")
+    sut = create_server(settings, create_api(settings), FakeRenderer())
+    assert sut.name == "acme-draw"
+    assert sut.instructions is not None
+    assert sut.instructions.startswith("Acme Draw holds")
+    assert "shares a Acme Draw link" in sut.instructions
+
+
 @pytest.mark.anyio
-async def test_should_call_api_with_service_key(sut: MCPServer, api: FakeDrawdoro) -> None:
+async def test_should_call_api_with_service_key(sut: MCPServer, api: FakeBackend) -> None:
     workspace_id = uuid.uuid4()
     async with Client(sut) as client:
         result = await client.call_tool("list_projects", {"workspace_id": str(workspace_id)})
@@ -121,7 +132,7 @@ async def test_should_show_api_errors_to_the_model(sut: MCPServer) -> None:
 
 
 @pytest.mark.anyio
-async def test_should_reject_ids_that_are_not_uuids(sut: MCPServer, api: FakeDrawdoro) -> None:
+async def test_should_reject_ids_that_are_not_uuids(sut: MCPServer, api: FakeBackend) -> None:
     async with Client(sut) as client:
         result = await client.call_tool("get_diagram", {"diagram_id": "../../workspaces"})
     assert result.is_error
@@ -150,8 +161,8 @@ async def test_should_return_the_render_as_an_image(sut: MCPServer) -> None:
 
 
 def test_should_not_announce_agent_when_name_is_empty() -> None:
-    fake = FakeDrawdoro()
-    settings = Settings(api_url="http://drawdoro.test", agent_name="")
+    fake = FakeBackend()
+    settings = Settings(api_url="http://api.test", agent_name="")
     api = create_api(settings, transport=httpx.MockTransport(fake))
     api.get_list("/workspaces/w1/projects")
     assert "X-Agent-Name" not in fake.requests[0].headers

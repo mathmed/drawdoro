@@ -2,13 +2,13 @@ from typing import cast
 from unittest.mock import MagicMock, create_autospec
 
 import pytest
-from tools.api import DrawdoroApi
+from tools.api import BackendApi
 from tools.workspaces import WorkspaceTools
 
 
 @pytest.fixture
 def api() -> MagicMock:
-    return cast(MagicMock, create_autospec(DrawdoroApi, instance=True))
+    return cast(MagicMock, create_autospec(BackendApi, instance=True))
 
 
 @pytest.fixture

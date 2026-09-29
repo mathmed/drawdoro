@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, create_autospec
 
 import pytest
 from mcp.server.mcpserver.exceptions import ToolError
-from tools.api import DrawdoroApi
+from tools.api import BackendApi
 from tools.diagrams import DiagramSaved, DiagramSummary, DiagramTools, ShapeEdits
 
 PROJECT_ID = uuid.uuid4()
@@ -30,7 +30,7 @@ def current_diagram() -> dict[str, Any]:
 
 @pytest.fixture
 def api() -> MagicMock:
-    mock = cast(MagicMock, create_autospec(DrawdoroApi, instance=True))
+    mock = cast(MagicMock, create_autospec(BackendApi, instance=True))
     mock.get_object.return_value = current_diagram()
     mock.put.side_effect = lambda _, body: current_diagram() | body
     mock.post.side_effect = lambda _, body: body
@@ -58,8 +58,8 @@ def test_should_get_diagram_by_id_alone(sut: DiagramTools, api: MagicMock) -> No
 @pytest.mark.parametrize(
     "url",
     [
-        f"https://drawdoro.example/diagrams/{DIAGRAM_ID}",
-        f"https://drawdoro.example/diagrams/{DIAGRAM_ID}/?tab=docs#top",
+        f"https://diagrams.example/diagrams/{DIAGRAM_ID}",
+        f"https://diagrams.example/diagrams/{DIAGRAM_ID}/?tab=docs#top",
         f"  http://localhost:3000/diagrams/{DIAGRAM_ID}\n",
     ],
 )
@@ -69,17 +69,17 @@ def test_should_open_editor_links(sut: DiagramTools, api: MagicMock, url: str) -
 
 
 def test_should_open_share_links(sut: DiagramTools, api: MagicMock) -> None:
-    sut.open_link("https://drawdoro.example/share/Ab-9_xY")
+    sut.open_link("https://diagrams.example/share/Ab-9_xY")
     api.get_object.assert_called_once_with("/share/Ab-9_xY")
 
 
 @pytest.mark.parametrize(
     "url",
     [
-        "https://drawdoro.example/",
-        "https://drawdoro.example/diagrams/not-a-uuid",
-        "https://drawdoro.example/share/..%2Fworkspaces",
-        f"https://drawdoro.example/diagrams/{DIAGRAM_ID}/comments",
+        "https://diagrams.example/",
+        "https://diagrams.example/diagrams/not-a-uuid",
+        "https://diagrams.example/share/..%2Fworkspaces",
+        f"https://diagrams.example/diagrams/{DIAGRAM_ID}/comments",
     ],
 )
 def test_should_reject_links_that_are_not_diagrams(

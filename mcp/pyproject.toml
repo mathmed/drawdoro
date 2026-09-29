@@ -1,6 +1,6 @@
 [project]
-name = "drawdoro-mcp"
-description = "MCP server for Drawdoro"
+name = "mcp-server"
+description = "MCP server for the diagramming tool"
 authors = []
 version = "0.1.0"
 requires-python = ">=3.12"
@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [project.scripts]
-drawdoro-mcp = "server:main"
+mcp-server = "server:main"
 
 [dependency-groups]
 dev = [

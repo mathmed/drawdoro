@@ -1,10 +1,10 @@
 import uuid
 
-from tools.api import DrawdoroApi, JsonObject
+from tools.api import BackendApi, JsonObject
 
 
 class CommentTools:
-    def __init__(self, api: DrawdoroApi) -> None:
+    def __init__(self, api: BackendApi) -> None:
         self._api = api
 
     def list_comments(self, diagram_id: uuid.UUID) -> list[JsonObject]:

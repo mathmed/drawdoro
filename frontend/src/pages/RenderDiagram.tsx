@@ -20,7 +20,7 @@ interface RenderRequest {
 declare global {
   interface Window {
     // Called by the MCP server's headless browser (render_diagram); resolves to a base64 PNG.
-    drawdoroRender?: (snapshot: TLStoreSnapshot, request: RenderRequest) => Promise<string>
+    renderDiagram?: (snapshot: TLStoreSnapshot, request: RenderRequest) => Promise<string>
   }
 }
 
@@ -73,9 +73,9 @@ async function render(editor: Editor, snapshot: TLStoreSnapshot, request: Render
 export default function RenderDiagramPage() {
   function handleMount(editor: Editor): () => void {
     editor.user.updateUserPreferences({ colorScheme: 'light', locale: 'en' })
-    window.drawdoroRender = (snapshot, request) => render(editor, snapshot, request)
+    window.renderDiagram = (snapshot, request) => render(editor, snapshot, request)
     return () => {
-      window.drawdoroRender = undefined
+      window.renderDiagram = undefined
     }
   }
 

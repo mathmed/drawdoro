@@ -6,11 +6,11 @@ from urllib.parse import urlparse
 
 from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import AfterValidator, BaseModel
-from tools.api import DrawdoroApi, JsonObject
+from tools.api import BackendApi, JsonObject
 from tools.canvas import Canvas, ShapeOutline
 
 EDITOR_LINK = re.compile(r"/diagrams/(?P<diagram_id>[^/]+)/?$")
-# Share tokens come from secrets.token_urlsafe, so anything else is not a Drawdoro link.
+# Share tokens come from secrets.token_urlsafe, so anything else is not a diagram link.
 SHARE_LINK = re.compile(r"/share/(?P<token>[A-Za-z0-9_-]+)/?$")
 
 
@@ -73,7 +73,7 @@ class StoredDiagram(DiagramUpdate):
 
 
 class DiagramTools:
-    def __init__(self, api: DrawdoroApi) -> None:
+    def __init__(self, api: BackendApi) -> None:
         self._api = api
 
     def list_diagrams(self, project_id: uuid.UUID) -> list[DiagramSummary]:
@@ -96,7 +96,7 @@ class DiagramTools:
         shapes and read their text, get_diagram_outline is much smaller.
 
         Args:
-            diagram_id: Diagram to fetch; in a Drawdoro link it is the part after /diagrams/.
+            diagram_id: Diagram to fetch; in an editor link it is the part after /diagrams/.
         """
         return self._api.get_object(f"/diagrams/{diagram_id}")
 
@@ -122,23 +122,21 @@ class DiagramTools:
         )
 
     def open_link(self, url: str) -> JsonObject:
-        """Open the diagram behind a Drawdoro link.
+        """Open the diagram behind an editor or share link.
 
         Editor links (https://<host>/diagrams/<diagram_id>) return the same as get_diagram.
         Share links (https://<host>/share/<token>) return a read-only copy without project or
         folder ids, so the diagram cannot be updated through them.
 
         Args:
-            url: Drawdoro link, as copied from the browser or from the Share button.
+            url: Diagram link, as copied from the browser or from the Share button.
         """
         path = urlparse(url.strip()).path
         if share := SHARE_LINK.search(path):
             return self._api.get_object(f"/share/{share['token']}")
         editor = EDITOR_LINK.search(path)
         if editor is None:
-            raise ToolError(
-                f"{url} is not a Drawdoro diagram link (/diagrams/<id> or /share/<token>)"
-            )
+            raise ToolError(f"{url} is not a diagram link (/diagrams/<id> or /share/<token>)")
         try:
             diagram_id = uuid.UUID(editor["diagram_id"])
         except ValueError as exc:

@@ -2,6 +2,7 @@ import type { Editor } from 'tldraw'
 import { create } from 'zustand'
 
 import { authConfig } from '../auth/config'
+import { storageKey } from '../config/branding'
 
 import { createComment as apiCreateComment, listComments } from '../api/comments'
 import { getDocumentation, upsertDocumentation } from '../api/documentation'
@@ -56,8 +57,8 @@ const EMPTY_PRESENCE: Presence = { users: [], you: null }
 export type InspectorTab = 'properties' | 'docs' | 'comments'
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
-const LAST_WORKSPACE_KEY = 'drawdoro:last-workspace'
-const LAST_PROJECT_KEY = 'drawdoro:last-project'
+const LAST_WORKSPACE_KEY = storageKey('last-workspace')
+const LAST_PROJECT_KEY = storageKey('last-project')
 
 function remember(key: string, value: string | null): void {
   try {

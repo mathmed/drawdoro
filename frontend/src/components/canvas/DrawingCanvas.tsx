@@ -20,7 +20,7 @@ import { useRealtime } from '../../hooks/useRealtime'
 import { useSelectionShortcuts } from '../../hooks/useSelectionShortcuts'
 import { useAppStore } from '../../store/useAppStore'
 import { useThemeStore } from '../../store/useThemeStore'
-import { registerGeoDefaults } from '../../shapes/DrawdoroGeoShapeUtil'
+import { registerGeoDefaults } from '../../shapes/CustomGeoShapeUtil'
 import { canRunSelection, runSelection, SELECTION_COMMANDS } from '../../utils/shapeSelection'
 import CommentBadge from '../comments/CommentBadge'
 import ConnectHandles from './ConnectHandles'
@@ -47,9 +47,9 @@ function CustomContextMenu(props: TLUiContextMenuProps) {
   return (
     <DefaultContextMenu {...props}>
       {selectedId !== null ? (
-        <TldrawUiMenuGroup id="drawdoro-comments">
+        <TldrawUiMenuGroup id="app-comments">
           <TldrawUiMenuItem
-            id="drawdoro-comment"
+            id="app-comment"
             label="Comment"
             icon="chat"
             readonlyOk
@@ -57,11 +57,11 @@ function CustomContextMenu(props: TLUiContextMenuProps) {
           />
         </TldrawUiMenuGroup>
       ) : null}
-      <TldrawUiMenuGroup id="drawdoro-select">
+      <TldrawUiMenuGroup id="app-select">
         {SELECTION_COMMANDS.filter(({ command }) => canRunSelection(command, editor)).map((entry) => (
           <TldrawUiMenuItem
             key={entry.command}
-            id={`drawdoro-select-${entry.command}`}
+            id={`app-select-${entry.command}`}
             label={entry.label}
             kbd={entry.kbd}
             readonlyOk

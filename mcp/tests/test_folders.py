@@ -3,7 +3,7 @@ from typing import cast
 from unittest.mock import MagicMock, create_autospec
 
 import pytest
-from tools.api import DrawdoroApi
+from tools.api import BackendApi
 from tools.folders import FolderTools
 
 PROJECT_ID = uuid.uuid4()
@@ -11,7 +11,7 @@ PROJECT_ID = uuid.uuid4()
 
 @pytest.fixture
 def api() -> MagicMock:
-    mock = cast(MagicMock, create_autospec(DrawdoroApi, instance=True))
+    mock = cast(MagicMock, create_autospec(BackendApi, instance=True))
     mock.post.side_effect = lambda _, body: body
     return mock
 

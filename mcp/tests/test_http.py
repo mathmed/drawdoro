@@ -8,7 +8,7 @@ from starlette.applications import Starlette
 from starlette.testclient import TestClient
 from tools.render import BrowserRenderer
 
-PUBLIC_HOST = "drawdoro.example"
+PUBLIC_HOST = "diagrams.example"
 INITIALIZE = {
     "jsonrpc": "2.0",
     "id": 1,
@@ -24,9 +24,11 @@ MCP_HEADERS = {"Accept": "application/json, text/event-stream"}
 
 @pytest.fixture
 def sut() -> Starlette:
-    settings = Settings(api_url="http://drawdoro.test", allowed_hosts=(PUBLIC_HOST,))
+    settings = Settings(
+        app_name="Acme Draw", api_url="http://api.test", allowed_hosts=(PUBLIC_HOST,)
+    )
     api = create_api(settings, transport=httpx.MockTransport(lambda _: httpx.Response(200)))
-    return create_server(api, BrowserRenderer(settings.frontend_url)).streamable_http_app(
+    return create_server(settings, api, BrowserRenderer(settings.frontend_url)).streamable_http_app(
         stateless_http=True, transport_security=create_transport_security(settings)
     )
 
@@ -47,7 +49,7 @@ def test_should_accept_the_allowed_public_host(public_client: TestClient) -> Non
     headers = {**MCP_HEADERS, "Origin": f"https://{PUBLIC_HOST}"}
     response = public_client.post("/mcp", json=INITIALIZE, headers=headers)
     assert response.status_code == 200
-    assert "drawdoro" in response.text
+    assert '"name":"acme-draw"' in response.text
 
 
 @pytest.mark.parametrize("base_url", ["http://localhost:8001", "http://127.0.0.1:8001"])

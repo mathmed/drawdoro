@@ -20,7 +20,7 @@ import {
   setNextDefaults,
   strokeColorOf,
   type Edges,
-} from '../../shapes/DrawdoroGeoShapeUtil'
+} from '../../shapes/CustomGeoShapeUtil'
 import {
   ArrowShapeArrowheadEndStyle,
   ArrowShapeArrowheadStartStyle,
@@ -202,7 +202,7 @@ function ArrowheadIcon({ head, flip }: { head: Arrowhead; flip: boolean }) {
   )
 }
 
-function DrawdoroStylePanelContent() {
+function CustomStylePanelContent() {
   const editor = useEditor()
   const styles = useRelevantStyles()
   const isDarkMode = useValue('dark mode', () => editor.user.getIsDarkMode(), [editor])
@@ -223,7 +223,7 @@ function DrawdoroStylePanelContent() {
     },
     [editor],
   )
-  // Custom stroke colours are a Drawdoro extension of geo shapes: '' means "use tldraw's palette",
+  // Custom stroke colours are an extension of geo shapes: '' means "use tldraw's palette",
   // null means the selection disagrees, undefined means the selection is not all geo shapes.
   const geoColors = useValue(
     'geo colors',
@@ -612,7 +612,7 @@ export function MenuPanelWithStyles() {
       <DefaultMenuPanel />
       {showStyles ? (
         <DefaultStylePanel>
-          <DrawdoroStylePanelContent />
+          <CustomStylePanelContent />
         </DefaultStylePanel>
       ) : null}
     </>

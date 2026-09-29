@@ -1,9 +1,11 @@
 import { create } from 'zustand'
 
+import { storageKey } from '../config/branding'
+
 export type ThemePreference = 'light' | 'dark' | 'system'
 export type ResolvedTheme = 'light' | 'dark'
 
-const STORAGE_KEY = 'drawdoro:theme'
+const STORAGE_KEY = storageKey('theme')
 const darkQuery = window.matchMedia('(prefers-color-scheme: dark)')
 
 function readPreference(): ThemePreference {

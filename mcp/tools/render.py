@@ -7,12 +7,12 @@ from mcp.server.mcpserver.exceptions import ToolError
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import ViewportSize, sync_playwright
 from pydantic import BaseModel, Field
-from tools.api import DrawdoroApi, JsonObject
+from tools.api import BackendApi, JsonObject
 
 DEFAULT_MAX_SIZE = 1600
 VIEWPORT: ViewportSize = {"width": 1280, "height": 800}
 # The frontend's /render page defines this function once tldraw is mounted.
-RENDER_FUNCTION = "window.drawdoroRender"
+RENDER_FUNCTION = "window.renderDiagram"
 # Inside the cluster the frontend is plain http, which is not a secure context, so the browser
 # leaves out crypto.randomUUID and the app fails on load. People always get https.
 RANDOM_UUID_POLYFILL = """
@@ -76,7 +76,7 @@ class BrowserRenderer:
 
 
 class RenderTools:
-    def __init__(self, api: DrawdoroApi, renderer: Renderer) -> None:
+    def __init__(self, api: BackendApi, renderer: Renderer) -> None:
         self._api = api
         self._renderer = renderer
 

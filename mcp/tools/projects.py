@@ -1,7 +1,7 @@
 import uuid
 
 from pydantic import BaseModel
-from tools.api import DrawdoroApi, JsonObject
+from tools.api import BackendApi, JsonObject
 
 
 class NewProject(BaseModel):
@@ -10,7 +10,7 @@ class NewProject(BaseModel):
 
 
 class ProjectTools:
-    def __init__(self, api: DrawdoroApi) -> None:
+    def __init__(self, api: BackendApi) -> None:
         self._api = api
 
     def list_projects(self, workspace_id: uuid.UUID) -> list[JsonObject]:

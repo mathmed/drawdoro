@@ -1,3 +1,4 @@
+import { storageKey } from '../config/branding'
 import { authConfig } from './config'
 
 interface Session {
@@ -19,8 +20,8 @@ export interface TokenProfile {
   picture?: string
 }
 
-const SESSION_KEY = 'drawdoro:session'
-const PENDING_KEY = 'drawdoro:pending-login'
+const SESSION_KEY = storageKey('session')
+const PENDING_KEY = storageKey('pending-login')
 // Refresh a minute early so requests never race the expiry.
 const EXPIRY_MARGIN_MS = 60_000
 

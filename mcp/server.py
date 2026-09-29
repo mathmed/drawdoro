@@ -6,7 +6,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 from settings import Settings, Transport
 from starlette.requests import Request
 from starlette.responses import JSONResponse
-from tools.api import DrawdoroApi
+from tools.api import BackendApi
 from tools.comments import CommentTools
 from tools.diagrams import DiagramTools
 from tools.documentation import DocumentationTools
@@ -18,11 +18,11 @@ from tools.workspaces import WorkspaceTools
 API_TIMEOUT_SECONDS = 30
 LOCAL_HOSTS = ("127.0.0.1", "localhost", "[::1]")
 # Sent to the client on connect; agents read it to know when and how to use the tools.
-INSTRUCTIONS = """Drawdoro holds software architecture diagrams, organised as
+INSTRUCTIONS = """{app_name} holds software architecture diagrams, organised as
 workspace -> project -> folders (optional, nestable) -> diagram. Each diagram is a tldraw canvas
 with an optional Markdown documentation page and comments anchored to its shapes.
 
-When the user shares a Drawdoro link, call open_link with it: /diagrams/<id> links open the
+When the user shares a {app_name} link, call open_link with it: /diagrams/<id> links open the
 editable diagram, /share/<token> links a read-only copy. Given only names, find ids with
 list_workspaces, list_projects, list_folders and list_diagrams.
 
@@ -32,7 +32,7 @@ at the result as an image (check it after every edit). Use get_diagram and updat
 carry the complete canvas_state, only to rebuild a diagram wholesale."""
 
 
-def create_api(settings: Settings, transport: httpx.BaseTransport | None = None) -> DrawdoroApi:
+def create_api(settings: Settings, transport: httpx.BaseTransport | None = None) -> BackendApi:
     headers = {"X-API-Key": settings.api_key} if settings.api_key else {}
     if settings.agent_name:
         headers["X-Agent-Name"] = settings.agent_name
@@ -42,7 +42,7 @@ def create_api(settings: Settings, transport: httpx.BaseTransport | None = None)
         timeout=API_TIMEOUT_SECONDS,
         transport=transport,
     )
-    return DrawdoroApi(client)
+    return BackendApi(client, settings.app_name)
 
 
 def create_transport_security(settings: Settings) -> TransportSecuritySettings:
@@ -61,11 +61,11 @@ async def health(_: Request) -> JSONResponse:
     return JSONResponse({"status": "ok"})
 
 
-def create_server(api: DrawdoroApi, renderer: Renderer) -> MCPServer:
+def create_server(settings: Settings, api: BackendApi, renderer: Renderer) -> MCPServer:
     server = MCPServer(
-        "drawdoro",
-        description="MCP server for the Drawdoro diagramming tool",
-        instructions=INSTRUCTIONS,
+        settings.app_slug,
+        description=f"MCP server for the {settings.app_name} diagramming tool",
+        instructions=INSTRUCTIONS.format(app_name=settings.app_name),
     )
     workspaces = WorkspaceTools(api)
     projects = ProjectTools(api)
@@ -101,7 +101,7 @@ def create_server(api: DrawdoroApi, renderer: Renderer) -> MCPServer:
 
 def main() -> None:
     settings = Settings.from_env()
-    server = create_server(create_api(settings), BrowserRenderer(settings.frontend_url))
+    server = create_server(settings, create_api(settings), BrowserRenderer(settings.frontend_url))
     if settings.transport == Transport.STDIO:
         server.run(transport="stdio")
         return
