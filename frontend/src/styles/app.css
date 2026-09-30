@@ -260,6 +260,34 @@
   opacity: 1;
 }
 
+/* Placeholder rows while a project's tree loads */
+.tree-skeleton {
+  pointer-events: none;
+}
+
+.skeleton {
+  display: block;
+  border-radius: var(--radius-sm);
+  background: var(--bg-active);
+  animation: skeleton-pulse 1.2s ease-in-out infinite;
+}
+
+.skeleton-icon {
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+}
+
+.skeleton-line {
+  height: 10px;
+}
+
+@keyframes skeleton-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
 .tree-empty {
   padding: 4px 8px 6px;
   font-size: 12.5px;
@@ -1802,6 +1830,17 @@ button.validation-item:hover {
   background: var(--bg-active);
   color: var(--text-muted);
   font-size: 11px;
+}
+
+/* Photo or initial inside a person's avatar; the circle clips the photo. */
+.presence-avatar-face {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
 }
 
 .presence-avatar[data-you='true'] {

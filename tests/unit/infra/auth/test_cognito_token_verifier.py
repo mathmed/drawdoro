@@ -100,3 +100,20 @@ async def test_should_reject_token_signed_with_another_key(sut: CognitoTokenVeri
     )
     with pytest.raises(UnauthorizedError):
         await sut.verify(forged)
+
+
+async def test_should_return_profile_photo_from_picture_claim(sut: CognitoTokenVerifier) -> None:
+    photo = "https://lh3.googleusercontent.com/a/photo=s96-c"
+    identity = await sut.verify(make_token(picture=photo))
+    assert identity.picture_url == photo
+
+
+@pytest.mark.parametrize(
+    "picture",
+    [None, "", "http://example.com/photo.png", "javascript:alert(1)", "https://x/" + "a" * 2048],
+)
+async def test_should_ignore_missing_or_unsafe_profile_photo(
+    sut: CognitoTokenVerifier, picture: str | None
+) -> None:
+    identity = await sut.verify(make_token(picture=picture))
+    assert identity.picture_url is None

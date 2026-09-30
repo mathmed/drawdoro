@@ -11,7 +11,9 @@ class CommentORM(Base):
     __tablename__ = "comments"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    diagram_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("diagrams.id", ondelete="CASCADE"))
+    diagram_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("diagrams.id", ondelete="CASCADE"), index=True
+    )
     element_id: Mapped[str] = mapped_column(String(255))
     content: Mapped[str] = mapped_column(Text)
     author_id: Mapped[uuid.UUID | None] = mapped_column(

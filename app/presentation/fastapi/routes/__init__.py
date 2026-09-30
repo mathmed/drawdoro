@@ -7,6 +7,7 @@ from .folder_routes import router as folder_router
 from .gallery_routes import router as gallery_router
 from .health_routes import router as health_router
 from .project_routes import router as project_router
+from .project_tree_routes import router as project_tree_router
 from .share_routes import public_router as public_share_router
 from .share_routes import router as share_router
 from .websocket_routes import router as websocket_router
@@ -22,6 +23,7 @@ protected_routers = [
     workspace_router,
     workspace_member_router,
     project_router,
+    project_tree_router,
     folder_router,
     diagram_router,
     diagram_by_id_router,

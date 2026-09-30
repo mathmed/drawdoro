@@ -2,7 +2,7 @@ import { Sparkles } from 'lucide-react'
 
 import type { PresenceUser } from '../../hooks/useRealtime'
 import { useAppStore } from '../../store/useAppStore'
-import { initial } from '../../utils/format'
+import UserAvatar from '../ui/UserAvatar'
 
 const MAX_VISIBLE = 4
 
@@ -33,14 +33,13 @@ function Avatar({ user, isYou }: { user: PresenceUser; isYou: boolean }) {
     )
   }
   return (
-    <span
-      className="presence-avatar"
-      data-you={isYou}
-      style={{ background: colorFor(user.id) }}
-      data-tooltip={label}
-      aria-label={label}
-    >
-      {initial(user.name)}
+    <span className="presence-avatar" data-you={isYou} data-tooltip={label} aria-label={label}>
+      <UserAvatar
+        className="presence-avatar-face"
+        name={user.name}
+        pictureUrl={user.picture_url}
+        style={{ background: colorFor(user.id) }}
+      />
     </span>
   )
 }

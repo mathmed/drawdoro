@@ -10,5 +10,6 @@ class User(BaseModel):
     id: uuid.UUID = Field(default_factory=uuid.uuid4)
     email: str
     name: str
+    picture_url: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

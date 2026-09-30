@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
-import type { Diagram } from '../../api/types'
+import type { DiagramSummary } from '../../api/types'
 import { branding } from '../../config/branding'
 import { useAppStore } from '../../store/useAppStore'
 import { confirmDialog, promptDialog } from '../../store/useDialogStore'
@@ -102,7 +102,7 @@ function NoProjects() {
   )
 }
 
-function DiagramCard({ diagram, folderName }: { diagram: Diagram; folderName: string | null }) {
+function DiagramCard({ diagram, folderName }: { diagram: DiagramSummary; folderName: string | null }) {
   const navigate = useNavigate()
   const renameDiagram = useAppStore((state) => state.renameDiagram)
   const deleteDiagram = useAppStore((state) => state.deleteDiagram)

@@ -5,3 +5,4 @@ class Identity(BaseModel):
     subject: str
     email: str
     name: str
+    picture_url: str | None = None

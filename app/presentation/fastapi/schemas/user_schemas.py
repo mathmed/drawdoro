@@ -9,3 +9,4 @@ class UserResponse(BaseModel):
     id: uuid.UUID
     email: str
     name: str
+    picture_url: str | None = None

@@ -12,9 +12,11 @@ class DiagramORM(Base):
     __tablename__ = "diagrams"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"))
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
     folder_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("folders.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("folders.id", ondelete="SET NULL"), nullable=True, index=True
     )
     name: Mapped[str] = mapped_column(String(255))
     canvas_state: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)

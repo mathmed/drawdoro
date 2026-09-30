@@ -1,10 +1,11 @@
 import uuid
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app.domain.entities.models.diagram import Diagram
+from app.domain.entities.models.diagram_summary import DiagramSummary
 from app.domain.entities.models.folder import Folder
 from app.domain.entities.models.project import Project
 from app.domain.entities.models.workspace import Workspace
@@ -66,7 +67,12 @@ def test_should_return_200_for_list_folders(client: TestClient) -> None:
 def test_should_return_200_for_list_diagrams(client: TestClient) -> None:
     project_id = uuid.uuid4()
     mock_uc = AsyncMock(spec=ListDiagrams)
-    mock_uc.execute.return_value = [Diagram(project_id=project_id, name="D")]
+    now = datetime.now(UTC)
+    mock_uc.execute.return_value = [
+        DiagramSummary(
+            id=uuid.uuid4(), project_id=project_id, name="D", created_at=now, updated_at=now
+        )
+    ]
     app.dependency_overrides[list_diagrams_factory] = lambda: mock_uc
     try:
         response = client.get(f"/projects/{project_id}/diagrams")

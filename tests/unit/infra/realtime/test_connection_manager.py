@@ -37,8 +37,8 @@ async def test_should_count_people_not_tabs(sut: ConnectionManager) -> None:
     await sut.connect(make_ws(), "room", Participant(name="Ana", user_id="user-ana"))
     await sut.connect(make_ws(), "room", BRUNO)
     assert sut.participants("room") == [
-        {"id": "user-ana", "name": "Ana", "kind": "person"},
-        {"id": "user-bruno", "name": "Bruno", "kind": "person"},
+        {"id": "user-ana", "name": "Ana", "kind": "person", "picture_url": None},
+        {"id": "user-bruno", "name": "Bruno", "kind": "person", "picture_url": None},
     ]
 
 
@@ -99,7 +99,9 @@ async def test_should_announce_again_after_dropping_a_dead_socket(sut: Connectio
     await sut.connect(dead, "room", ANA)
     await sut.connect(alive, "room", BRUNO)
     await sut.broadcast_presence("room")
-    assert sent(alive)[-1]["users"] == [{"id": "user-bruno", "name": "Bruno", "kind": "person"}]
+    assert sent(alive)[-1]["users"] == [
+        {"id": "user-bruno", "name": "Bruno", "kind": "person", "picture_url": None}
+    ]
 
 
 CLAUDE = {"id": "agent:Claude", "name": "Claude", "kind": "agent"}
@@ -113,7 +115,7 @@ async def test_should_list_active_agent_after_people(sut: ConnectionManager) -> 
     await sut.connect(make_ws(), "room", BRUNO)
     await sut.mark_agent_active("room", "Claude", seconds=60)
     assert sut.participants("room") == [
-        {"id": "user-bruno", "name": "Bruno", "kind": "person"},
+        {"id": "user-bruno", "name": "Bruno", "kind": "person", "picture_url": None},
         CLAUDE,
     ]
 
@@ -148,3 +150,13 @@ async def test_should_keep_agent_listed_while_it_stays_active(sut: ConnectionMan
     await sut.mark_agent_active("room", "Claude", seconds=0.1)
     await asyncio.sleep(0.06)
     assert sut.participants("room") == [CLAUDE]
+
+
+async def test_should_share_profile_photo_in_presence(sut: ConnectionManager) -> None:
+    photo = "https://lh3.googleusercontent.com/a/ana"
+    ws = make_ws()
+    await sut.connect(ws, "room", Participant(name="Ana", user_id="user-ana", picture_url=photo))
+    await sut.broadcast_presence("room")
+    assert sent(ws)[-1]["users"] == [
+        {"id": "user-ana", "name": "Ana", "kind": "person", "picture_url": photo}
+    ]

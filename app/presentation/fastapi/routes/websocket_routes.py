@@ -74,7 +74,7 @@ async def resolve_participant(
         )
     except DomainError, ValueError:
         return None
-    return Participant(name=user.name, user_id=str(user.id))
+    return Participant(name=user.name, user_id=str(user.id), picture_url=user.picture_url)
 
 
 @router.websocket("/ws/diagrams/{diagram_id}")

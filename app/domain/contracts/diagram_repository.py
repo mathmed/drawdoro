@@ -2,6 +2,7 @@ import uuid
 from abc import ABC, abstractmethod
 
 from app.domain.entities.models.diagram import Diagram
+from app.domain.entities.models.diagram_summary import DiagramSummary
 
 
 class DiagramRepository(ABC):
@@ -18,7 +19,7 @@ class DiagramRepository(ABC):
     async def set_share_token(self, diagram_id: uuid.UUID, share_token: str) -> Diagram: ...
 
     @abstractmethod
-    async def list_by_project(self, project_id: uuid.UUID) -> list[Diagram]: ...
+    async def list_by_project(self, project_id: uuid.UUID) -> list[DiagramSummary]: ...
 
     @abstractmethod
     async def list_by_folder(self, folder_id: uuid.UUID) -> list[Diagram]: ...

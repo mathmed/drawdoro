@@ -11,6 +11,8 @@ export interface PresenceUser {
   name: string
   // Agents (the MCP server) have no socket; the server lists them while they are working.
   kind?: 'person' | 'agent'
+  // Profile photo from the identity provider; absent for guests, agents and users without one.
+  picture_url?: string | null
 }
 
 export interface Presence {

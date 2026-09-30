@@ -18,6 +18,7 @@ class Participant:
     name: str
     # None for guests (authentication disabled); they are told apart per connection.
     user_id: str | None = None
+    picture_url: str | None = None
     connection_id: str = field(default_factory=lambda: uuid.uuid4().hex)
 
     @property
@@ -45,8 +46,8 @@ class ConnectionManager:
         return len(self.participants(diagram_id))
 
     # One entry per person: the same user in two tabs is shown once. Agents come last.
-    def participants(self, diagram_id: str) -> list[dict[str, str]]:
-        unique: dict[str, dict[str, str]] = {}
+    def participants(self, diagram_id: str) -> list[dict[str, str | None]]:
+        unique: dict[str, dict[str, str | None]] = {}
         for participant in self._rooms.get(diagram_id, {}).values():
             unique.setdefault(
                 participant.presence_id,
@@ -54,10 +55,11 @@ class ConnectionManager:
                     "id": participant.presence_id,
                     "name": participant.name,
                     "kind": PresenceKind.PERSON,
+                    "picture_url": participant.picture_url,
                 },
             )
-        people = sorted(unique.values(), key=lambda item: item["name"].lower())
-        agents = [
+        people = sorted(unique.values(), key=lambda item: str(item["name"]).lower())
+        agents: list[dict[str, str | None]] = [
             {"id": f"agent:{name}", "name": name, "kind": PresenceKind.AGENT}
             for name in sorted(self._agents.get(diagram_id, {}))
         ]
