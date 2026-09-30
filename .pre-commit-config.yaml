@@ -17,9 +17,24 @@ repos:
 
       - id: mypy
         name: mypy (type check)
-        entry: uv run mypy app tests
+        entry: uv run mypy app tests scripts
         language: system
         types: [python]
+        pass_filenames: false
+
+      - id: import-linter
+        name: import-linter (architecture contracts)
+        entry: uv run lint-imports
+        language: system
+        # pyproject.toml holds the contracts, so editing them re-runs the check too
+        files: (\.py|pyproject\.toml)$
+        pass_filenames: false
+
+      - id: import-linter-mcp
+        name: import-linter (mcp architecture contracts)
+        entry: bash -c 'cd mcp && uv run lint-imports'
+        language: system
+        files: ^mcp/.*(\.py|pyproject\.toml)$
         pass_filenames: false
 
       - id: bandit
