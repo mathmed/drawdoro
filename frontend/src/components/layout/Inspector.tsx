@@ -1,14 +1,16 @@
-import { BookOpenText, MessageSquare, Tags, X } from 'lucide-react'
+import { BookOpenText, Images, MessageSquare, Tags, X } from 'lucide-react'
 
 import { useAppStore, type InspectorTab } from '../../store/useAppStore'
 import CommentsPanel from '../comments/CommentsPanel'
 import DocsPanel from '../docs/DocsPanel'
+import GalleryPanel from '../gallery/GalleryPanel'
 import SemanticPanel from '../semantic/SemanticPanel'
 
 const TABS: { id: InspectorTab; label: string; icon: typeof Tags }[] = [
   { id: 'properties', label: 'Properties', icon: Tags },
   { id: 'docs', label: 'Docs', icon: BookOpenText },
   { id: 'comments', label: 'Comments', icon: MessageSquare },
+  { id: 'gallery', label: 'Gallery', icon: Images },
 ]
 
 export default function Inspector() {
@@ -49,6 +51,7 @@ export default function Inspector() {
         {inspectorTab === 'properties' ? <SemanticPanel /> : null}
         {inspectorTab === 'docs' ? <DocsPanel /> : null}
         {inspectorTab === 'comments' ? <CommentsPanel /> : null}
+        {inspectorTab === 'gallery' ? <GalleryPanel /> : null}
       </div>
     </aside>
   )

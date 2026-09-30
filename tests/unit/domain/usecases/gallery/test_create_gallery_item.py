@@ -1,0 +1,130 @@
+import uuid
+from typing import Any, cast
+from unittest.mock import AsyncMock, create_autospec
+
+import pytest
+
+from app.domain.constants.gallery import GALLERY_MAX_THUMBNAIL_BYTES
+from app.domain.contracts.gallery_item_repository import GalleryItemRepository
+from app.domain.entities.models.gallery_item import GalleryItem
+from app.domain.entities.objects.gallery_limits import GalleryLimits
+from app.domain.enums.gallery_item_kind import GalleryItemKind
+from app.domain.enums.image_mime_type import ImageMimeType
+from app.domain.errors.domain_errors import InvalidInputError, PayloadTooLargeError
+from app.domain.usecases.gallery.create_gallery_item import (
+    CreateGalleryItem,
+    CreateGalleryItemParams,
+)
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 16
+CONTENT: dict[str, Any] = {"shapes": [{"id": "shape:a"}], "rootShapeIds": ["shape:a"]}
+
+
+@pytest.fixture
+def repo() -> GalleryItemRepository:
+    mock = cast(GalleryItemRepository, create_autospec(GalleryItemRepository))
+    mock.create = AsyncMock(side_effect=lambda item: item)  # type: ignore[method-assign]
+    return mock
+
+
+@pytest.fixture
+def sut(repo: GalleryItemRepository) -> CreateGalleryItem:
+    return CreateGalleryItem(repo, GalleryLimits(max_image_bytes=64, max_shapes_bytes=200))
+
+
+async def test_should_create_shapes_item_for_owner(sut: CreateGalleryItem) -> None:
+    owner_id = uuid.uuid4()
+
+    item = await sut.execute(
+        CreateGalleryItemParams(
+            owner_id=owner_id,
+            name="  Load balancer  ",
+            kind=GalleryItemKind.SHAPES,
+            content=CONTENT,
+            thumbnail=PNG,
+        )
+    )
+
+    assert item.owner_id == owner_id
+    assert item.name == "Load balancer"
+    assert item.content == CONTENT
+    assert item.thumbnail == PNG
+    assert item.image_data is None
+
+
+async def test_should_create_image_item_with_detected_mime_type(sut: CreateGalleryItem) -> None:
+    item = await sut.execute(
+        CreateGalleryItemParams(name="Logo", kind=GalleryItemKind.IMAGE, image_data=JPEG)
+    )
+
+    assert item.image_data == JPEG
+    assert item.image_mime_type == ImageMimeType.JPEG
+    assert item.content is None
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        CreateGalleryItemParams(name="x", kind=GalleryItemKind.SHAPES),
+        CreateGalleryItemParams(
+            name="x", kind=GalleryItemKind.SHAPES, content=CONTENT, image_data=PNG
+        ),
+        CreateGalleryItemParams(name="x", kind=GalleryItemKind.SHAPES, content={"shapes": []}),
+        CreateGalleryItemParams(name="x", kind=GalleryItemKind.SHAPES, content={"shapes": "a"}),
+        CreateGalleryItemParams(name="x", kind=GalleryItemKind.IMAGE),
+        CreateGalleryItemParams(
+            name="x", kind=GalleryItemKind.IMAGE, image_data=PNG, content=CONTENT
+        ),
+        CreateGalleryItemParams(name="x", kind=GalleryItemKind.IMAGE, image_data=b"<svg></svg>"),
+        CreateGalleryItemParams(name="   ", kind=GalleryItemKind.IMAGE, image_data=PNG),
+        CreateGalleryItemParams(
+            name="x", kind=GalleryItemKind.IMAGE, image_data=PNG, thumbnail=JPEG
+        ),
+    ],
+)
+async def test_should_reject_invalid_input(
+    sut: CreateGalleryItem, repo: GalleryItemRepository, params: CreateGalleryItemParams
+) -> None:
+    with pytest.raises(InvalidInputError):
+        await sut.execute(params)
+    cast(AsyncMock, repo.create).assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        CreateGalleryItemParams(
+            name="x", kind=GalleryItemKind.IMAGE, image_data=PNG + b"\x00" * 64
+        ),
+        CreateGalleryItemParams(
+            name="x",
+            kind=GalleryItemKind.SHAPES,
+            content={"shapes": [{"id": "shape:a", "text": "a" * 300}]},
+        ),
+        CreateGalleryItemParams(
+            name="x",
+            kind=GalleryItemKind.IMAGE,
+            image_data=PNG,
+            thumbnail=PNG + b"\x00" * GALLERY_MAX_THUMBNAIL_BYTES,
+        ),
+    ],
+)
+async def test_should_reject_payloads_above_the_limit(
+    sut: CreateGalleryItem, params: CreateGalleryItemParams
+) -> None:
+    with pytest.raises(PayloadTooLargeError):
+        await sut.execute(params)
+
+
+async def test_should_return_what_the_repository_stored(
+    sut: CreateGalleryItem, repo: GalleryItemRepository
+) -> None:
+    stored = GalleryItem(name="Stored", kind=GalleryItemKind.IMAGE, image_data=PNG)
+    repo.create = AsyncMock(return_value=stored)  # type: ignore[method-assign]
+
+    item = await sut.execute(
+        CreateGalleryItemParams(name="x", kind=GalleryItemKind.IMAGE, image_data=PNG)
+    )
+
+    assert item is stored

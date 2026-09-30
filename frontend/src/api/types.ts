@@ -93,3 +93,30 @@ export interface WorkspaceMember {
   email: string
   role: WorkspaceRole
 }
+
+export type GalleryItemKind = 'shapes' | 'image'
+
+export interface GalleryItemSummary {
+  id: string
+  name: string
+  kind: GalleryItemKind
+  image_mime_type: string | null
+  // Base64 PNG preview rendered by the client when the item was saved.
+  thumbnail_base64: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface GalleryItem extends GalleryItemSummary {
+  // tldraw content (shapes, bindings, assets) for "shapes" items.
+  content: Record<string, unknown> | null
+  image_base64: string | null
+}
+
+export interface CreateGalleryItemInput {
+  name: string
+  kind: GalleryItemKind
+  content?: Record<string, unknown>
+  image_base64?: string
+  thumbnail_base64?: string | null
+}

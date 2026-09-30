@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, type DragEvent } from 'react'
 import {
   ArrowShapeKindStyle,
   DefaultContextMenu,
@@ -21,6 +21,7 @@ import { useSelectionShortcuts } from '../../hooks/useSelectionShortcuts'
 import { useAppStore } from '../../store/useAppStore'
 import { useThemeStore } from '../../store/useThemeStore'
 import { registerGeoDefaults } from '../../shapes/CustomGeoShapeUtil'
+import { GALLERY_DRAG_TYPE, insertGalleryItem, saveSelectionToGallery } from '../../utils/gallery'
 import { canRunSelection, runSelection, SELECTION_COMMANDS } from '../../utils/shapeSelection'
 import CommentBadge from '../comments/CommentBadge'
 import ConnectHandles from './ConnectHandles'
@@ -37,6 +38,7 @@ function CustomContextMenu(props: TLUiContextMenuProps) {
   const editor = useEditor()
   const commentOnElement = useAppStore((state) => state.commentOnElement)
   const selectedId = editor.getOnlySelectedShapeId()
+  const hasSelection = editor.getSelectedShapeIds().length > 0
 
   function handleComment(): void {
     if (selectedId !== null) {
@@ -54,6 +56,17 @@ function CustomContextMenu(props: TLUiContextMenuProps) {
             icon="chat"
             readonlyOk
             onSelect={handleComment}
+          />
+        </TldrawUiMenuGroup>
+      ) : null}
+      {hasSelection ? (
+        <TldrawUiMenuGroup id="app-gallery">
+          <TldrawUiMenuItem
+            id="app-save-to-gallery"
+            label="Save to gallery"
+            icon="bookmark"
+            readonlyOk
+            onSelect={() => void saveSelectionToGallery(editor)}
           />
         </TldrawUiMenuGroup>
       ) : null}
@@ -157,10 +170,31 @@ export default function DrawingCanvas({ diagram }: DrawingCanvasProps) {
     }
   }
 
+  // Gallery tiles are dragged in with their own dataTransfer type; everything else (files, urls)
+  // keeps going to tldraw's own drop handler.
+  function handleDragOverCapture(event: DragEvent): void {
+    if (event.dataTransfer.types.includes(GALLERY_DRAG_TYPE)) {
+      event.preventDefault()
+      event.dataTransfer.dropEffect = 'copy'
+    }
+  }
+
+  function handleDropCapture(event: DragEvent): void {
+    const itemId = event.dataTransfer.getData(GALLERY_DRAG_TYPE)
+    if (itemId === '' || editor === null) {
+      return
+    }
+    event.preventDefault()
+    event.stopPropagation()
+    void insertGalleryItem(editor, itemId, editor.screenToPage({ x: event.clientX, y: event.clientY }))
+  }
+
   return (
     <div
       style={{ width: '100%', height: '100%', position: 'relative' }}
       onPointerDownCapture={() => editor?.focus()}
+      onDragOverCapture={handleDragOverCapture}
+      onDropCapture={handleDropCapture}
     >
       <Tldraw
         onMount={handleMount}

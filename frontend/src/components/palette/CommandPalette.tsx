@@ -1,9 +1,11 @@
 import {
+  BookmarkPlus,
   BookOpenText,
   FilePlus2,
   FolderPlus,
   House,
   Image,
+  Images,
   Layers,
   MessageSquare,
   Moon,
@@ -25,6 +27,7 @@ import { promptDialog } from '../../store/useDialogStore'
 import { useThemeStore } from '../../store/useThemeStore'
 import { exportDiagram } from '../../utils/exportDiagram'
 import { modKey } from '../../utils/format'
+import { canSaveSelection, saveSelectionToGallery } from '../../utils/gallery'
 import { canRunSelection, runSelection, SELECTION_COMMANDS } from '../../utils/shapeSelection'
 
 interface Command {
@@ -143,6 +146,7 @@ export default function CommandPalette() {
         { id: 'properties', group: 'Actions', label: 'Open shape properties', icon: <Tags size={16} />, run: () => store.openInspector('properties') },
         { id: 'docs', group: 'Actions', label: 'Open documentation', icon: <BookOpenText size={16} />, run: () => store.openInspector('docs') },
         { id: 'comments', group: 'Actions', label: 'Open comments', icon: <MessageSquare size={16} />, run: () => store.openInspector('comments') },
+        { id: 'gallery', group: 'Actions', label: 'Open gallery', icon: <Images size={16} />, run: () => store.openInspector('gallery') },
         { id: 'validate', group: 'Actions', label: 'Validate architecture', icon: <ShieldCheck size={16} />, run: store.runValidation },
         { id: 'present', group: 'Actions', label: 'Start presentation', icon: <Play size={16} />, run: store.enterPresentation },
         {
@@ -173,6 +177,16 @@ export default function CommandPalette() {
             hint: entry.hint,
             run: () => runSelection(entry.command, editor, useAppStore.getState().semanticMetadata),
           }))
+
+    if (editor !== null && canSaveSelection(editor)) {
+      selection.push({
+        id: 'save-to-gallery',
+        group: 'Selection',
+        label: 'Save selection to gallery',
+        icon: <BookmarkPlus size={16} />,
+        run: () => void saveSelectionToGallery(editor),
+      })
+    }
 
     return [...list, ...actions, ...selection]
   }, [diagrams, projects, activeProject, activeDiagram, editor, resolvedTheme, navigate])
