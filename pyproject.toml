@@ -79,7 +79,8 @@ max-average = "A"
 source_paths = ["app/"]
 only_mutate = ["app/domain/usecases/*", "app/domain/services/*"]
 pytest_add_cli_args_test_selection = ["tests/unit/"]
-pytest_add_cli_args = ["-p", "no:cacheprovider"]
+# mutants/ holds a copy of app/ and tests/ only, and the tests of scripts/ kill no domain mutant.
+pytest_add_cli_args = ["-p", "no:cacheprovider", "--ignore=tests/unit/scripts"]
 
 # Architecture contracts, checked by `make lint-imports` (pre-commit and CI too). They mirror the
 # Clean Architecture described in CLAUDE.md. `ignore_imports` entries are the baseline of imports
