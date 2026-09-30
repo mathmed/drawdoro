@@ -3,6 +3,7 @@ from typing import Any, Protocol
 
 import jwt
 
+from app.domain.constants.user import PICTURE_URL_MAX_LENGTH
 from app.domain.contracts.token_verifier import TokenVerifier
 from app.domain.entities.models.identity import Identity
 from app.domain.errors.domain_errors import UnauthorizedError
@@ -41,8 +42,21 @@ class CognitoTokenVerifier(TokenVerifier):
         if not isinstance(email, str) or email == "":
             raise UnauthorizedError("Token has no email")
         return Identity(
-            subject=claims["sub"], email=email.lower(), name=_display_name(claims, email)
+            subject=claims["sub"],
+            email=email.lower(),
+            name=_display_name(claims, email),
+            picture_url=_picture_url(claims),
         )
+
+
+# Only https URLs are kept: the value ends up in an <img src> seen by every collaborator.
+def _picture_url(claims: dict[str, Any]) -> str | None:
+    picture = claims.get("picture")
+    if not isinstance(picture, str) or not picture.startswith("https://"):
+        return None
+    if len(picture) > PICTURE_URL_MAX_LENGTH:
+        return None
+    return picture
 
 
 def _display_name(claims: dict[str, Any], email: str) -> str:

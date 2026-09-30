@@ -31,6 +31,17 @@ class DiagramResponse(BaseModel):
     updated_at: datetime
 
 
+class DiagramSummaryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    project_id: uuid.UUID
+    folder_id: uuid.UUID | None
+    name: str
+    created_at: datetime
+    updated_at: datetime
+
+
 class ShareDiagramResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

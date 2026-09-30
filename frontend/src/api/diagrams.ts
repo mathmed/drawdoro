@@ -1,6 +1,6 @@
 import apiClient from './client'
 import { TAB_CLIENT_ID } from './tabClientId'
-import type { CanvasState, Diagram, SemanticMetadata } from './types'
+import type { CanvasState, Diagram, DiagramSummary, SemanticMetadata } from './types'
 
 export interface UpdateDiagramInput {
   name: string
@@ -9,12 +9,9 @@ export interface UpdateDiagramInput {
   semantic_metadata?: SemanticMetadata | null
 }
 
-export async function listDiagrams(projectId: string, folderId?: string): Promise<Diagram[]> {
-  const { data } = await apiClient.get<Diagram[]>(`/projects/${projectId}/diagrams`)
-  if (folderId === undefined) {
-    return data
-  }
-  return data.filter((diagram) => diagram.folder_id === folderId)
+export function toSummary(diagram: DiagramSummary): DiagramSummary {
+  const { id, project_id, folder_id, name, created_at, updated_at } = diagram
+  return { id, project_id, folder_id, name, created_at, updated_at }
 }
 
 export async function createDiagram(
@@ -29,8 +26,9 @@ export async function createDiagram(
   return data
 }
 
-export async function getDiagram(projectId: string, diagramId: string): Promise<Diagram> {
-  const { data } = await apiClient.get<Diagram>(`/projects/${projectId}/diagrams/${diagramId}`)
+// Links carry only the diagram id; the response says which project it belongs to.
+export async function getDiagramById(diagramId: string): Promise<Diagram> {
+  const { data } = await apiClient.get<Diagram>(`/diagrams/${diagramId}`)
   return data
 }
 

@@ -19,6 +19,7 @@ from app.presentation.fastapi.dependencies.workspace_access import require_works
 from app.presentation.fastapi.schemas.diagram_schemas import (
     CreateDiagramRequest,
     DiagramResponse,
+    DiagramSummaryResponse,
     UpdateDiagramRequest,
 )
 
@@ -39,13 +40,13 @@ diagram_by_id_router = APIRouter(
 )
 
 
-@router.get("", response_model=list[DiagramResponse])
+@router.get("", response_model=list[DiagramSummaryResponse])
 async def list_diagrams(
     project_id: uuid.UUID,
     use_case: ListDiagrams = Depends(list_diagrams_factory),
-) -> list[DiagramResponse]:
+) -> list[DiagramSummaryResponse]:
     diagrams = await use_case.execute(ListDiagramsParams(project_id=project_id))
-    return [DiagramResponse.model_validate(d) for d in diagrams]
+    return [DiagramSummaryResponse.model_validate(d) for d in diagrams]
 
 
 @router.post("", response_model=DiagramResponse, status_code=201)

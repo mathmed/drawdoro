@@ -9,19 +9,20 @@ import { getDocumentation, upsertDocumentation } from '../api/documentation'
 import {
   createDiagram as apiCreateDiagram,
   deleteDiagram as apiDeleteDiagram,
-  listDiagrams,
+  getDiagramById,
+  toSummary,
   updateDiagram,
   type UpdateDiagramInput,
 } from '../api/diagrams'
 import {
   createFolder as apiCreateFolder,
   deleteFolder as apiDeleteFolder,
-  listFolders,
   updateFolder as apiUpdateFolder,
 } from '../api/folders'
 import {
   createProject as apiCreateProject,
   deleteProject as apiDeleteProject,
+  getProjectTree,
   listProjects,
   updateProject as apiUpdateProject,
 } from '../api/projects'
@@ -36,9 +37,11 @@ import type {
   CanvasState,
   Comment,
   Diagram,
+  DiagramSummary,
   DocumentationPage,
   Folder,
   Project,
+  ProjectTree,
   PushedDiagram,
   SemanticMetadata,
   ShapeMetadata,
@@ -81,6 +84,8 @@ function recall(key: string): string | null {
 }
 
 let pendingSaves = 0
+// The diagram the latest loadDiagram call asked for; slower earlier calls drop their result.
+let requestedDiagramId: string | null = null
 
 interface AppState {
   workspaces: Workspace[]
@@ -88,7 +93,9 @@ interface AppState {
   projects: Project[]
   activeProject: Project | null
   folders: Folder[]
-  diagrams: Diagram[]
+  diagrams: DiagramSummary[]
+  // Trees of projects opened in this session, so reopening one shows it at once while it refreshes.
+  projectTrees: Record<string, ProjectTree>
   activeDiagram: Diagram | null
   isLoadingWorkspaces: boolean
   isLoadingProject: boolean
@@ -126,8 +133,8 @@ interface AppState {
   renameFolder: (folder: Folder, name: string) => Promise<void>
   deleteFolder: (folder: Folder) => Promise<void>
   createDiagram: (name: string, folderId?: string) => Promise<Diagram | null>
-  renameDiagram: (name: string, diagram?: Diagram) => Promise<void>
-  deleteDiagram: (diagram: Diagram) => Promise<void>
+  renameDiagram: (name: string, diagram?: DiagramSummary) => Promise<void>
+  deleteDiagram: (diagram: DiagramSummary) => Promise<void>
   saveCanvasState: (state: CanvasState) => Promise<void>
   // Returns false when the pushed diagram is not the one open or is older than the local copy.
   applyPushedDiagram: (diagram: PushedDiagram) => boolean
@@ -158,6 +165,43 @@ interface AppState {
 }
 
 export const useAppStore = create<AppState>((set, get) => {
+  function currentTree(projectId: string): ProjectTree | undefined {
+    const state = get()
+    if (state.activeProject?.id === projectId) {
+      return { folders: state.folders, diagrams: state.diagrams }
+    }
+    return state.projectTrees[projectId]
+  }
+
+  // Keeps the cached tree and, for the open project, the visible folders and diagrams in step.
+  function commitTree(projectId: string, tree: ProjectTree): void {
+    const projectTrees = { ...get().projectTrees, [projectId]: tree }
+    if (get().activeProject?.id !== projectId) {
+      set({ projectTrees })
+      return
+    }
+    set({ projectTrees, folders: tree.folders, diagrams: tree.diagrams })
+  }
+
+  function editTree(projectId: string, edit: (tree: ProjectTree) => ProjectTree): void {
+    const tree = currentTree(projectId)
+    if (tree !== undefined) {
+      commitTree(projectId, edit(tree))
+    }
+  }
+
+  function replaceSummary(updated: DiagramSummary): void {
+    editTree(updated.project_id, (tree) => {
+      const index = tree.diagrams.findIndex((item) => item.id === updated.id)
+      if (index === -1 || isOlder(updated.updated_at, tree.diagrams[index].updated_at)) {
+        return tree
+      }
+      const diagrams = [...tree.diagrams]
+      diagrams[index] = toSummary(updated)
+      return { ...tree, diagrams }
+    })
+  }
+
   // The backend PUT replaces every field, so each save sends the full current diagram
   // with only the changed fields overridden.
   async function persistDiagram(patch: Partial<UpdateDiagramInput>, target?: Diagram): Promise<void> {
@@ -176,13 +220,11 @@ export const useAppStore = create<AppState>((set, get) => {
         ...patch,
       })
       // A newer copy may have been pushed by another writer while this save was in flight.
-      const keepNewest = (item: Diagram) =>
-        item.id === updated.id && !isOlder(updated.updated_at, item.updated_at) ? updated : item
       const current = get().activeDiagram
-      set({
-        activeDiagram: current === null ? null : keepNewest(current),
-        diagrams: get().diagrams.map(keepNewest),
-      })
+      if (current?.id === updated.id && !isOlder(updated.updated_at, current.updated_at)) {
+        set({ activeDiagram: updated })
+      }
+      replaceSummary(updated)
       pendingSaves -= 1
       if (pendingSaves === 0) {
         set({ saveStatus: 'saved' })
@@ -192,6 +234,56 @@ export const useAppStore = create<AppState>((set, get) => {
       set({ saveStatus: 'error' })
       throw error
     }
+  }
+
+  // Direct navigation or refresh: find the workspace holding the diagram's project (all
+  // workspaces are asked at once) and load the whole context in parallel.
+  async function findProjectContext(
+    projectId: string,
+  ): Promise<{ workspace: Workspace; projects: Project[] } | null> {
+    const { activeWorkspace, projects } = get()
+    if (activeWorkspace !== null && projects.some((item) => item.id === projectId)) {
+      return { workspace: activeWorkspace, projects }
+    }
+    let workspaces = get().workspaces
+    if (workspaces.length === 0) {
+      workspaces = await listWorkspaces()
+      set({ workspaces })
+    }
+    const projectLists = await Promise.all(workspaces.map((workspace) => listProjects(workspace.id)))
+    const index = projectLists.findIndex((list) => list.some((item) => item.id === projectId))
+    return index === -1 ? null : { workspace: workspaces[index], projects: projectLists[index] }
+  }
+
+  async function openInItsProject(diagram: Diagram, isCurrentRequest: () => boolean): Promise<void> {
+    const context = await findProjectContext(diagram.project_id)
+    if (context === null || !isCurrentRequest()) {
+      return
+    }
+    const { workspace, projects } = context
+    const project = projects.find((item) => item.id === diagram.project_id) as Project
+    const [tree, documentation, comments] = await Promise.all([
+      getProjectTree(project.id),
+      getDocumentation(diagram.id),
+      listComments(diagram.id),
+    ])
+    if (!isCurrentRequest()) {
+      return
+    }
+    remember(LAST_WORKSPACE_KEY, workspace.id)
+    remember(LAST_PROJECT_KEY, project.id)
+    set({
+      activeWorkspace: workspace,
+      projects,
+      activeProject: project,
+      projectTrees: { ...get().projectTrees, [project.id]: tree },
+      folders: tree.folders,
+      diagrams: tree.diagrams,
+      documentation,
+      comments,
+      ...diagramContext(diagram),
+    })
+    void get().loadMembers(workspace.id)
   }
 
   function diagramContext(diagram: Diagram): Partial<AppState> {
@@ -211,6 +303,7 @@ export const useAppStore = create<AppState>((set, get) => {
     activeProject: null,
     folders: [],
     diagrams: [],
+    projectTrees: {},
     activeDiagram: null,
     isLoadingWorkspaces: true,
     isLoadingProject: false,
@@ -276,25 +369,16 @@ export const useAppStore = create<AppState>((set, get) => {
 
     setActiveProject: async (project) => {
       remember(LAST_PROJECT_KEY, project.id)
-      // Clear the previous project's tree immediately; otherwise the newly
-      // expanded project shows the last project's folders/diagrams until the
-      // async fetch resolves, which looks like the tree is caching stale state.
-      const isSameProject = get().activeProject?.id === project.id
-      set({
-        activeProject: project,
-        isLoadingProject: true,
-        ...(isSameProject ? {} : { folders: [], diagrams: [] }),
-      })
+      // Show the cached tree right away (or nothing, never the previous project's tree)
+      // and refresh it in the background.
+      const tree = currentTree(project.id) ?? { folders: [], diagrams: [] }
+      set({ activeProject: project, isLoadingProject: true, folders: tree.folders, diagrams: tree.diagrams })
       try {
-        const [folders, diagrams] = await Promise.all([
-          listFolders(project.id),
-          listDiagrams(project.id),
-        ])
-        if (get().activeProject?.id === project.id) {
-          set({ folders, diagrams })
-        }
+        commitTree(project.id, await getProjectTree(project.id))
       } finally {
-        set({ isLoadingProject: false })
+        if (get().activeProject?.id === project.id) {
+          set({ isLoadingProject: false })
+        }
       }
     },
 
@@ -307,6 +391,7 @@ export const useAppStore = create<AppState>((set, get) => {
     },
 
     closeDiagram: () => {
+      requestedDiagramId = null
       if (get().isPresentationMode) {
         get().exitPresentation()
       }
@@ -319,6 +404,7 @@ export const useAppStore = create<AppState>((set, get) => {
         activeElementId: null,
         presence: EMPTY_PRESENCE,
         saveStatus: 'idle',
+        isLoadingDiagram: false,
       })
     },
 
@@ -327,54 +413,30 @@ export const useAppStore = create<AppState>((set, get) => {
       if (current !== null && current.id === diagramId) {
         return
       }
+      requestedDiagramId = diagramId
+      const isCurrentRequest = () => requestedDiagramId === diagramId
 
-      const known = get().diagrams.find((diagram) => diagram.id === diagramId)
-      if (known !== undefined) {
-        await get().setActiveDiagram(known)
-        return
-      }
-
-      // Direct navigation / refresh: we only have the diagram id, so scan the
-      // workspaces until we find its project, then hydrate the full context.
+      // Listings carry no canvas, so the diagram itself is always fetched, straight by id.
       set({ isLoadingDiagram: true })
       try {
-        let workspaces = get().workspaces
-        if (workspaces.length === 0) {
-          workspaces = await listWorkspaces()
-          set({ workspaces })
+        let diagram: Diagram
+        try {
+          diagram = await getDiagramById(diagramId)
+        } catch {
+          return
         }
-
-        for (const workspace of workspaces) {
-          const projects = await listProjects(workspace.id)
-          for (const project of projects) {
-            const diagrams = await listDiagrams(project.id)
-            const found = diagrams.find((diagram) => diagram.id === diagramId)
-            if (found === undefined) {
-              continue
-            }
-            const [folders, documentation, comments] = await Promise.all([
-              listFolders(project.id),
-              getDocumentation(found.id),
-              listComments(found.id),
-            ])
-            remember(LAST_WORKSPACE_KEY, workspace.id)
-            remember(LAST_PROJECT_KEY, project.id)
-            set({
-              activeWorkspace: workspace,
-              projects,
-              activeProject: project,
-              folders,
-              diagrams,
-              documentation,
-              comments,
-              ...diagramContext(found),
-            })
-            void get().loadMembers(workspace.id)
-            return
-          }
+        if (!isCurrentRequest()) {
+          return
         }
+        if (get().activeProject?.id === diagram.project_id) {
+          await get().setActiveDiagram(diagram)
+          return
+        }
+        await openInItsProject(diagram, isCurrentRequest)
       } finally {
-        set({ isLoadingDiagram: false })
+        if (isCurrentRequest()) {
+          set({ isLoadingDiagram: false })
+        }
       }
     },
 
@@ -406,7 +468,8 @@ export const useAppStore = create<AppState>((set, get) => {
     deleteProject: async (project) => {
       await apiDeleteProject(project.workspace_id, project.id)
       const projects = get().projects.filter((item) => item.id !== project.id)
-      set({ projects })
+      const { [project.id]: _deleted, ...projectTrees } = get().projectTrees
+      set({ projects, projectTrees })
       if (get().activeDiagram?.project_id === project.id) {
         get().closeDiagram()
       }
@@ -426,22 +489,21 @@ export const useAppStore = create<AppState>((set, get) => {
         return
       }
       const folder = await apiCreateFolder(activeProject.id, name, parentId)
-      set({ folders: [...get().folders, folder] })
+      editTree(folder.project_id, (tree) => ({ ...tree, folders: [...tree.folders, folder] }))
     },
 
     renameFolder: async (folder, name) => {
       const updated = await apiUpdateFolder(folder.project_id, folder.id, name, folder.parent_folder_id)
-      set({ folders: get().folders.map((item) => (item.id === updated.id ? updated : item)) })
+      editTree(updated.project_id, (tree) => ({
+        ...tree,
+        folders: tree.folders.map((item) => (item.id === updated.id ? updated : item)),
+      }))
     },
 
     deleteFolder: async (folder) => {
       await apiDeleteFolder(folder.project_id, folder.id)
       // Children are re-parented server side, so reload the tree instead of guessing.
-      const [folders, diagrams] = await Promise.all([
-        listFolders(folder.project_id),
-        listDiagrams(folder.project_id),
-      ])
-      set({ folders, diagrams })
+      commitTree(folder.project_id, await getProjectTree(folder.project_id))
     },
 
     createDiagram: async (name, folderId) => {
@@ -450,17 +512,26 @@ export const useAppStore = create<AppState>((set, get) => {
         return null
       }
       const diagram = await apiCreateDiagram(activeProject.id, name, folderId)
-      set({ diagrams: [...get().diagrams, diagram] })
+      editTree(diagram.project_id, (tree) => ({ ...tree, diagrams: [...tree.diagrams, toSummary(diagram)] }))
       return diagram
     },
 
     renameDiagram: async (name, diagram) => {
-      await persistDiagram({ name }, diagram)
+      const active = get().activeDiagram
+      if (diagram === undefined || diagram.id === active?.id) {
+        await persistDiagram({ name })
+        return
+      }
+      // The PUT replaces every field and summaries have no canvas: rename from the full diagram.
+      await persistDiagram({ name }, await getDiagramById(diagram.id))
     },
 
     deleteDiagram: async (diagram) => {
       await apiDeleteDiagram(diagram.project_id, diagram.id)
-      set({ diagrams: get().diagrams.filter((item) => item.id !== diagram.id) })
+      editTree(diagram.project_id, (tree) => ({
+        ...tree,
+        diagrams: tree.diagrams.filter((item) => item.id !== diagram.id),
+      }))
       if (get().activeDiagram?.id === diagram.id) {
         get().closeDiagram()
       }
@@ -480,9 +551,9 @@ export const useAppStore = create<AppState>((set, get) => {
       const metadataChanged =
         JSON.stringify(pushed.semantic_metadata ?? null) !== JSON.stringify(current.semantic_metadata ?? null)
       const updated = { ...current, ...pushed }
+      replaceSummary(updated)
       set({
         activeDiagram: updated,
-        diagrams: get().diagrams.map((item) => (item.id === updated.id ? updated : item)),
         ...(metadataChanged
           ? { semanticMetadata: (pushed.semantic_metadata as Record<string, ShapeMetadata> | null) ?? {} }
           : {}),
@@ -627,7 +698,16 @@ export const useAppStore = create<AppState>((set, get) => {
       }
       // Leaving drops access right away, so move to another workspace.
       get().closeDiagram()
-      set({ activeWorkspace: null, projects: [], activeProject: null, folders: [], diagrams: [], members: [], myRole: null })
+      set({
+        activeWorkspace: null,
+        projects: [],
+        activeProject: null,
+        folders: [],
+        diagrams: [],
+        projectTrees: {},
+        members: [],
+        myRole: null,
+      })
       await get().loadWorkspaces()
     },
   }

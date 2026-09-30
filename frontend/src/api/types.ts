@@ -27,15 +27,24 @@ export interface Folder {
   updated_at?: string
 }
 
-export interface Diagram {
+// What listings return: everything but the (large) canvas snapshot and metadata.
+export interface DiagramSummary {
   id: string
   project_id: string
   folder_id: string | null
   name: string
-  canvas_state: CanvasState | null
-  semantic_metadata?: SemanticMetadata | null
   created_at?: string
   updated_at?: string
+}
+
+export interface Diagram extends DiagramSummary {
+  canvas_state: CanvasState | null
+  semantic_metadata?: SemanticMetadata | null
+}
+
+export interface ProjectTree {
+  folders: Folder[]
+  diagrams: DiagramSummary[]
 }
 
 // Pushed over the realtime socket to open editors after every saved change to a diagram.

@@ -20,8 +20,11 @@ class AuthenticateUser(Usecase[AuthenticateUserParams, User]):
         identity = await self._verifier.verify(params.token)
         user = await self._repo.get_by_email(identity.email)
         if user is None:
-            return await self._repo.create(User(email=identity.email, name=identity.name))
-        if user.name != identity.name:
-            user.name = identity.name
-            return await self._repo.update(user)
-        return user
+            return await self._repo.create(
+                User(email=identity.email, name=identity.name, picture_url=identity.picture_url)
+            )
+        if (user.name, user.picture_url) == (identity.name, identity.picture_url):
+            return user
+        user.name = identity.name
+        user.picture_url = identity.picture_url
+        return await self._repo.update(user)

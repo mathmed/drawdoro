@@ -74,6 +74,13 @@ def test_should_return_signed_in_user(client: TestClient, authenticate: AsyncMoc
     assert response.json()["email"] == "ana@example.com"
 
 
+def test_should_return_signed_in_user_photo(client: TestClient, authenticate: AsyncMock) -> None:
+    photo = "https://lh3.googleusercontent.com/a/ana"
+    authenticate.execute.return_value = USER.model_copy(update={"picture_url": photo})
+    response = client.get("/me", headers={"Authorization": "Bearer good"})
+    assert response.json()["picture_url"] == photo
+
+
 def test_should_close_websocket_without_valid_token(
     client: TestClient, authenticate: AsyncMock
 ) -> None:

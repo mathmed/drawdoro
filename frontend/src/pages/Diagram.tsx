@@ -16,11 +16,16 @@ export default function DiagramPage() {
       return
     }
     setNotFound(false)
+    // A later navigation supersedes this load; its outcome must not mark the new diagram missing.
+    let isCurrent = true
     void loadDiagram(id).then(() => {
-      if (useAppStore.getState().activeDiagram?.id !== id) {
+      if (isCurrent && useAppStore.getState().activeDiagram?.id !== id) {
         setNotFound(true)
       }
     })
+    return () => {
+      isCurrent = false
+    }
   }, [id, loadDiagram])
 
   if (notFound) {

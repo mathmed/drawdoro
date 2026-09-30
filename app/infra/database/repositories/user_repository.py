@@ -16,7 +16,7 @@ class UserRepositoryImpl(UserRepository):
         return _to_domain(orm) if orm else None
 
     async def create(self, user: User) -> User:
-        orm = UserORM(id=user.id, name=user.name, email=user.email)
+        orm = UserORM(id=user.id, name=user.name, email=user.email, picture_url=user.picture_url)
         self._session.add(orm)
         await self._session.commit()
         await self._session.refresh(orm)
@@ -26,6 +26,7 @@ class UserRepositoryImpl(UserRepository):
         result = await self._session.execute(select(UserORM).where(UserORM.id == user.id))
         orm = result.scalar_one()
         orm.name = user.name
+        orm.picture_url = user.picture_url
         await self._session.commit()
         await self._session.refresh(orm)
         return _to_domain(orm)
@@ -36,6 +37,7 @@ def _to_domain(orm: UserORM) -> User:
         id=orm.id,
         email=orm.email,
         name=orm.name,
+        picture_url=orm.picture_url,
         created_at=orm.created_at,
         updated_at=orm.updated_at,
     )

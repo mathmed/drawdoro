@@ -127,6 +127,11 @@ The app client in the pool needs: no client secret, the *Authorization code gran
 `openid email profile`, the Google identity provider enabled, callback URL `<app origin>/auth/callback`
 and sign-out URL `<app origin>` with no trailing slash (add the `http://localhost:3000` ones for local testing).
 
+Profile photos come from the ID token's `picture` claim: map the Google attribute `picture` to the user pool
+attribute `picture` in the Google identity provider and allow the app client to read it. The photo (https
+URLs only) is stored on the user, returned by `/me` as `picture_url` and shared in the diagram presence;
+without it avatars fall back to the name's initial.
+
 ## Folder structure
 
 ```
@@ -177,7 +182,7 @@ mcp/                      Python MCP server
 
 | Method | Path | Description |
 |---|---|---|
-| GET | /me | Signed-in user (creates it on first sign-in) |
+| GET | /me | Signed-in user (creates it on first sign-in), with the profile photo as `picture_url` |
 | GET/POST | /workspaces/{id}/members | List members / add a member by email (owner) |
 | PUT/DELETE | /workspaces/{id}/members/{user_id} | Change a role (owner) / remove a member (owner, or yourself to leave) |
 | GET | /health | Health check |
@@ -187,7 +192,8 @@ mcp/                      Python MCP server
 | GET/PUT/DELETE | /workspaces/{id}/projects/{id} | Get / update / delete project |
 | GET/POST | /projects/{id}/folders | List / create folders |
 | GET/PUT/DELETE | /projects/{id}/folders/{id} | Get / update / delete folder |
-| GET/POST | /projects/{id}/diagrams | List / create diagrams |
+| GET | /projects/{id}/tree | Folders and diagram summaries of a project in one response (the sidebar tree) |
+| GET/POST | /projects/{id}/diagrams | List diagram summaries (no canvas or metadata) / create a diagram |
 | GET | /diagrams/{id} | Get a diagram by its id alone, as in the editor link `/diagrams/<id>` (used by the MCP server's `open_link`) |
 | GET/PUT/DELETE | /projects/{id}/diagrams/{id} | Get / update / delete diagram. Every saved update is pushed to open editors as `diagram_updated`; editor tabs send `X-Client-Id` so they skip the echo of their own saves |
 | GET/PUT | /diagrams/{id}/documentation | Get / update documentation page |

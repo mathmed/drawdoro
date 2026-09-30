@@ -11,6 +11,7 @@ from app.domain.errors.domain_errors import UnauthorizedError
 from app.domain.usecases.auth.authenticate_user import AuthenticateUser, AuthenticateUserParams
 
 IDENTITY = Identity(subject="sub-1", email="ana@example.com", name="Ana Souza")
+PHOTO = "https://lh3.googleusercontent.com/a/photo"
 
 
 @pytest.fixture
@@ -73,3 +74,27 @@ async def test_should_propagate_invalid_token(
     verifier.verify = AsyncMock(side_effect=UnauthorizedError("bad"))  # type: ignore[method-assign]
     with pytest.raises(UnauthorizedError):
         await sut.execute(AuthenticateUserParams(token="token"))
+
+
+async def test_should_store_profile_photo_on_first_sign_in(
+    sut: AuthenticateUser, verifier: TokenVerifier, repo: UserRepository
+) -> None:
+    verifier.verify = AsyncMock(  # type: ignore[method-assign]
+        return_value=IDENTITY.model_copy(update={"picture_url": PHOTO})
+    )
+    repo.get_by_email = AsyncMock(return_value=None)  # type: ignore[method-assign]
+    user = await sut.execute(AuthenticateUserParams(token="token"))
+    assert user.picture_url == PHOTO
+
+
+async def test_should_refresh_profile_photo_when_it_changed(
+    sut: AuthenticateUser, verifier: TokenVerifier, repo: UserRepository
+) -> None:
+    verifier.verify = AsyncMock(  # type: ignore[method-assign]
+        return_value=IDENTITY.model_copy(update={"picture_url": PHOTO})
+    )
+    existing = User(email="ana@example.com", name="Ana Souza", picture_url=None)
+    repo.get_by_email = AsyncMock(return_value=existing)  # type: ignore[method-assign]
+    user = await sut.execute(AuthenticateUserParams(token="token"))
+    assert (user.name, user.picture_url) == ("Ana Souza", PHOTO)
+    repo.update.assert_awaited_once()  # type: ignore[attr-defined]

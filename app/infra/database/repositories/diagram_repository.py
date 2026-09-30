@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.contracts.diagram_repository import DiagramRepository
 from app.domain.entities.models.diagram import Diagram
+from app.domain.entities.models.diagram_summary import DiagramSummary
 from app.infra.database.models.diagram import DiagramORM
 
 
@@ -60,14 +61,22 @@ class DiagramRepositoryImpl(DiagramRepository):
         await self._session.refresh(orm)
         return _to_domain(orm)
 
-    async def list_by_project(self, project_id: uuid.UUID) -> list[Diagram]:
+    async def list_by_project(self, project_id: uuid.UUID) -> list[DiagramSummary]:
+        # Only the metadata columns: loading every canvas snapshot made listings megabytes long.
         result = await self._session.execute(
-            select(DiagramORM).where(
+            select(
+                DiagramORM.id,
+                DiagramORM.project_id,
+                DiagramORM.folder_id,
+                DiagramORM.name,
+                DiagramORM.created_at,
+                DiagramORM.updated_at,
+            ).where(
                 DiagramORM.project_id == project_id,
                 DiagramORM.deleted_at.is_(None),
             )
         )
-        return [_to_domain(row) for row in result.scalars().all()]
+        return [DiagramSummary.model_validate(row._asdict()) for row in result.all()]
 
     async def list_by_folder(self, folder_id: uuid.UUID) -> list[Diagram]:
         result = await self._session.execute(
