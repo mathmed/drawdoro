@@ -409,6 +409,13 @@ class TestMutationAnalyzer:
 
         assert (finding.status, finding.summary) == (Status.SKIPPED, "No use case changed.")
 
+    def test_should_drop_progress_spinners_from_the_output(self) -> None:
+        output = "⠋ Generating mutants\n⠙ Running stats\nfailed to collect stats. runner returned 1"
+
+        finding = analyze_mutation(fragment(Analysis.MUTATION, output, 1))
+
+        assert finding.details == "failed to collect stats. runner returned 1"
+
     def test_should_fail_without_a_result_line(self) -> None:
         finding = analyze_mutation(fragment(Analysis.MUTATION, "Traceback: boom", 1))
 

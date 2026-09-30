@@ -25,6 +25,8 @@ MAX_COVERAGE_ROWS = 10
 MUTATION_RESULT_PREFIX = "MUTATION_RESULT: "
 UV_NOISE = re.compile(r"^warning: `VIRTUAL_ENV=.*$", re.MULTILINE)
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+# Progress spinners (mutmut) print one braille frame per line
+SPINNER_LINE = re.compile(r"^[\u2800-\u28ff] .*(?:\n|$)", re.MULTILINE)
 
 
 class Analysis(StrEnum):
@@ -192,7 +194,7 @@ class SectionResult:
 
 
 def clean(output: str) -> str:
-    return ANSI_ESCAPE.sub("", UV_NOISE.sub("", output)).strip()
+    return SPINNER_LINE.sub("", ANSI_ESCAPE.sub("", UV_NOISE.sub("", output))).strip()
 
 
 def tail(text: str, limit: int = MAX_DETAILS_CHARS) -> str:
