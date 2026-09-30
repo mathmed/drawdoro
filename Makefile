@@ -1,4 +1,5 @@
-.PHONY: setup dev dev-build run build test test-unit test-mcp test-frontend hooks check-code format-code frontend db
+.PHONY: setup dev dev-build run build test test-unit test-mcp test-frontend hooks check-code format-code frontend db \
+	smoke smoke-mcp lint-imports mutation mutation-report
 
 # Install uv (if missing), project dependencies and git hooks
 setup:
@@ -53,6 +54,31 @@ test-frontend:
 # Run all quality checks (ruff, mypy, bandit, vulture, xenon, pip-audit)
 hooks:
 	uv run pre-commit run --all-files
+
+# Boot smoke: clean Postgres (throwaway container), alembic upgrade head, real API with auth on and
+# off, /health and /ready, then the MCP server against it. Needs docker or SMOKE_DATABASE_URL.
+smoke:
+	./scripts/smoke.sh
+
+# MCP smoke only: streamable-http server, /health, initialize and tools/list
+smoke-mcp:
+	./scripts/smoke_mcp.sh
+
+# Architecture contracts (import-linter) for the API and the MCP server
+lint-imports:
+	uv run lint-imports
+	cd mcp && uv run lint-imports
+
+# Mutation testing of the use cases and domain services (slow: about 10 minutes). Results are
+# cached in mutants/; delete it for a clean run. The report lands in mutants/report.md.
+mutation:
+	uv run mutmut run
+	@$(MAKE) --no-print-directory mutation-report
+
+mutation-report:
+	uv run python scripts/mutation_report.py > mutants/report.md
+	@sed -n '1,4p' mutants/report.md
+	@echo ">> full report: mutants/report.md | inspect a mutant: uv run mutmut show <name>"
 
 # Lint and check formatting
 check-code:

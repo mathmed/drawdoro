@@ -1,0 +1,57 @@
+name: Mutation testing
+
+# Slow (about 10 minutes) and informative: it measures how well the unit tests pin down the use
+# cases and domain services. It never gates a PR; read the job summary or the report artifact.
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      min_score:
+        description: "Fail the run below this mutation score (0 only reports)"
+        required: false
+        default: "0"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mutation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mutmut:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+
+      - name: Run mutmut
+        run: uv run --locked mutmut run --max-children "$(nproc)"
+
+      - name: Report
+        if: always()
+        env:
+          MIN_SCORE: ${{ inputs.min_score || '0' }}
+        run: |
+          uv run --locked python scripts/mutation_report.py --min-score "$MIN_SCORE" \
+            > mutation-report.md || EXIT=$?
+          # The job summary has a size limit: keep the tables and point to the artifact for diffs.
+          sed '/^### Surviving mutants/,$d' mutation-report.md >> "$GITHUB_STEP_SUMMARY"
+          echo "Surviving mutants with diffs: see the mutation-report artifact." >> "$GITHUB_STEP_SUMMARY"
+          uv run --locked mutmut export-cicd-stats || true
+          exit "${EXIT:-0}"
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mutation-report
+          path: |
+            mutation-report.md
+            mutants/mutmut-cicd-stats.json
+          if-no-files-found: ignore

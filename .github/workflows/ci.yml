@@ -21,6 +21,8 @@ jobs:
       - run: uv sync --locked
       - run: uv run --locked ruff check .
       - run: uv run --locked ruff format --check .
+      - name: Architecture contracts (import-linter)
+        run: uv run --locked lint-imports
 
   mcp:
     runs-on: ubuntu-latest
@@ -36,6 +38,27 @@ jobs:
       - run: uv sync --locked
       - run: uv run --locked pytest
       - run: uv run --locked mypy .
+      - name: Architecture contracts (import-linter)
+        run: uv run --locked lint-imports
+
+  # Boots the real API on a clean Postgres (throwaway container started by the script, same image
+  # as docker-compose.yaml), with auth on and off, plus the MCP server against it.
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            uv.lock
+            mcp/uv.lock
+      - run: uv sync --locked
+      - run: uv sync --locked
+        working-directory: mcp
+      - name: Boot smoke (API + migrations + MCP)
+        run: ./scripts/smoke.sh
 
   frontend:
     runs-on: ubuntu-latest
@@ -92,7 +115,7 @@ jobs:
           MINIMUM_ORANGE: 70
 
       - name: Type check
-        run: uv run --locked mypy app tests
+        run: uv run --locked mypy app tests scripts
 
       - name: Security scan
         run: uv run --locked bandit -r app -ll
