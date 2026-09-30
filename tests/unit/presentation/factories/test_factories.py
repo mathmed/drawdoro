@@ -25,6 +25,7 @@ from app.domain.usecases.gallery.delete_gallery_item import DeleteGalleryItem
 from app.domain.usecases.gallery.get_gallery_item import GetGalleryItem
 from app.domain.usecases.gallery.list_gallery_items import ListGalleryItems
 from app.domain.usecases.gallery.rename_gallery_item import RenameGalleryItem
+from app.domain.usecases.health.check_readiness import CheckReadiness
 from app.domain.usecases.project.create_project import CreateProject
 from app.domain.usecases.project.delete_project import DeleteProject
 from app.domain.usecases.project.get_project import GetProject
@@ -67,6 +68,7 @@ from app.presentation.factories.gallery_factories import (
     list_gallery_items_factory,
     rename_gallery_item_factory,
 )
+from app.presentation.factories.health_factories import check_readiness_factory
 from app.presentation.factories.project_factories import (
     create_project_factory,
     delete_project_factory,
@@ -141,3 +143,8 @@ async def test_gallery_factories() -> None:
     assert isinstance(await get_gallery_item_factory(session), GetGalleryItem)
     assert isinstance(await rename_gallery_item_factory(session), RenameGalleryItem)
     assert isinstance(await delete_gallery_item_factory(session), DeleteGalleryItem)
+
+
+async def test_health_factories() -> None:
+    session = MagicMock(spec=AsyncSession)
+    assert isinstance(await check_readiness_factory(session), CheckReadiness)

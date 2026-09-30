@@ -8,6 +8,7 @@ from app.domain.errors.domain_errors import (
     InvalidInputError,
     NotFoundError,
     PayloadTooLargeError,
+    ServiceUnavailableError,
     UnauthorizedError,
 )
 
@@ -18,6 +19,7 @@ STATUS_BY_ERROR: dict[type[DomainError], int] = {
     ForbiddenError: status.HTTP_403_FORBIDDEN,
     InvalidInputError: status.HTTP_422_UNPROCESSABLE_CONTENT,
     PayloadTooLargeError: status.HTTP_413_CONTENT_TOO_LARGE,
+    ServiceUnavailableError: status.HTTP_503_SERVICE_UNAVAILABLE,
 }
 
 
