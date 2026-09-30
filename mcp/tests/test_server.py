@@ -27,6 +27,8 @@ TOOL_NAMES = {
     "update_diagram",
     "edit_shapes",
     "render_diagram",
+    "list_revisions",
+    "restore_revision",
     "get_documentation",
     "update_documentation",
     "list_comments",

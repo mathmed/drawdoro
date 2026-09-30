@@ -1,6 +1,7 @@
 from collections.abc import Callable
 
 import httpx
+from caller_key import ForwardCallerApiKey
 from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 from settings import Settings, Transport
@@ -13,6 +14,7 @@ from tools.documentation import DocumentationTools
 from tools.folders import FolderTools
 from tools.projects import ProjectTools
 from tools.render import BrowserRenderer, Renderer, RenderTools
+from tools.revisions import RevisionTools
 from tools.workspaces import WorkspaceTools
 
 API_TIMEOUT_SECONDS = 30
@@ -29,7 +31,11 @@ list_workspaces, list_projects, list_folders and list_diagrams.
 Canvases are large, so prefer the compact tools: get_diagram_outline to read shapes and their text,
 edit_shapes to create, change or delete only the records that change, and render_diagram to look
 at the result as an image (check it after every edit). Use get_diagram and update_diagram, which
-carry the complete canvas_state, only to rebuild a diagram wholesale."""
+carry the complete canvas_state, only to rebuild a diagram wholesale.
+
+Every change you save is kept in the diagram's history under your name. Pass a one-sentence summary
+to edit_shapes and update_diagram so people can tell what you did; list_revisions shows the
+history and restore_revision undoes a change."""
 
 
 def create_api(settings: Settings, transport: httpx.BaseTransport | None = None) -> BackendApi:
@@ -66,6 +72,7 @@ def create_server(settings: Settings, api: BackendApi, renderer: Renderer) -> MC
         settings.app_slug,
         description=f"MCP server for the {settings.app_name} diagramming tool",
         instructions=INSTRUCTIONS.format(app_name=settings.app_name),
+        middleware=[ForwardCallerApiKey()],
     )
     workspaces = WorkspaceTools(api)
     projects = ProjectTools(api)
@@ -74,6 +81,7 @@ def create_server(settings: Settings, api: BackendApi, renderer: Renderer) -> MC
     render = RenderTools(api, renderer)
     documentation = DocumentationTools(api)
     comments = CommentTools(api)
+    revisions = RevisionTools(api)
     tools: list[Callable[..., object]] = [
         workspaces.list_workspaces,
         projects.list_projects,
@@ -89,6 +97,8 @@ def create_server(settings: Settings, api: BackendApi, renderer: Renderer) -> MC
         diagrams.update_diagram,
         diagrams.edit_shapes,
         render.render_diagram,
+        revisions.list_revisions,
+        revisions.restore_revision,
         documentation.get_documentation,
         documentation.update_documentation,
         comments.list_comments,
