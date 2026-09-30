@@ -29,6 +29,31 @@ npm install
 npm run dev    starts at http://localhost:3000
 ```
 
+### Frontend checks
+
+The frontend needs Node.js 22 or newer. From `frontend/`:
+
+| Command | Description |
+|---|---|
+| `npm run lint` | ESLint (`eslint.config.js`): TypeScript, React Hooks and React Refresh rules |
+| `npm run typecheck` | `tsc --noEmit` over `src/`, tests included |
+| `npm test` | Vitest + React Testing Library on jsdom, once |
+| `npm run test:watch` | Vitest in watch mode |
+| `npm run test:coverage` | Tests with V8 coverage; the report goes to `frontend/coverage/` |
+| `npm run build` | Type check and production build |
+
+Tests live next to the code as `*.test.ts(x)`; shared helpers are in `src/test/`. They cover the pure and critical
+modules (branding, auth session, Zustand stores, formatting and validation utilities) and simple components; the tldraw
+canvas is not unit tested. Tests always run with `VITE_APP_NAME=Test App` (set in `vitest.config.ts`), so they never
+depend on the product name or on a local `.env`.
+
+Coverage thresholds (`vitest.config.ts`) fail the run when coverage drops: a low global floor (about 15%, since the
+canvas and most views are untested) and stricter per-file floors for the covered modules (90% for the auth session,
+branding and utilities; 60% for the stores). Raise them as tests are added.
+
+CI runs the `frontend` job on every pull request and on pushes to `main`: `npm ci`, lint, type check, tests with
+coverage and `vite build`.
+
 Or run everything with Docker:
 ```sh
 make dev
@@ -48,6 +73,7 @@ Health check: `curl http://localhost:8000/health`
 | `make test` | Run all tests with coverage |
 | `make test-unit` | Run only the unit tests |
 | `make test-mcp` | Run the MCP server tests and type check |
+| `make test-frontend` | Run the frontend lint, type check and tests with coverage |
 | `make hooks` | Run all quality checks (ruff, mypy, bandit, vulture, xenon, pip-audit) |
 | `make format-code` | Fix lint issues and format the code |
 | `make migrate` | Apply database migrations (requires running DB) |
