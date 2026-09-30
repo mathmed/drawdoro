@@ -21,6 +21,7 @@ import { useSelectionShortcuts } from '../../hooks/useSelectionShortcuts'
 import { useAppStore } from '../../store/useAppStore'
 import { useThemeStore } from '../../store/useThemeStore'
 import { registerGeoDefaults } from '../../shapes/CustomGeoShapeUtil'
+import { registerSloppinessDefaults } from '../../shapes/sloppiness'
 import { GALLERY_DRAG_TYPE, insertGalleryItem, saveSelectionToGallery } from '../../utils/gallery'
 import { canRunSelection, runSelection, SELECTION_COMMANDS } from '../../utils/shapeSelection'
 import CommentBadge from '../comments/CommentBadge'
@@ -143,6 +144,7 @@ export default function DrawingCanvas({ diagram }: DrawingCanvasProps) {
     }
     mountedEditor.setStyleForNextShapes(ArrowShapeKindStyle, 'elbow')
     const unregisterGeoDefaults = registerGeoDefaults(mountedEditor)
+    const unregisterSloppinessDefaults = registerSloppinessDefaults(mountedEditor)
     mountedEditor.focus()
 
     let timer: ReturnType<typeof setTimeout>
@@ -166,6 +168,7 @@ export default function DrawingCanvas({ diagram }: DrawingCanvasProps) {
       clearTimeout(timer)
       unlisten()
       unregisterGeoDefaults()
+      unregisterSloppinessDefaults()
       setEditor(null)
     }
   }

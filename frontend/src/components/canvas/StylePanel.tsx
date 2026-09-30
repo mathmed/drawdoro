@@ -10,7 +10,6 @@ import {
 import type { ReactNode } from 'react'
 
 import {
-  effectiveFontSize,
   FONT_SIZE_PRESETS,
   edgesOf,
   fillTintsFor,
@@ -21,6 +20,15 @@ import {
   strokeColorOf,
   type Edges,
 } from '../../shapes/CustomGeoShapeUtil'
+import { clampFontSize, hasFontSize, MAX_FONT_SIZE, MIN_FONT_SIZE, shapeFontSize } from '../../shapes/fontSize'
+import {
+  hasDash,
+  nextSloppinessOf,
+  setNextSloppiness,
+  sloppinessMetaPatch,
+  sloppinessOf,
+  type Sloppiness,
+} from '../../shapes/sloppiness'
 import {
   ArrowShapeArrowheadEndStyle,
   ArrowShapeArrowheadStartStyle,
@@ -164,11 +172,71 @@ function Line({ width, dash }: { width: number; dash?: string }) {
   )
 }
 
-function Squiggle({ wobble }: { wobble: boolean }) {
+const SQUIGGLES: Record<Sloppiness, string> = {
+  architect: 'M2 12c3-5 6-5 7-2s4 3 7-3',
+  moderate: 'M2 12c2-4 4-5 6-2s3 2 5-1 2-3 3-2',
+  artist: 'M2 11c2-4 3-4 5-1s3 3 5-1 3-3 4 0',
+}
+
+const SLOPPINESS_LEVELS: { level: Sloppiness; label: string }[] = [
+  { level: 'architect', label: 'Architect — clean lines' },
+  { level: 'moderate', label: 'Draftsman — lightly hand-drawn' },
+  { level: 'artist', label: 'Artist — hand-drawn' },
+]
+
+function Squiggle({ level }: { level: Sloppiness }) {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
-      {wobble ? <path d="M2 11c2-4 3-4 5-1s3 3 5-1 3-3 4 0" /> : <path d="M2 12c3-5 6-5 7-2s4 3 7-3" />}
+      <path d={SQUIGGLES[level]} />
     </svg>
+  )
+}
+
+// Commits on Enter or blur, so typing "36" does not resize the text to 3px on the way there.
+// Keyed by the shared value, the field resets whenever the selection or its size changes.
+function FontSizeField({ value, onCommit }: { value: number | null; onCommit: (px: number) => void }) {
+  function commit(input: HTMLInputElement): void {
+    const px = Number(input.value)
+    if (input.value.trim() === '' || !Number.isFinite(px)) {
+      input.value = value === null ? '' : String(value)
+      return
+    }
+    const next = clampFontSize(px)
+    input.value = String(next)
+    if (next !== value) {
+      onCommit(next)
+    }
+  }
+
+  const step = (delta: number) => onCommit(clampFontSize((value ?? FONT_SIZE_PRESETS[1].px) + delta))
+
+  return (
+    <div className="sp-number">
+      <button type="button" className="sp-option" aria-label="Decrease font size" title="Decrease font size" onClick={() => step(-2)}>
+        −
+      </button>
+      <input
+        key={value ?? 'mixed'}
+        type="number"
+        className="sp-number-input"
+        aria-label="Font size in px"
+        min={MIN_FONT_SIZE}
+        max={MAX_FONT_SIZE}
+        step={1}
+        defaultValue={value ?? ''}
+        placeholder="Mixed"
+        onBlur={(event) => commit(event.currentTarget)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            commit(event.currentTarget)
+          }
+        }}
+      />
+      <span className="sp-number-unit">px</span>
+      <button type="button" className="sp-option" aria-label="Increase font size" title="Increase font size" onClick={() => step(2)}>
+        +
+      </button>
+    </div>
   )
 }
 
@@ -237,16 +305,32 @@ function CustomStylePanelContent() {
     },
     [editor],
   )
-  // Label size of geo shapes, independent from the stroke width (null when they disagree).
-  const geoFontSize = useValue(
-    'geo font size',
+  // Text size in px of text, geo labels and arrow labels, independent from the stroke width
+  // (null when they disagree).
+  const fontSize = useValue(
+    'font size',
     () => {
       const selected = editor.getSelectedShapes()
-      if (!editor.isIn('select') || selected.length === 0 || !selected.every(isGeo)) {
+      if (!editor.isIn('select') || selected.length === 0 || !selected.every(hasFontSize)) {
         return undefined
       }
-      const sizes = new Set(selected.map((shape) => effectiveFontSize(shape)))
+      const sizes = new Set(selected.map(shapeFontSize))
       return sizes.size === 1 ? [...sizes][0] : null
+    },
+    [editor],
+  )
+  // Level of the solid lines in the selection, or of the next shapes when nothing is selected
+  // (null when they disagree or some are dashed).
+  const sloppiness = useValue<Sloppiness | null>(
+    'sloppiness',
+    () => {
+      const selected = editor.isIn('select') ? editor.getSelectedShapes() : []
+      if (selected.length === 0) {
+        return nextSloppinessOf(editor, editor.getStyleForNextShape(DefaultDashStyle))
+      }
+      const levels = new Set(selected.filter(hasDash).map(sloppinessOf))
+      const [level] = [...levels]
+      return levels.size === 1 && level !== undefined ? level : null
     },
     [editor],
   )
@@ -327,8 +411,18 @@ function CustomStylePanelContent() {
   function applyFontSize(px: number): void {
     editor.markHistoryStoppingPoint('change font size')
     editor.run(() => {
-      updateGeoMeta({ fontSize: px })
+      const targets = editor.getSelectedShapes().filter(hasFontSize)
+      editor.updateShapes(targets.map((shape) => ({ id: shape.id, type: shape.type, meta: { ...shape.meta, fontSize: px } })))
       setNextDefaults(editor, { fontSize: px })
+    })
+  }
+
+  function applySloppiness(level: Sloppiness): void {
+    apply(DefaultDashStyle, level === 'architect' ? 'solid' : 'draw')
+    editor.run(() => {
+      const targets = editor.isIn('select') ? editor.getSelectedShapes().filter(hasDash) : []
+      editor.updateShapes(targets.map((shape) => ({ id: shape.id, type: shape.type, meta: sloppinessMetaPatch(level) })))
+      setNextSloppiness(editor, level)
     })
   }
 
@@ -343,7 +437,7 @@ function CustomStylePanelContent() {
   }
 
   // tldraw models "sloppy" as a dash style, so stroke style and sloppiness share one prop:
-  // a solid line is either `solid` (architect) or `draw` (artist).
+  // a solid line is either `solid` (architect) or `draw` (draftsman or artist, see sloppiness.ts).
   const isSolidLine = dash === 'solid' || dash === 'draw'
 
   return (
@@ -401,7 +495,8 @@ function CustomStylePanelContent() {
         </Section>
       ) : null}
 
-      {size !== undefined ? (
+      {/* Plain text has no stroke: tldraw's size is only its font size, covered by the section below. */}
+      {size !== undefined && !(isTextOnly && fontSize !== undefined) ? (
         <Section title={isTextOnly ? 'Font size' : 'Stroke width'}>
           {(
             [
@@ -428,16 +523,18 @@ function CustomStylePanelContent() {
         </Section>
       ) : null}
 
-      {geoFontSize !== undefined ? (
-        <Section title="Font size">
-          {FONT_SIZE_PRESETS.map(({ label, px }) => (
-            <Option key={px} active={geoFontSize === px} label={`${label} — ${px}px`} onSelect={() => applyFontSize(px)}>
-              <span style={{ fontSize: 11 + FONT_SIZE_PRESETS.findIndex((item) => item.px === px) * 1.5, fontWeight: 600 }}>
-                {label}
-              </span>
-            </Option>
-          ))}
-        </Section>
+      {fontSize !== undefined ? (
+        <div className="sp-section">
+          <div className="sp-title">Font size</div>
+          <div className="sp-row">
+            {FONT_SIZE_PRESETS.map(({ label, px }, index) => (
+              <Option key={px} active={fontSize === px} label={`${label} — ${px}px`} onSelect={() => applyFontSize(px)}>
+                <span style={{ fontSize: 11 + index * 1.5, fontWeight: 600 }}>{label}</span>
+              </Option>
+            ))}
+          </div>
+          <FontSizeField value={fontSize} onCommit={applyFontSize} />
+        </div>
       ) : null}
 
       {dash !== undefined ? (
@@ -458,12 +555,17 @@ function CustomStylePanelContent() {
             </Option>
           </Section>
           <Section title="Sloppiness">
-            <Option active={dash === 'solid'} disabled={!isSolidLine} label="Architect — clean lines" onSelect={() => apply(DefaultDashStyle, 'solid')}>
-              <Squiggle wobble={false} />
-            </Option>
-            <Option active={dash === 'draw'} disabled={!isSolidLine} label="Artist — hand-drawn" onSelect={() => apply(DefaultDashStyle, 'draw')}>
-              <Squiggle wobble />
-            </Option>
+            {SLOPPINESS_LEVELS.map(({ level, label }) => (
+              <Option
+                key={level}
+                active={isSolidLine && sloppiness === level}
+                disabled={!isSolidLine}
+                label={label}
+                onSelect={() => applySloppiness(level)}
+              >
+                <Squiggle level={level} />
+              </Option>
+            ))}
           </Section>
         </>
       ) : null}

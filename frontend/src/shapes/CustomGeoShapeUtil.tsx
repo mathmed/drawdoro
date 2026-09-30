@@ -18,12 +18,15 @@ import {
   type TLShape,
 } from 'tldraw'
 
+import { sloppinessOffsetScale } from './sloppiness'
+
 // Excalidraw-style extras that tldraw does not model. They live in `meta`, so they are saved,
 // synced and exported with the shape while plain tldraw keeps rendering its defaults.
 //   meta.edges       'sharp' | 'round'   rounded corners (rectangles only)
 //   meta.strokeColor '#rrggbb'           custom colour, overrides props.color; fills derive their
 //                                        tint from it exactly like tldraw does for its palette
-//   meta.fontSize    number (px)         label size independent from the stroke width
+//   meta.fontSize    number (px)         label size independent from the stroke width (also read
+//                                        by the tldraw patch for text and arrow labels)
 
 export type Edges = 'sharp' | 'round'
 
@@ -183,7 +186,14 @@ function RoundedBody({ shape, w, h, scale }: { shape: TLGeoShape; w: number; h: 
 
   let outline: ReactNode
   if (dash === 'draw') {
-    outline = path.toSvg({ style: 'draw', strokeWidth, randomSeed: shape.id, roundness, props: { fill: 'none', stroke } })
+    outline = path.toSvg({
+      style: 'draw',
+      strokeWidth,
+      randomSeed: shape.id,
+      roundness,
+      offsetScale: sloppinessOffsetScale(shape),
+      props: { fill: 'none', stroke },
+    })
   } else {
     const dashArray = { solid: undefined, dashed: `${strokeWidth * 2} ${strokeWidth * 2}`, dotted: `0 ${strokeWidth * 2}` }[dash]
     outline = (
@@ -403,14 +413,22 @@ export function setNextDefaults(editor: Editor, patch: Partial<NextShapeDefaults
   editor.updateInstanceState({ meta: { ...meta, [NEXT_KEY]: { ...getNextDefaults(editor), ...patch } } })
 }
 
-// New geo shapes inherit the last edges/colour choices, the way tldraw applies its own styles.
-// Shapes arriving from other peers are left untouched so every client renders the same thing.
+// New geo shapes inherit the last edges/colour choices, the way tldraw applies its own styles;
+// text and arrows inherit the font size. Shapes arriving from other peers are left untouched so
+// every client renders the same thing.
 export function registerGeoDefaults(editor: Editor): () => void {
   return editor.sideEffects.registerBeforeCreateHandler('shape', (shape, source) => {
-    if (source === 'remote' || !isGeo(shape)) {
+    if (source === 'remote') {
       return shape
     }
     const next = getNextDefaults(editor)
+    if (!isGeo(shape)) {
+      const takesFontSize = shape.type === 'text' || shape.type === 'arrow'
+      if (!takesFontSize || shape.meta.fontSize !== undefined || next.fontSize === null) {
+        return shape
+      }
+      return { ...shape, meta: { ...shape.meta, fontSize: next.fontSize } }
+    }
     const meta = { ...shape.meta }
     if (meta.edges === undefined && shape.props.geo === 'rectangle') {
       meta.edges = next.edges

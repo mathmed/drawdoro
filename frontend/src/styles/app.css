@@ -1257,6 +1257,44 @@ button.breadcrumb:hover {
   color: var(--text-subtle);
 }
 
+/* Font size field: − [ px ] + */
+.sp-number {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.sp-number-input {
+  width: 56px;
+  height: 30px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-muted);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: center;
+  -moz-appearance: textfield;
+}
+
+.sp-number-input::-webkit-inner-spin-button,
+.sp-number-input::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
+.sp-number-input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.sp-number-unit {
+  font-size: 12px;
+  color: var(--text-subtle);
+}
+
 .sp-option:disabled {
   opacity: 0.35;
   background: var(--bg-muted);
