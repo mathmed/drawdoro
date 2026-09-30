@@ -28,6 +28,9 @@ make test         all tests with coverage (fails under 80%)
 make test-unit    only the fast unit tests
 make hooks        all quality checks: ruff, mypy, bandit, vulture, xenon, pip-audit
 make format-code  fix lint issues and format with ruff
+make smoke        boot smoke: clean Postgres + migrations + real API (auth on/off) + MCP
+make lint-imports architecture contracts (import-linter) for app/ and mcp/
+make mutation     mutation testing of use cases and domain services (slow, weekly in CI)
 ```
 
 Always use `uv run` for the backend. Frontend: `cd frontend && npm install && npm run dev`. MCP: `cd mcp && uv run python server.py`.
@@ -70,9 +73,18 @@ tests/integration/ HTTP tests with TestClient
 
 1. The app imports: `uv run python -c "import app.main.main"`.
 2. New environment variables have a default or an entry in `.env.example`.
-3. `make hooks` and `make test` pass. A PR with failing checks is not a PR.
+3. `make hooks`, `make test`, `make lint-imports` and `make smoke` pass. A PR with failing checks is not a PR.
 4. Existing routes are not removed or renamed unless the task asks for it.
 5. The README is updated if the change affects setup, commands, routes, env vars or architecture.
+
+## Validation of agent-generated code
+
+- Run `make smoke` (boots the real API on a clean, migrated Postgres, and the MCP server) and
+  `make lint-imports` (architecture contracts) before opening a PR, besides `make hooks` and `make test`.
+- Never relax an import-linter contract (`[tool.importlinter]` in `pyproject.toml` or `mcp/pyproject.toml`)
+  nor add `ignore_imports` without the owner's approval: fix the import instead.
+- Never remove or rename `/health` (liveness) or `/ready` (readiness): deploy probes depend on them.
+- `make mutation` is slow and runs weekly in CI; use it to find weak tests, not as a PR gate.
 
 ## Workflow
 
