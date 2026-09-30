@@ -62,6 +62,7 @@ tests/integration/ HTTP tests with TestClient
 | DocumentationPage | Markdown page linked to a Diagram (one per diagram) |
 | Comment | Anchored to a diagram element via element_id |
 | CustomShape | tldraw custom shape owned by a user or Workspace |
+| GalleryItem | Personal reusable item (tldraw shapes snapshot or image) visible only to its owner |
 | User | Member of one or more Workspaces |
 | WorkspaceMember | User x Workspace join with role: owner/editor/viewer |
 

@@ -72,6 +72,8 @@ Health check: `curl http://localhost:8000/health`
 | `COGNITO_USER_POOL_ID` | - | User pool whose ID tokens the API accepts |
 | `COGNITO_CLIENT_ID` | - | App client id expected in the token audience |
 | `SERVICE_API_KEY` | - | Shared secret that lets trusted services (the MCP server) call the API via `X-API-Key` |
+| `GALLERY_MAX_IMAGE_BYTES` | `2097152` (2 MiB) | Largest image accepted in the personal gallery (PNG, JPEG, GIF or WebP; stored in Postgres) |
+| `GALLERY_MAX_SHAPES_BYTES` | `5242880` (5 MiB) | Largest saved selection (tldraw content JSON, inlined assets included) accepted in the personal gallery |
 | `MCP_API_URL` | `http://localhost:8000` | MCP server: backend URL |
 | `MCP_API_KEY` | - | MCP server: value sent as `X-API-Key` (same as `SERVICE_API_KEY`) |
 | `MCP_FRONTEND_URL` | `http://localhost:3000` | MCP server: frontend whose `/render` page `render_diagram` opens in a headless Chromium |
@@ -192,6 +194,8 @@ mcp/                      Python MCP server
 | GET/POST | /diagrams/{id}/comments | List / create comments |
 | POST | /diagrams/{id}/share | Generate (or return) the diagram's shareable link token |
 | GET | /share/{share_token} | Public: open a shared diagram by token, no sign-in required (used by guests) |
+| GET/POST | /gallery | List the signed-in user's gallery items (without payloads) / save a selection (`kind=shapes`, tldraw content) or an image (`kind=image`, base64) with a PNG thumbnail |
+| GET/PATCH/DELETE | /gallery/{id} | Get an item with its payload / rename / delete it. Items are private: someone else's item answers 404 |
 | WS | /ws/diagrams/{id} | Real-time collaboration: broadcasts canvas updates, cursors, peer count and saved changes (`diagram_updated`, including those made through the API or the MCP server) to everyone connected to the same diagram. An agent that reads or saves the diagram through the MCP server (`X-Agent-Name`, honoured only with the service key when auth is on) is listed in the presence for 60s after its last call. Guests join with `?share=<token>&name=<name>` as read-only viewers |
 
 All routes except `/health` return `501 Not Implemented` until infra is wired.

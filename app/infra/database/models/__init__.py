@@ -3,6 +3,7 @@ from app.infra.database.models.custom_shape import CustomShapeORM
 from app.infra.database.models.diagram import DiagramORM
 from app.infra.database.models.documentation_page import DocumentationPageORM
 from app.infra.database.models.folder import FolderORM
+from app.infra.database.models.gallery_item import GalleryItemORM
 from app.infra.database.models.project import ProjectORM
 from app.infra.database.models.user import UserORM
 from app.infra.database.models.workspace import Base, WorkspaceORM
@@ -19,4 +20,5 @@ __all__ = [
     "DocumentationPageORM",
     "CommentORM",
     "CustomShapeORM",
+    "GalleryItemORM",
 ]

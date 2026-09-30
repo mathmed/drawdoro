@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     cognito_client_id: str = ""
     # Lets trusted services (the MCP server) call the API without a user session.
     service_api_key: str = ""
+    # Personal gallery limits. Images are stored in Postgres, so keep them small.
+    gallery_max_image_bytes: int = 2 * 1024 * 1024
+    gallery_max_shapes_bytes: int = 5 * 1024 * 1024
 
     @property
     def is_production(self) -> bool:

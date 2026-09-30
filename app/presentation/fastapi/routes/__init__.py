@@ -4,6 +4,7 @@ from .diagram_routes import diagram_by_id_router
 from .diagram_routes import router as diagram_router
 from .documentation_routes import router as documentation_router
 from .folder_routes import router as folder_router
+from .gallery_routes import router as gallery_router
 from .health_routes import router as health_router
 from .project_routes import router as project_router
 from .share_routes import public_router as public_share_router
@@ -27,4 +28,5 @@ protected_routers = [
     documentation_router,
     comment_router,
     share_router,
+    gallery_router,
 ]

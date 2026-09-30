@@ -2,6 +2,7 @@ from unittest.mock import MagicMock
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.settings import Settings
 from app.domain.usecases.comment.create_comment import CreateComment
 from app.domain.usecases.comment.delete_comment import DeleteComment
 from app.domain.usecases.comment.list_comments import ListComments
@@ -19,6 +20,11 @@ from app.domain.usecases.folder.delete_folder import DeleteFolder
 from app.domain.usecases.folder.get_folder import GetFolder
 from app.domain.usecases.folder.list_folders import ListFolders
 from app.domain.usecases.folder.update_folder import UpdateFolder
+from app.domain.usecases.gallery.create_gallery_item import CreateGalleryItem
+from app.domain.usecases.gallery.delete_gallery_item import DeleteGalleryItem
+from app.domain.usecases.gallery.get_gallery_item import GetGalleryItem
+from app.domain.usecases.gallery.list_gallery_items import ListGalleryItems
+from app.domain.usecases.gallery.rename_gallery_item import RenameGalleryItem
 from app.domain.usecases.project.create_project import CreateProject
 from app.domain.usecases.project.delete_project import DeleteProject
 from app.domain.usecases.project.get_project import GetProject
@@ -53,6 +59,13 @@ from app.presentation.factories.folder_factories import (
     get_folder_factory,
     list_folders_factory,
     update_folder_factory,
+)
+from app.presentation.factories.gallery_factories import (
+    create_gallery_item_factory,
+    delete_gallery_item_factory,
+    get_gallery_item_factory,
+    list_gallery_items_factory,
+    rename_gallery_item_factory,
 )
 from app.presentation.factories.project_factories import (
     create_project_factory,
@@ -119,3 +132,12 @@ async def test_documentation_factories() -> None:
     session = MagicMock(spec=AsyncSession)
     assert isinstance(await get_documentation_page_factory(session), GetDocumentationPage)
     assert isinstance(await upsert_documentation_page_factory(session), UpsertDocumentationPage)
+
+
+async def test_gallery_factories() -> None:
+    session = MagicMock(spec=AsyncSession)
+    assert isinstance(await create_gallery_item_factory(session, Settings()), CreateGalleryItem)
+    assert isinstance(await list_gallery_items_factory(session), ListGalleryItems)
+    assert isinstance(await get_gallery_item_factory(session), GetGalleryItem)
+    assert isinstance(await rename_gallery_item_factory(session), RenameGalleryItem)
+    assert isinstance(await delete_gallery_item_factory(session), DeleteGalleryItem)

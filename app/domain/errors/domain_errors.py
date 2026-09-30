@@ -18,3 +18,11 @@ class UnauthorizedError(DomainError):
 
 class ForbiddenError(DomainError):
     pass
+
+
+class InvalidInputError(DomainError):
+    pass
+
+
+class PayloadTooLargeError(DomainError):
+    pass
