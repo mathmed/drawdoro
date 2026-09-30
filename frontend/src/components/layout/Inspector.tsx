@@ -1,9 +1,10 @@
-import { BookOpenText, Images, MessageSquare, Tags, X } from 'lucide-react'
+import { BookOpenText, History, Images, MessageSquare, Tags, X } from 'lucide-react'
 
 import { useAppStore, type InspectorTab } from '../../store/useAppStore'
 import CommentsPanel from '../comments/CommentsPanel'
 import DocsPanel from '../docs/DocsPanel'
 import GalleryPanel from '../gallery/GalleryPanel'
+import HistoryPanel from '../history/HistoryPanel'
 import SemanticPanel from '../semantic/SemanticPanel'
 
 const TABS: { id: InspectorTab; label: string; icon: typeof Tags }[] = [
@@ -11,6 +12,7 @@ const TABS: { id: InspectorTab; label: string; icon: typeof Tags }[] = [
   { id: 'docs', label: 'Docs', icon: BookOpenText },
   { id: 'comments', label: 'Comments', icon: MessageSquare },
   { id: 'gallery', label: 'Gallery', icon: Images },
+  { id: 'history', label: 'History', icon: History },
 ]
 
 export default function Inspector() {
@@ -27,17 +29,21 @@ export default function Inspector() {
         <div className="inspector-tabs" role="tablist">
           {TABS.map(({ id, label, icon: Icon }) => {
             const count = counts[id] ?? 0
+            const isSelected = inspectorTab === id
+            // Only the open tab spells out its name, so every tab fits the panel.
             return (
               <button
                 key={id}
                 type="button"
                 role="tab"
                 className="inspector-tab"
-                aria-selected={inspectorTab === id}
+                aria-selected={isSelected}
+                aria-label={label}
+                data-tooltip={isSelected ? undefined : label}
                 onClick={() => openInspector(id)}
               >
                 <Icon size={14} />
-                {label}
+                {isSelected ? label : null}
                 {count > 0 ? <span className="count">{count}</span> : null}
               </button>
             )
@@ -52,6 +58,7 @@ export default function Inspector() {
         {inspectorTab === 'docs' ? <DocsPanel /> : null}
         {inspectorTab === 'comments' ? <CommentsPanel /> : null}
         {inspectorTab === 'gallery' ? <GalleryPanel /> : null}
+        {inspectorTab === 'history' ? <HistoryPanel /> : null}
       </div>
     </aside>
   )

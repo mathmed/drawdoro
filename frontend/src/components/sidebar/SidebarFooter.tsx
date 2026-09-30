@@ -1,9 +1,11 @@
-import { LogOut, Monitor, Moon, Sun } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { KeyRound, LogOut, Monitor, Moon, Sparkles, Sun } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
 
 import { logout } from '../../auth/session'
 import { useAuthStore } from '../../store/useAuthStore'
 import { useThemeStore, type ThemePreference } from '../../store/useThemeStore'
+import ApiKeysDialog from '../account/ApiKeysDialog'
+import ConnectClaudeDialog from '../account/ConnectClaudeDialog'
 import Logo from '../ui/Logo'
 import Menu from '../ui/Menu'
 import UserAvatar from '../ui/UserAvatar'
@@ -18,15 +20,20 @@ export default function SidebarFooter() {
   const profile = useAuthStore((state) => state.profile)
   const themePreference = useThemeStore((state) => state.preference)
   const setThemePreference = useThemeStore((state) => state.setPreference)
+  const [accountDialog, setAccountDialog] = useState<'connect' | 'keys' | null>(null)
 
   return (
     <div className="sidebar-footer">
+      {accountDialog === 'connect' ? <ConnectClaudeDialog onClose={() => setAccountDialog(null)} /> : null}
+      {accountDialog === 'keys' ? <ApiKeysDialog onClose={() => setAccountDialog(null)} /> : null}
       {profile !== null ? (
         <Menu
           side="top"
           className="menu-anchor user-anchor"
           items={[
             { kind: 'label', label: profile.email },
+            { label: 'Connect Claude', icon: <Sparkles size={15} />, onSelect: () => setAccountDialog('connect') },
+            { label: 'API keys', icon: <KeyRound size={15} />, onSelect: () => setAccountDialog('keys') },
             { label: 'Sign out', icon: <LogOut size={15} />, onSelect: logout },
           ]}
           trigger={({ toggle }) => (
