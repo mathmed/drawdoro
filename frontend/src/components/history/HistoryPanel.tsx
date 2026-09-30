@@ -9,10 +9,11 @@ import { useAppStore } from '../../store/useAppStore'
 import { confirmDialog } from '../../store/useDialogStore'
 import { toast } from '../../store/useToastStore'
 import { colorFor } from '../../utils/avatar'
-import { initial, timeAgo } from '../../utils/format'
+import { timeAgo } from '../../utils/format'
 import { revisionAuthor, revisionDescription } from '../../utils/revisions'
 import { shapeUtils } from '../canvas/shapeUtils'
 import EmptyState from '../ui/EmptyState'
+import UserAvatar from '../ui/UserAvatar'
 import '../../styles/history.css'
 
 function RevisionAvatar({ revision }: { revision: DiagramRevision }) {
@@ -33,16 +34,21 @@ function RevisionAvatar({ revision }: { revision: DiagramRevision }) {
       </span>
     )
   }
-  if (revision.author_picture_url !== null) {
-    return <img className="revision-avatar" src={revision.author_picture_url} alt="" referrerPolicy="no-referrer" />
+  const background = revision.author_id !== null ? { background: colorFor(revision.author_id) } : undefined
+  if (revision.author_name === null && revision.author_picture_url === null) {
+    return (
+      <span className="revision-avatar" style={background}>
+        <User size={14} />
+      </span>
+    )
   }
   return (
-    <span
+    <UserAvatar
       className="revision-avatar"
-      style={revision.author_id !== null ? { background: colorFor(revision.author_id) } : undefined}
-    >
-      {revision.author_name !== null ? initial(revision.author_name) : <User size={14} />}
-    </span>
+      name={revision.author_name ?? ''}
+      pictureUrl={revision.author_picture_url}
+      style={background}
+    />
   )
 }
 

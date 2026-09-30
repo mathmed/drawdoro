@@ -14,10 +14,15 @@ interface UseRevisionsResult {
   restore: (revision: DiagramRevision) => Promise<void>
 }
 
+interface LoadedRevisions {
+  diagramId: string
+  revisions: DiagramRevision[]
+}
+
 export function useRevisions(diagramId: string | null): UseRevisionsResult {
   const updatedAt = useAppStore((state) => state.activeDiagram?.updated_at)
-  const [revisions, setRevisions] = useState<DiagramRevision[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  // Keyed by diagram so switching diagrams shows nothing (and "loading") until its own list arrives.
+  const [loaded, setLoaded] = useState<LoadedRevisions | null>(null)
   const request = useRef(0)
 
   const refresh = useCallback(async () => {
@@ -26,20 +31,18 @@ export function useRevisions(diagramId: string | null): UseRevisionsResult {
     }
     const current = ++request.current
     try {
-      const loaded = await listRevisions(diagramId)
+      const revisions = await listRevisions(diagramId)
       if (current === request.current) {
-        setRevisions(loaded)
+        setLoaded({ diagramId, revisions })
       }
     } finally {
       if (current === request.current) {
-        setIsLoading(false)
+        setLoaded((previous) => (previous?.diagramId === diagramId ? previous : { diagramId, revisions: [] }))
       }
     }
   }, [diagramId])
 
   useEffect(() => {
-    setIsLoading(true)
-    setRevisions([])
     void refresh()
   }, [refresh])
 
@@ -66,5 +69,6 @@ export function useRevisions(diagramId: string | null): UseRevisionsResult {
     [diagramId, refresh],
   )
 
-  return { revisions, isLoading, restore }
+  const isCurrent = loaded !== null && loaded.diagramId === diagramId
+  return { revisions: isCurrent ? loaded.revisions : [], isLoading: !isCurrent, restore }
 }
