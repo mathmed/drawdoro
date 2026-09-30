@@ -34,7 +34,11 @@ class ActiveAgent:
     expiry: asyncio.Task[None]
 
     def presence_entry(self) -> dict[str, str | None]:
-        entry: dict[str, str | None] = {"id": self.identity.id, "name": self.identity.name, "kind": PresenceKind.AGENT}
+        entry: dict[str, str | None] = {
+            "id": self.identity.id,
+            "name": self.identity.name,
+            "kind": PresenceKind.AGENT,
+        }
         owner = {
             "owner_id": str(self.identity.owner_id) if self.identity.owner_id else None,
             "owner_name": self.identity.owner_name,
