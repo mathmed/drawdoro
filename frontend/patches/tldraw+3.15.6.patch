@@ -297,6 +297,20 @@ index 7f81453..0f910eb 100644
    const maybeFixedWidth = props.autoSize ? null : Math.max(minWidth, Math.floor(w));
    const html = (0, import_richText.renderHtmlFromRichTextForMeasurement)(editor, richText);
    const result = editor.textMeasure.measureHtml(html, {
+diff --git a/node_modules/tldraw/dist-cjs/lib/ui/components/ContextMenu/DefaultContextMenu.js b/node_modules/tldraw/dist-cjs/lib/ui/components/ContextMenu/DefaultContextMenu.js
+index e4c3515..cc908e9 100644
+--- a/node_modules/tldraw/dist-cjs/lib/ui/components/ContextMenu/DefaultContextMenu.js
++++ b/node_modules/tldraw/dist-cjs/lib/ui/components/ContextMenu/DefaultContextMenu.js
+@@ -92,7 +92,8 @@ const DefaultContextMenu = (0, import_react.memo)(function DefaultContextMenu2({
+   const container = (0, import_editor.useContainer)();
+   const [isOpen, handleOpenChange] = (0, import_useMenuIsOpen.useMenuIsOpen)("context menu", cb);
+   const content = children ?? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_DefaultContextMenuContent.DefaultContextMenuContent, {});
+-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_radix_ui.ContextMenu.Root, { dir: "ltr", onOpenChange: handleOpenChange, modal: false, children: [
++  // Controlled by the editor menu state: the menu click capture closes menus through the editor only, so an uncontrolled Radix root stayed "open" and ignored every later right-click.
++  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_radix_ui.ContextMenu.Root, { dir: "ltr", open: isOpen, onOpenChange: handleOpenChange, modal: false, children: [
+     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_radix_ui.ContextMenu.Trigger, { onContextMenu: void 0, dir: "ltr", disabled, children: Canvas ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Canvas, {}) : null }),
+     isOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_radix_ui.ContextMenu.Portal, { container, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+       import_radix_ui.ContextMenu.Content,
 diff --git a/node_modules/tldraw/dist-esm/index.d.mts b/node_modules/tldraw/dist-esm/index.d.mts
 index 5a6f288..90c846a 100644
 --- a/node_modules/tldraw/dist-esm/index.d.mts
@@ -621,3 +635,17 @@ index 6759d0d..2755aa1 100644
    const maybeFixedWidth = props.autoSize ? null : Math.max(minWidth, Math.floor(w));
    const html = renderHtmlFromRichTextForMeasurement(editor, richText);
    const result = editor.textMeasure.measureHtml(html, {
+diff --git a/node_modules/tldraw/dist-esm/lib/ui/components/ContextMenu/DefaultContextMenu.mjs b/node_modules/tldraw/dist-esm/lib/ui/components/ContextMenu/DefaultContextMenu.mjs
+index a6fef57..56f4cb2 100644
+--- a/node_modules/tldraw/dist-esm/lib/ui/components/ContextMenu/DefaultContextMenu.mjs
++++ b/node_modules/tldraw/dist-esm/lib/ui/components/ContextMenu/DefaultContextMenu.mjs
+@@ -69,7 +69,8 @@ const DefaultContextMenu = memo(function DefaultContextMenu2({
+   const container = useContainer();
+   const [isOpen, handleOpenChange] = useMenuIsOpen("context menu", cb);
+   const content = children ?? /* @__PURE__ */ jsx(DefaultContextMenuContent, {});
+-  return /* @__PURE__ */ jsxs(_ContextMenu.Root, { dir: "ltr", onOpenChange: handleOpenChange, modal: false, children: [
++  // Controlled by the editor menu state: the menu click capture closes menus through the editor only, so an uncontrolled Radix root stayed "open" and ignored every later right-click.
++  return /* @__PURE__ */ jsxs(_ContextMenu.Root, { dir: "ltr", open: isOpen, onOpenChange: handleOpenChange, modal: false, children: [
+     /* @__PURE__ */ jsx(_ContextMenu.Trigger, { onContextMenu: void 0, dir: "ltr", disabled, children: Canvas ? /* @__PURE__ */ jsx(Canvas, {}) : null }),
+     isOpen && /* @__PURE__ */ jsx(_ContextMenu.Portal, { container, children: /* @__PURE__ */ jsx(
+       _ContextMenu.Content,
