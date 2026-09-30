@@ -7,7 +7,11 @@ import pytest
 from app.domain.contracts.diagram_repository import DiagramRepository
 from app.domain.contracts.diagram_update_notifier import DiagramUpdateNotifier
 from app.domain.entities.models.diagram import Diagram
+from app.domain.entities.models.diagram_snapshot import DiagramSnapshot
+from app.domain.entities.models.revision_author import RevisionAuthor
+from app.domain.enums.revision_origin import RevisionOrigin
 from app.domain.errors.domain_errors import NotFoundError
+from app.domain.services.revision_recorder import RevisionRecorder
 from app.domain.usecases.diagram.update_diagram import UpdateDiagram, UpdateDiagramParams
 
 
@@ -22,8 +26,15 @@ def notifier() -> DiagramUpdateNotifier:
 
 
 @pytest.fixture
-def sut(repo: DiagramRepository, notifier: DiagramUpdateNotifier) -> UpdateDiagram:
-    return UpdateDiagram(repo, notifier)
+def recorder() -> RevisionRecorder:
+    return cast(RevisionRecorder, create_autospec(RevisionRecorder, instance=True))
+
+
+@pytest.fixture
+def sut(
+    repo: DiagramRepository, notifier: DiagramUpdateNotifier, recorder: RevisionRecorder
+) -> UpdateDiagram:
+    return UpdateDiagram(repo, notifier, recorder)
 
 
 def existing_diagram() -> Diagram:
@@ -80,3 +91,37 @@ async def test_should_raise_not_found_and_notify_nobody_when_diagram_missing(
     with pytest.raises(NotFoundError, match=str(diagram_id)):
         await sut.execute(UpdateDiagramParams(diagram_id=diagram_id, name="New"))
     cast(AsyncMock, notifier.notify_updated).assert_not_awaited()
+
+
+async def test_should_record_the_change_with_its_author_and_summary(
+    sut: UpdateDiagram, repo: DiagramRepository, recorder: RevisionRecorder
+) -> None:
+    diagram = existing_diagram()
+    repo.get_by_id = AsyncMock(return_value=diagram.model_copy())  # type: ignore[method-assign]
+    repo.update = AsyncMock(side_effect=lambda updated: updated)  # type: ignore[method-assign]
+    author = RevisionAuthor(origin=RevisionOrigin.AGENT, agent_name="Claude")
+    await sut.execute(
+        UpdateDiagramParams(
+            diagram_id=diagram.id,
+            name="New",
+            canvas_state={"shapes": ["new"]},
+            author=author,
+            revision_summary="Renamed it",
+        )
+    )
+    cast(AsyncMock, recorder.record).assert_awaited_once_with(
+        diagram.id,
+        DiagramSnapshot.of(diagram),
+        DiagramSnapshot(name="New", canvas_state={"shapes": ["new"]}),
+        author,
+        summary="Renamed it",
+    )
+
+
+async def test_should_record_nothing_when_diagram_missing(
+    sut: UpdateDiagram, repo: DiagramRepository, recorder: RevisionRecorder
+) -> None:
+    repo.get_by_id = AsyncMock(return_value=None)  # type: ignore[method-assign]
+    with pytest.raises(NotFoundError):
+        await sut.execute(UpdateDiagramParams(diagram_id=uuid.uuid4(), name="New"))
+    cast(AsyncMock, recorder.record).assert_not_awaited()

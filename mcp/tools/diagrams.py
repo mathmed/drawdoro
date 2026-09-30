@@ -11,6 +11,8 @@ from tools.canvas import Canvas, ShapeOutline
 
 EDITOR_LINK = re.compile(r"/diagrams/(?P<diagram_id>[^/]+)/?$")
 # Share tokens come from secrets.token_urlsafe, so anything else is not a diagram link.
+# The API rejects longer history summaries.
+REVISION_SUMMARY_MAX_LENGTH = 500
 SHARE_LINK = re.compile(r"/share/(?P<token>[A-Za-z0-9_-]+)/?$")
 
 
@@ -170,6 +172,7 @@ class DiagramTools:
         folder_id: uuid.UUID | None = None,
         canvas_state: dict[str, Any] | None = None,
         semantic_metadata: dict[str, Any] | None = None,
+        summary: str | None = None,
     ) -> DiagramSaved:
         """Update a diagram. Only the fields you pass change; omitted ones keep their current values.
 
@@ -184,6 +187,8 @@ class DiagramTools:
                 get_diagram and send every record back, not only the changed ones; records must
                 stay valid tldraw records or the editor may fail to open the diagram.
             semantic_metadata: Complete shape metadata map that replaces the current one.
+            summary: One sentence on what you changed and why, shown in the diagram's history
+                next to your change (e.g. "Added the payment queue between API and worker").
         """
         # The API's PUT replaces every field, so omitted ones are filled from the current diagram.
         current = StoredDiagram.model_validate(self.get_diagram(diagram_id))
@@ -193,8 +198,11 @@ class DiagramTools:
             canvas_state=canvas_state,
             semantic_metadata=semantic_metadata,
         )
-        updated = current.model_copy(update=changes.model_dump(exclude_none=True))
-        saved = self._save(diagram_id, updated)
+        given = changes.model_dump(exclude_none=True)
+        updated = current.model_copy(update=given)
+        saved = self._save(
+            diagram_id, updated, summary or f"Updated {', '.join(given) or 'nothing'}"
+        )
         store = (updated.canvas_state or {}).get("store", {})
         return DiagramSaved.model_validate(saved | {"records": len(store)})
 
@@ -204,6 +212,7 @@ class DiagramTools:
         upsert: list[dict[str, Any]] | None = None,
         delete: list[str] | None = None,
         expected_updated_at: datetime | None = None,
+        summary: str | None = None,
     ) -> ShapeEdits:
         """Create, change or delete some records of a diagram without sending the whole canvas.
 
@@ -225,6 +234,8 @@ class DiagramTools:
                 and the arrow bindings attached to it.
             expected_updated_at: updated_at of the diagram when you read it. If it was saved after
                 that, nothing changes and the call fails, so you can read it again first.
+            summary: One sentence on what you changed and why, shown in the diagram's history
+                next to your change (e.g. "Renamed the auth service and linked it to the DB").
         """
         if not upsert and not delete:
             raise ToolError("Pass the records to upsert, the ids to delete, or both")
@@ -240,7 +251,9 @@ class DiagramTools:
         deleted = canvas.delete(delete or [])
         created, changed = canvas.upsert(upsert or [])
         saved = self._save(
-            diagram_id, current.model_copy(update={"canvas_state": canvas.to_snapshot()})
+            diagram_id,
+            current.model_copy(update={"canvas_state": canvas.to_snapshot()}),
+            summary or _describe_edits(created, changed, deleted),
         )
         return ShapeEdits.model_validate(
             saved
@@ -252,8 +265,17 @@ class DiagramTools:
             }
         )
 
-    def _save(self, diagram_id: uuid.UUID, diagram: StoredDiagram) -> JsonObject:
+    def _save(self, diagram_id: uuid.UUID, diagram: StoredDiagram, summary: str) -> JsonObject:
         path = f"/projects/{diagram.project_id}/diagrams/{diagram_id}"
-        saved = self._api.put(path, diagram.model_dump(mode="json", exclude={"project_id"}))
+        body = diagram.model_dump(mode="json", exclude={"project_id"})
+        saved = self._api.put(
+            path, body | {"revision_summary": summary[:REVISION_SUMMARY_MAX_LENGTH]}
+        )
         # Echoing the saved canvas back would cost the agent as much as sending it.
         return {key: saved[key] for key in ("id", "name", "updated_at")}
+
+
+def _describe_edits(created: list[str], changed: list[str], deleted: list[str]) -> str:
+    counts = {"created": len(created), "changed": len(changed), "deleted": len(deleted)}
+    done = [f"{count} {verb}" for verb, count in counts.items() if count]
+    return f"Edited the canvas: {', '.join(done) or 'no records'}"

@@ -110,6 +110,7 @@ def test_should_keep_omitted_fields_when_updating_diagram(
             "folder_id": str(FOLDER_ID),
             "canvas_state": {"shapes": ["box"]},
             "semantic_metadata": {"owner": "platform"},
+            "revision_summary": "Updated semantic_metadata",
         },
     )
 
@@ -130,6 +131,7 @@ def test_should_apply_every_given_field_when_updating_diagram(
         "folder_id": str(new_folder_id),
         "canvas_state": {"shapes": []},
         "semantic_metadata": {},
+        "revision_summary": "Updated name, folder_id, canvas_state, semantic_metadata",
     }
 
 
@@ -153,6 +155,7 @@ def test_should_keep_null_fields_null_when_updating_diagram(
         "folder_id": None,
         "canvas_state": None,
         "semantic_metadata": {"owner": "payments"},
+        "revision_summary": "Updated name",
     }
 
 
@@ -222,3 +225,30 @@ def test_should_outline_a_diagram(sut: DiagramTools, api_with_canvas: MagicMock)
     api_with_canvas.get_object.assert_called_once_with(BY_ID)
     assert (outline.id, outline.name, outline.project_id) == (DIAGRAM_ID, "Checkout", PROJECT_ID)
     assert [shape.id for shape in outline.shapes][:2] == ["shape:frame", "shape:inside"]
+
+
+def test_should_record_the_agents_summary_in_the_history(sut: DiagramTools, api: MagicMock) -> None:
+    sut.update_diagram(DIAGRAM_ID, name="Checkout v2", summary="Renamed after the split")
+    assert api.put.call_args.args[1]["revision_summary"] == "Renamed after the split"
+
+
+def test_should_cap_the_summary_to_what_the_api_accepts(sut: DiagramTools, api: MagicMock) -> None:
+    sut.update_diagram(DIAGRAM_ID, name="Checkout v2", summary="x" * 1000)
+    assert len(api.put.call_args.args[1]["revision_summary"]) == 500
+
+
+def test_should_describe_shape_edits_when_no_summary_is_given(
+    sut: DiagramTools, api_with_canvas: MagicMock, canvas_state: dict[str, Any]
+) -> None:
+    shape_id = next(key for key in canvas_state["store"] if key.startswith("shape:"))
+    result = sut.edit_shapes(DIAGRAM_ID, delete=[shape_id])
+    expected = f"Edited the canvas: {len(result.deleted)} deleted"
+    assert api_with_canvas.put.call_args.args[1]["revision_summary"] == expected
+
+
+def test_should_pass_the_summary_of_shape_edits(
+    sut: DiagramTools, api_with_canvas: MagicMock, canvas_state: dict[str, Any]
+) -> None:
+    shape_id = next(key for key in canvas_state["store"] if key.startswith("shape:"))
+    sut.edit_shapes(DIAGRAM_ID, delete=[shape_id], summary="Removed the legacy cache")
+    assert api_with_canvas.put.call_args.args[1]["revision_summary"] == "Removed the legacy cache"

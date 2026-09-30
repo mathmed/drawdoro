@@ -2,6 +2,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, Header
 
+from app.domain.entities.models.revision_author import RevisionAuthor
 from app.domain.usecases.diagram.create_diagram import CreateDiagram, CreateDiagramParams
 from app.domain.usecases.diagram.delete_diagram import DeleteDiagram, DeleteDiagramParams
 from app.domain.usecases.diagram.get_diagram import GetDiagram, GetDiagramParams
@@ -15,6 +16,7 @@ from app.presentation.factories.diagram_factories import (
     update_diagram_factory,
 )
 from app.presentation.fastapi.dependencies.agent_presence import track_agent_activity
+from app.presentation.fastapi.dependencies.revision_author import get_revision_author
 from app.presentation.fastapi.dependencies.workspace_access import require_workspace_access
 from app.presentation.fastapi.schemas.diagram_schemas import (
     CreateDiagramRequest,
@@ -90,6 +92,7 @@ async def update_diagram(
     diagram_id: uuid.UUID,
     body: UpdateDiagramRequest,
     x_client_id: str | None = Header(default=None, max_length=CLIENT_ID_MAX_LENGTH),
+    author: RevisionAuthor = Depends(get_revision_author),
     use_case: UpdateDiagram = Depends(update_diagram_factory),
 ) -> DiagramResponse:
     diagram = await use_case.execute(
@@ -100,6 +103,8 @@ async def update_diagram(
             canvas_state=body.canvas_state,
             semantic_metadata=body.semantic_metadata,
             origin_client_id=x_client_id,
+            author=author,
+            revision_summary=body.revision_summary,
         )
     )
     return DiagramResponse.model_validate(diagram)

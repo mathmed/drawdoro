@@ -13,6 +13,10 @@ export interface PresenceUser {
   kind?: 'person' | 'agent'
   // Profile photo from the identity provider; absent for guests, agents and users without one.
   picture_url?: string | null
+  // Agents with a personal key: the person they work for and the key's label.
+  owner_id?: string
+  owner_name?: string
+  label?: string
 }
 
 export interface Presence {

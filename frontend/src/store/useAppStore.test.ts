@@ -2,12 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { listComments } from '../api/comments'
 import { getDocumentation } from '../api/documentation'
-import { deleteDiagram, listDiagrams, updateDiagram } from '../api/diagrams'
-import { listFolders } from '../api/folders'
+import { deleteDiagram, getDiagramById, updateDiagram } from '../api/diagrams'
 import { removeMember, listMembers } from '../api/members'
-import { deleteProject, listProjects } from '../api/projects'
+import { deleteProject, getProjectTree, listProjects } from '../api/projects'
 import { listWorkspaces } from '../api/workspaces'
-import type { Diagram, Project, Workspace, WorkspaceMember } from '../api/types'
+import type { Diagram, Project, ProjectTree, Workspace, WorkspaceMember } from '../api/types'
 import { useAppStore } from './useAppStore'
 import { useAuthStore } from './useAuthStore'
 
@@ -16,8 +15,13 @@ const authConfig = vi.hoisted(() => ({ enabled: false }))
 vi.mock('../auth/config', () => ({ authConfig }))
 vi.mock('../api/comments')
 vi.mock('../api/documentation')
-vi.mock('../api/diagrams')
-vi.mock('../api/folders')
+// toSummary is a pure helper the store relies on; only the HTTP calls are mocked.
+vi.mock('../api/diagrams', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../api/diagrams')>()),
+  deleteDiagram: vi.fn(),
+  getDiagramById: vi.fn(),
+  updateDiagram: vi.fn(),
+}))
 vi.mock('../api/members')
 vi.mock('../api/projects')
 vi.mock('../api/workspaces')
@@ -63,8 +67,7 @@ beforeEach(() => {
   useAppStore.setState(useAppStore.getInitialState(), true)
   useAuthStore.setState({ status: 'signed-in', profile: null })
   vi.mocked(listProjects).mockResolvedValue([])
-  vi.mocked(listFolders).mockResolvedValue([])
-  vi.mocked(listDiagrams).mockResolvedValue([])
+  vi.mocked(getProjectTree).mockResolvedValue({ folders: [], diagrams: [] })
   vi.mocked(getDocumentation).mockResolvedValue(null as never)
   vi.mocked(listComments).mockResolvedValue([])
   vi.mocked(listMembers).mockResolvedValue([])
@@ -124,13 +127,13 @@ describe('workspace and project selection', () => {
 
   it('should clear the previous project tree right away when switching project', async () => {
     useAppStore.setState({ activeProject: project('p1'), folders: [{ id: 'f1', project_id: 'p1', parent_folder_id: null, name: 'Old' }] })
-    const slow = deferred<Diagram[]>()
-    vi.mocked(listDiagrams).mockReturnValue(slow.promise)
+    const slow = deferred<ProjectTree>()
+    vi.mocked(getProjectTree).mockReturnValue(slow.promise)
 
     const pending = useAppStore.getState().setActiveProject(project('p2'))
 
     expect(useAppStore.getState()).toMatchObject({ folders: [], diagrams: [], isLoadingProject: true })
-    slow.resolve([diagram({ project_id: 'p2' })])
+    slow.resolve({ folders: [], diagrams: [diagram({ project_id: 'p2' })] })
     await pending
     expect(useAppStore.getState().diagrams).toHaveLength(1)
     expect(useAppStore.getState().isLoadingProject).toBe(false)
@@ -162,7 +165,7 @@ describe('workspace and project selection', () => {
 describe('saving diagrams', () => {
   it('should send the full diagram with only the changed field overridden', async () => {
     const current = diagram()
-    useAppStore.setState({ activeDiagram: current, diagrams: [current] })
+    useAppStore.setState({ activeProject: project('p1'), activeDiagram: current, diagrams: [current] })
     vi.mocked(updateDiagram).mockResolvedValue({ ...current, name: 'Payments', updated_at: '2026-01-01T11:00:00Z' })
 
     await useAppStore.getState().renameDiagram('Payments')
@@ -181,11 +184,13 @@ describe('saving diagrams', () => {
   it('should rename a diagram other than the open one', async () => {
     const open = diagram()
     const other = diagram({ id: 'd2', name: 'Other' })
-    useAppStore.setState({ activeDiagram: open, diagrams: [open, other] })
+    useAppStore.setState({ activeProject: project('p1'), activeDiagram: open, diagrams: [open, other] })
+    vi.mocked(getDiagramById).mockResolvedValue(other)
     vi.mocked(updateDiagram).mockResolvedValue({ ...other, name: 'Renamed' })
 
     await useAppStore.getState().renameDiagram('Renamed', other)
 
+    expect(getDiagramById).toHaveBeenCalledWith('d2')
     expect(updateDiagram).toHaveBeenCalledWith('p1', 'd2', expect.objectContaining({ name: 'Renamed' }))
     expect(useAppStore.getState().activeDiagram).toBe(open)
     expect(useAppStore.getState().diagrams.map((item) => item.name)).toEqual(['Checkout', 'Renamed'])
@@ -200,7 +205,7 @@ describe('saving diagrams', () => {
 
   it('should keep a newer copy pushed while the save was in flight', async () => {
     const current = diagram()
-    useAppStore.setState({ activeDiagram: current, diagrams: [current] })
+    useAppStore.setState({ activeProject: project('p1'), activeDiagram: current, diagrams: [current] })
     const save = deferred<Diagram>()
     vi.mocked(updateDiagram).mockReturnValue(save.promise)
 
@@ -210,12 +215,12 @@ describe('saving diagrams', () => {
     await pending
 
     expect(useAppStore.getState().activeDiagram?.canvas_state).toEqual({ shapes: 3 })
-    expect(useAppStore.getState().diagrams[0].canvas_state).toEqual({ shapes: 3 })
+    expect(useAppStore.getState().diagrams[0].updated_at).toBe('2026-01-01T12:00:00Z')
   })
 
   it('should stay "saving" until every overlapping save finished', async () => {
     const current = diagram()
-    useAppStore.setState({ activeDiagram: current, diagrams: [current] })
+    useAppStore.setState({ activeProject: project('p1'), activeDiagram: current, diagrams: [current] })
     const first = deferred<Diagram>()
     const second = deferred<Diagram>()
     vi.mocked(updateDiagram).mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
@@ -277,7 +282,12 @@ describe('applyPushedDiagram', () => {
 
   it('should keep unsaved panel edits when the pushed metadata did not change', () => {
     const current = diagram()
-    useAppStore.setState({ activeDiagram: current, diagrams: [current], semanticMetadata: { s1: { type: 'queue' } } })
+    useAppStore.setState({
+      activeProject: project('p1'),
+      activeDiagram: current,
+      diagrams: [current],
+      semanticMetadata: { s1: { type: 'queue' } },
+    })
 
     const applied = useAppStore
       .getState()
@@ -323,7 +333,7 @@ describe('opening diagrams', () => {
   it('should find a diagram by id across workspaces on direct navigation', async () => {
     vi.mocked(listWorkspaces).mockResolvedValue([workspace('w1'), workspace('w2')])
     vi.mocked(listProjects).mockImplementation(async (id) => (id === 'w1' ? [project('p1', 'w1')] : [project('p2', 'w2')]))
-    vi.mocked(listDiagrams).mockImplementation(async (id) => (id === 'p2' ? [diagram({ id: 'target', project_id: 'p2' })] : []))
+    vi.mocked(getDiagramById).mockResolvedValue(diagram({ id: 'target', project_id: 'p2' }))
 
     await useAppStore.getState().loadDiagram('target')
 
@@ -331,6 +341,7 @@ describe('opening diagrams', () => {
     expect(state.activeWorkspace?.id).toBe('w2')
     expect(state.activeProject?.id).toBe('p2')
     expect(state.activeDiagram?.id).toBe('target')
+    expect(getProjectTree).toHaveBeenCalledWith('p2')
     expect(state.isLoadingDiagram).toBe(false)
     expect(localStorage.getItem(LAST_WORKSPACE_KEY)).toBe('w2')
     expect(localStorage.getItem(LAST_PROJECT_KEY)).toBe('p2')
@@ -347,7 +358,7 @@ describe('opening diagrams', () => {
 
   it('should close the open diagram when it is deleted', async () => {
     const current = diagram()
-    useAppStore.setState({ activeDiagram: current, diagrams: [current, diagram({ id: 'd2' })] })
+    useAppStore.setState({ activeProject: project('p1'), activeDiagram: current, diagrams: [current, diagram({ id: 'd2' })] })
     vi.mocked(deleteDiagram).mockResolvedValue(undefined)
 
     await useAppStore.getState().deleteDiagram(current)

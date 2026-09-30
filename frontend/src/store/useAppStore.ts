@@ -57,7 +57,7 @@ import { useAuthStore } from './useAuthStore'
 
 const EMPTY_PRESENCE: Presence = { users: [], you: null }
 
-export type InspectorTab = 'properties' | 'docs' | 'comments' | 'gallery'
+export type InspectorTab = 'properties' | 'docs' | 'comments' | 'gallery' | 'history'
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
 const LAST_WORKSPACE_KEY = storageKey('last-workspace')

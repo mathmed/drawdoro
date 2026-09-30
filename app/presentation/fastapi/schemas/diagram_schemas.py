@@ -2,7 +2,9 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+REVISION_SUMMARY_MAX_LENGTH = 500
 
 
 class CreateDiagramRequest(BaseModel):
@@ -16,6 +18,8 @@ class UpdateDiagramRequest(BaseModel):
     folder_id: uuid.UUID | None = None
     canvas_state: dict[str, Any] | None = None
     semantic_metadata: dict[str, Any] | None = None
+    # Shown in the diagram's history next to the change; agents describe what they did.
+    revision_summary: str | None = Field(default=None, max_length=REVISION_SUMMARY_MAX_LENGTH)
 
 
 class DiagramResponse(BaseModel):

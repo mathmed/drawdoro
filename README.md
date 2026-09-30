@@ -97,11 +97,14 @@ Health check: `curl http://localhost:8000/health`
 | `COGNITO_REGION` | `us-east-1` | Region of the Cognito user pool |
 | `COGNITO_USER_POOL_ID` | - | User pool whose ID tokens the API accepts |
 | `COGNITO_CLIENT_ID` | - | App client id expected in the token audience |
-| `SERVICE_API_KEY` | - | Shared secret that lets trusted services (the MCP server) call the API via `X-API-Key` |
+| `SERVICE_API_KEY` | - | Shared secret that lets trusted services (the MCP server) call the API via `X-API-Key`, as an agent without owner. People can also create personal keys (see [Diagram history and personal API keys](#diagram-history-and-personal-api-keys)) |
 | `GALLERY_MAX_IMAGE_BYTES` | `2097152` (2 MiB) | Largest image accepted in the personal gallery (PNG, JPEG, GIF or WebP; stored in Postgres) |
 | `GALLERY_MAX_SHAPES_BYTES` | `5242880` (5 MiB) | Largest saved selection (tldraw content JSON, inlined assets included) accepted in the personal gallery |
+| `REVISION_INTERVAL_MINUTES` | `10` | Diagram history: a person's saves within this many minutes share one revision (agent changes and restores always get their own) |
+| `REVISION_RETENTION_DAYS` | `30` | Diagram history: revisions last updated longer ago are deleted; `0` keeps them regardless of age. The newest one is always kept |
+| `REVISION_MAX_PER_DIAGRAM` | `100` | Diagram history: at most this many revisions are kept per diagram, newest first; `0` keeps any number |
 | `MCP_API_URL` | `http://localhost:8000` | MCP server: backend URL |
-| `MCP_API_KEY` | - | MCP server: value sent as `X-API-Key` (same as `SERVICE_API_KEY`) |
+| `MCP_API_KEY` | - | MCP server: value sent as `X-API-Key`: the API's `SERVICE_API_KEY` (agent without owner) or a personal key. Over HTTP, a key sent by the MCP client takes precedence |
 | `MCP_FRONTEND_URL` | `http://localhost:3000` | MCP server: frontend whose `/render` page `render_diagram` opens in a headless Chromium |
 | `MCP_AGENT_NAME` | `Claude` | MCP server: name shown in the diagram's presence avatars while the agent works on it; empty hides it |
 | `MCP_TRANSPORT` | `stdio` | MCP server transport: `stdio` or `streamable-http` |
@@ -111,6 +114,7 @@ Health check: `curl http://localhost:8000/health`
 | `VITE_COGNITO_DOMAIN` | - | Frontend: managed login domain; empty disables login |
 | `VITE_COGNITO_CLIENT_ID` | - | Frontend: public app client id (no secret) |
 | `VITE_COGNITO_IDENTITY_PROVIDER` | `Google` | Frontend: identity provider to skip the Cognito provider picker |
+| `VITE_MCP_URL` | `http://localhost:8001/mcp` | Frontend: MCP server URL shown in the *Connect Claude* guide |
 
 The MCP server still reads the former `DRAWDORO_*` names (`DRAWDORO_API_URL`, `DRAWDORO_MCP_PORT`...) when the
 `MCP_*` one is not set, so existing setups keep working. In Kubernetes, a Service named `mcp` would make the kubelet
@@ -225,12 +229,42 @@ mcp/                      Python MCP server
 | GET/PUT | /diagrams/{id}/documentation | Get / update documentation page |
 | GET/POST | /diagrams/{id}/comments | List / create comments |
 | POST | /diagrams/{id}/share | Generate (or return) the diagram's shareable link token |
+| GET | /diagrams/{id}/revisions | Diagram history, newest first, without snapshots (`?limit=`, up to 200) |
+| GET | /diagrams/{id}/revisions/{revision_id} | One revision with its snapshot (name, canvas and shape metadata) |
+| POST | /diagrams/{id}/revisions/{revision_id}/restore | Bring the canvas and shape metadata of a revision back (editor). Recorded as a new revision and pushed to open editors |
+| GET/POST | /me/api-keys | List / create the signed-in user's personal API keys. The secret is only in the creation response |
+| DELETE | /me/api-keys/{key_id} | Revoke a personal API key |
 | GET | /share/{share_token} | Public: open a shared diagram by token, no sign-in required (used by guests) |
 | GET/POST | /gallery | List the signed-in user's gallery items (without payloads) / save a selection (`kind=shapes`, tldraw content) or an image (`kind=image`, base64) with a PNG thumbnail |
 | GET/PATCH/DELETE | /gallery/{id} | Get an item with its payload / rename / delete it. Items are private: someone else's item answers 404 |
-| WS | /ws/diagrams/{id} | Real-time collaboration: broadcasts canvas updates, cursors, peer count and saved changes (`diagram_updated`, including those made through the API or the MCP server) to everyone connected to the same diagram. An agent that reads or saves the diagram through the MCP server (`X-Agent-Name`, honoured only with the service key when auth is on) is listed in the presence for 60s after its last call. Guests join with `?share=<token>&name=<name>` as read-only viewers |
+| WS | /ws/diagrams/{id} | Real-time collaboration: broadcasts canvas updates, cursors, peer count and saved changes (`diagram_updated`, including those made through the API or the MCP server) to everyone connected to the same diagram. An agent that reads or saves the diagram through the MCP server (`X-Agent-Name`, honoured with the service key or a personal key when auth is on) is listed in the presence for 60s after its last call. Guests join with `?share=<token>&name=<name>` as read-only viewers |
 
 All routes except `/health` return `501 Not Implemented` until infra is wired.
+
+## Diagram history and personal API keys
+
+Every saved change to a diagram is kept in `diagram_revisions` as a full snapshot (name, canvas, shape metadata)
+with its author, origin (`human` or `agent`), an optional summary and timestamps. The editor's *History* tab lists
+them with a preview, and editors and owners can restore any of them; viewers only look.
+
+To keep the table small:
+
+- A person's saves (the editor autosaves every few seconds) update their own revision for
+  `REVISION_INTERVAL_MINUTES`, so each person gets at most one revision per interval, even when several people
+  edit together.
+- Every agent change (`update_diagram`, `edit_shapes`) and every restore gets a revision of its own, and the state
+  right before it is captured first (as a `baseline`) when the history doesn't already end with it.
+- Saves that change nothing (e.g. `{}` versus no metadata) don't add revisions.
+- After each write, revisions beyond `REVISION_MAX_PER_DIAGRAM` or older than `REVISION_RETENTION_DAYS` are deleted.
+
+A restore brings back the canvas and shape metadata (name and folder stay), is recorded as a new `restore` revision
+and is pushed to every open editor, so it can itself be undone.
+
+People create **personal API keys** from the user menu (*API keys* or *Connect Claude*). Each has a label and a
+last-used time; the secret (`mcpk_...`) is shown once and only its SHA-256 hash is stored. A key acts as its owner,
+with their role, but can't manage keys. Agents using one show up as *Ana's Claude* in the presence avatars and the
+history, so two people's agents are two different avatars. The shared `SERVICE_API_KEY` still works as an agent
+without owner.
 
 ## Adding a feature
 
@@ -248,6 +282,7 @@ The MCP server exposes the app's tools to AI coding agents:
 |---|---|
 | Navigation | `list_workspaces`, `list_projects`, `get_project`, `list_folders`, `list_diagrams` (ids and names only, no canvas) |
 | Diagrams | `open_link` (editor `/diagrams/<id>` or read-only `/share/<token>` links), `get_diagram`, `get_diagram_outline`, `create_diagram`, `update_diagram`, `edit_shapes`, `render_diagram` |
+| History | `list_revisions`, `restore_revision` |
 | Organisation | `create_project`, `create_folder` |
 | Documentation and comments | `get_documentation`, `update_documentation`, `list_comments` |
 
@@ -255,7 +290,16 @@ Nothing deletes workspaces, projects, folders or diagrams (`edit_shapes` only de
 nothing manages members. On connect the server sends instructions telling the agent to call `open_link` when it sees
 a link to the app (named after `APP_NAME`), and to prefer the compact tools below over whole canvases.
 
-Configure the backend URL with `MCP_API_URL` (default: `http://localhost:8000`). When the API has `AUTH_ENABLED=true`, set `MCP_API_KEY` to the API's `SERVICE_API_KEY`.
+Configure the backend URL with `MCP_API_URL` (default: `http://localhost:8000`). When the API has `AUTH_ENABLED=true`, set `MCP_API_KEY` to the API's `SERVICE_API_KEY`, or to a personal key so the agent acts as you.
+
+`update_diagram` and `edit_shapes` take an optional `summary` shown in the diagram's history (a generic one is made
+up when it's missing). Over HTTP, the key sent by the MCP client in `X-API-Key` (or `Authorization: Bearer`) is used
+instead of `MCP_API_KEY`, so one shared MCP server serves everyone under their own name. The frontend's *Connect
+Claude* dialog generates the key and the ready-to-paste commands:
+
+```sh
+claude mcp add --transport http drawdoro http://localhost:8001/mcp --header "X-API-Key: mcpk_..."
+```
 
 `update_diagram` only changes the fields you pass; the others keep their current values. A canvas is tens of KB of
 tldraw JSON, so agents mostly use three tools that avoid moving it around:

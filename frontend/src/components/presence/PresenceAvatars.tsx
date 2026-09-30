@@ -2,23 +2,15 @@ import { Sparkles } from 'lucide-react'
 
 import type { PresenceUser } from '../../hooks/useRealtime'
 import { useAppStore } from '../../store/useAppStore'
+import { agentDescription } from '../../utils/agents'
+import { colorFor } from '../../utils/avatar'
 import UserAvatar from '../ui/UserAvatar'
 
 const MAX_VISIBLE = 4
 
-// Stable colour per person so the same collaborator always looks the same.
-function colorFor(id: string): string {
-  let hash = 2166136261
-  for (const char of id) {
-    hash = Math.imul(hash ^ char.charCodeAt(0), 16777619) >>> 0
-  }
-  // The golden angle spreads hues apart even for near-identical ids.
-  return `hsl(${Math.round((hash * 137.508) % 360)} 62% 50%)`
-}
-
 function labelFor(user: PresenceUser, isYou: boolean): string {
   if (user.kind === 'agent') {
-    return `${user.name} (AI agent)`
+    return agentDescription({ name: user.name, ownerName: user.owner_name, label: user.label })
   }
   return isYou ? `${user.name} (you)` : user.name
 }
@@ -27,7 +19,13 @@ function Avatar({ user, isYou }: { user: PresenceUser; isYou: boolean }) {
   const label = labelFor(user, isYou)
   if (user.kind === 'agent') {
     return (
-      <span className="presence-avatar presence-agent" data-tooltip={label} aria-label={label}>
+      <span
+        className="presence-avatar presence-agent"
+        // Each owner's agent gets its own ring colour, so two people's agents are told apart.
+        style={user.owner_id ? { boxShadow: `0 0 0 2px ${colorFor(user.owner_id)}` } : undefined}
+        data-tooltip={label}
+        aria-label={label}
+      >
         <Sparkles size={14} strokeWidth={2.25} aria-hidden />
       </span>
     )
@@ -63,7 +61,7 @@ export default function PresenceAvatars() {
         <Avatar key={user.id} user={user} isYou={user.id === presence.you} />
       ))}
       {hidden.length > 0 ? (
-        <span className="presence-avatar presence-more" data-tooltip={hidden.map((user) => user.name).join(', ')}>
+        <span className="presence-avatar presence-more" data-tooltip={hidden.map((user) => labelFor(user, false)).join(', ')}>
           +{hidden.length}
         </span>
       ) : null}

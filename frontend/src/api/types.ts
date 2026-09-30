@@ -129,3 +129,43 @@ export interface CreateGalleryItemInput {
   image_base64?: string
   thumbnail_base64?: string | null
 }
+
+export type RevisionKind = 'edit' | 'restore' | 'baseline'
+export type RevisionOrigin = 'human' | 'agent'
+
+// One entry of a diagram's history. For agent changes, author_* is the person the agent works for.
+export interface DiagramRevision {
+  id: string
+  diagram_id: string
+  kind: RevisionKind
+  origin: RevisionOrigin
+  author_id: string | null
+  author_name: string | null
+  author_picture_url: string | null
+  agent_name: string | null
+  agent_label: string | null
+  summary: string | null
+  restored_from_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface DiagramRevisionDetail extends DiagramRevision {
+  name: string
+  canvas_state: CanvasState | null
+  semantic_metadata: SemanticMetadata | null
+}
+
+// A personal key that lets the user's agent (Claude through the MCP server) act as them.
+export interface ApiKey {
+  id: string
+  label: string
+  prefix: string
+  created_at: string
+  last_used_at: string | null
+}
+
+// Returned once, right after the key is created; the secret can't be read back afterwards.
+export interface CreatedApiKey extends ApiKey {
+  secret: string
+}

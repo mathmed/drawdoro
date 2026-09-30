@@ -35,7 +35,7 @@ export default defineConfig({
         branches: 10,
         functions: 6,
         lines: 10,
-        'src/{auth/session,config/branding,utils/format,utils/freshness,utils/validateArchitecture}.ts': {
+        'src/{auth/session,config/branding,config/mcp,utils/agents,utils/format,utils/freshness,utils/revisions,utils/validateArchitecture}.ts': {
           statements: 90,
           branches: 85,
           functions: 90,

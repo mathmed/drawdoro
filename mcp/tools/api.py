@@ -3,6 +3,7 @@ from enum import StrEnum
 from typing import Any, cast
 
 import httpx
+from caller_key import caller_api_key
 from mcp.server.mcpserver.exceptions import ToolError
 
 JsonObject = dict[str, Any]
@@ -36,7 +37,7 @@ class BackendApi:
     ) -> httpx.Response:
         # ToolError is the only exception whose message reaches the model; anything else is masked.
         try:
-            response = self._client.request(method, path, json=body)
+            response = self._client.request(method, path, json=body, headers=_caller_headers())
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
             status = exc.response.status_code
@@ -49,6 +50,11 @@ class BackendApi:
                 f"Could not reach the {self._app_name} API at {self._client.base_url}: {exc}"
             ) from exc
         return response
+
+
+def _caller_headers() -> dict[str, str]:
+    key = caller_api_key.get()
+    return {"X-API-Key": key} if key else {}
 
 
 def _error_detail(response: httpx.Response) -> str:

@@ -12,6 +12,7 @@ import {
   Play,
   Share2,
   ShieldCheck,
+  Sparkles,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -21,6 +22,7 @@ import { branding } from '../../config/branding'
 import { useAppStore } from '../../store/useAppStore'
 import { exportDiagram, type ExportFormat } from '../../utils/exportDiagram'
 import { modKey } from '../../utils/format'
+import ConnectClaudeDialog from '../account/ConnectClaudeDialog'
 import ShareDialog from '../diagram/ShareDialog'
 import PresenceAvatars from '../presence/PresenceAvatars'
 import Menu from '../ui/Menu'
@@ -115,6 +117,7 @@ export default function TopBar() {
   const runValidation = useAppStore((state) => state.runValidation)
   const enterPresentation = useAppStore((state) => state.enterPresentation)
   const [isShareOpen, setIsShareOpen] = useState(false)
+  const [isConnectOpen, setIsConnectOpen] = useState(false)
 
   function handleExport(format: ExportFormat): void {
     if (activeDiagram !== null) {
@@ -158,6 +161,18 @@ export default function TopBar() {
           </>
         )}
       </nav>
+
+      {/* Icon only next to the diagram actions, where the title needs the room. */}
+      <button
+        type="button"
+        className={activeDiagram === null ? 'btn btn-ghost btn-sm' : 'btn btn-ghost btn-icon btn-sm'}
+        aria-label="Connect Claude"
+        data-tooltip="Connect Claude to your diagrams"
+        onClick={() => setIsConnectOpen(true)}
+      >
+        <Sparkles size={15} />
+        {activeDiagram === null ? ' Connect Claude' : null}
+      </button>
 
       {activeDiagram !== null ? (
         <div className="topbar-actions">
@@ -212,6 +227,7 @@ export default function TopBar() {
         </div>
       ) : null}
 
+      {isConnectOpen ? <ConnectClaudeDialog onClose={() => setIsConnectOpen(false)} /> : null}
       {isShareOpen && activeDiagram !== null ? (
         <ShareDialog diagramId={activeDiagram.id} onClose={() => setIsShareOpen(false)} />
       ) : null}
