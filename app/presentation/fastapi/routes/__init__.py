@@ -1,3 +1,4 @@
+from .api_key_routes import router as api_key_router
 from .auth_routes import router as auth_router
 from .comment_routes import router as comment_router
 from .diagram_routes import diagram_by_id_router
@@ -8,6 +9,7 @@ from .gallery_routes import router as gallery_router
 from .health_routes import router as health_router
 from .project_routes import router as project_router
 from .project_tree_routes import router as project_tree_router
+from .revision_routes import router as revision_router
 from .share_routes import public_router as public_share_router
 from .share_routes import router as share_router
 from .websocket_routes import router as websocket_router
@@ -31,4 +33,6 @@ protected_routers = [
     comment_router,
     share_router,
     gallery_router,
+    revision_router,
+    api_key_router,
 ]

@@ -1,3 +1,5 @@
+import uuid
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,6 +11,11 @@ from app.infra.database.models.user import UserORM
 class UserRepositoryImpl(UserRepository):
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def get_by_id(self, user_id: uuid.UUID) -> User | None:
+        result = await self._session.execute(select(UserORM).where(UserORM.id == user_id))
+        orm = result.scalar_one_or_none()
+        return _to_domain(orm) if orm else None
 
     async def get_by_email(self, email: str) -> User | None:
         result = await self._session.execute(select(UserORM).where(UserORM.email == email))

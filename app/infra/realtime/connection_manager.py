@@ -7,6 +7,8 @@ from enum import StrEnum
 
 from fastapi import WebSocket
 
+from app.domain.entities.models.agent_identity import AgentIdentity
+
 
 class PresenceKind(StrEnum):
     PERSON = "person"
@@ -26,11 +28,33 @@ class Participant:
         return self.user_id or self.connection_id
 
 
+@dataclass
+class ActiveAgent:
+    identity: AgentIdentity
+    expiry: asyncio.Task[None]
+
+    def presence_entry(self) -> dict[str, str | None]:
+        entry: dict[str, str | None] = {"id": self.identity.id, "name": self.identity.name, "kind": PresenceKind.AGENT}
+        owner = {
+            "owner_id": str(self.identity.owner_id) if self.identity.owner_id else None,
+            "owner_name": self.identity.owner_name,
+            "label": self.identity.label,
+        }
+        return entry | {key: value for key, value in owner.items() if value is not None}
+
+    def sort_key(self) -> tuple[str, str, str]:
+        return (
+            (self.identity.owner_name or "").lower(),
+            self.identity.name.lower(),
+            self.identity.id,
+        )
+
+
 class ConnectionManager:
     def __init__(self) -> None:
         self._rooms: dict[str, dict[WebSocket, Participant]] = {}
         # Agents (the MCP server) have no socket; each one's timer removes it when it goes quiet.
-        self._agents: dict[str, dict[str, asyncio.Task[None]]] = {}
+        self._agents: dict[str, dict[str, ActiveAgent]] = {}
 
     async def connect(self, ws: WebSocket, diagram_id: str, participant: Participant) -> None:
         await ws.accept()
@@ -59,25 +83,25 @@ class ConnectionManager:
                 },
             )
         people = sorted(unique.values(), key=lambda item: str(item["name"]).lower())
-        agents: list[dict[str, str | None]] = [
-            {"id": f"agent:{name}", "name": name, "kind": PresenceKind.AGENT}
-            for name in sorted(self._agents.get(diagram_id, {}))
-        ]
-        return people + agents
+        agents = sorted(self._agents.get(diagram_id, {}).values(), key=ActiveAgent.sort_key)
+        return people + [agent.presence_entry() for agent in agents]
 
-    async def mark_agent_active(self, diagram_id: str, name: str, seconds: float) -> None:
+    async def mark_agent_active(
+        self, diagram_id: str, identity: AgentIdentity, seconds: float
+    ) -> None:
         agents = self._agents.setdefault(diagram_id, {})
-        previous = agents.pop(name, None)
+        previous = agents.pop(identity.id, None)
         if previous is not None:
-            previous.cancel()
-        agents[name] = asyncio.create_task(self._expire_agent(diagram_id, name, seconds))
-        if previous is None:
+            previous.expiry.cancel()
+        expiry = asyncio.create_task(self._expire_agent(diagram_id, identity.id, seconds))
+        agents[identity.id] = ActiveAgent(identity=identity, expiry=expiry)
+        if previous is None or previous.identity != identity:
             await self.broadcast_presence(diagram_id)
 
-    async def _expire_agent(self, diagram_id: str, name: str, seconds: float) -> None:
+    async def _expire_agent(self, diagram_id: str, agent_id: str, seconds: float) -> None:
         await asyncio.sleep(seconds)
         agents = self._agents.get(diagram_id, {})
-        agents.pop(name, None)
+        agents.pop(agent_id, None)
         if not agents:
             self._agents.pop(diagram_id, None)
         await self.broadcast_presence(diagram_id)

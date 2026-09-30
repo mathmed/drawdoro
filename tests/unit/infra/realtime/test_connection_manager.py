@@ -1,11 +1,13 @@
 import asyncio
 import json
+import uuid
 from typing import cast
 from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import WebSocket
 
+from app.domain.entities.models.agent_identity import AgentIdentity
 from app.infra.realtime.connection_manager import ConnectionManager, Participant
 
 ANA = Participant(name="Ana", user_id="user-ana")
@@ -105,6 +107,7 @@ async def test_should_announce_again_after_dropping_a_dead_socket(sut: Connectio
 
 
 CLAUDE = {"id": "agent:Claude", "name": "Claude", "kind": "agent"}
+OWNERLESS_CLAUDE = AgentIdentity(id="agent:Claude", name="Claude")
 
 
 def last_presence_users(ws: WebSocket) -> list[dict[str, str]]:
@@ -113,7 +116,7 @@ def last_presence_users(ws: WebSocket) -> list[dict[str, str]]:
 
 async def test_should_list_active_agent_after_people(sut: ConnectionManager) -> None:
     await sut.connect(make_ws(), "room", BRUNO)
-    await sut.mark_agent_active("room", "Claude", seconds=60)
+    await sut.mark_agent_active("room", OWNERLESS_CLAUDE, seconds=60)
     assert sut.participants("room") == [
         {"id": "user-bruno", "name": "Bruno", "kind": "person", "picture_url": None},
         CLAUDE,
@@ -123,31 +126,31 @@ async def test_should_list_active_agent_after_people(sut: ConnectionManager) -> 
 async def test_should_announce_agent_when_it_arrives(sut: ConnectionManager) -> None:
     ws = make_ws()
     await sut.connect(ws, "room", ANA)
-    await sut.mark_agent_active("room", "Claude", seconds=60)
+    await sut.mark_agent_active("room", OWNERLESS_CLAUDE, seconds=60)
     assert CLAUDE in last_presence_users(ws)
 
 
 async def test_should_not_announce_agent_again_while_it_is_listed(sut: ConnectionManager) -> None:
     ws = make_ws()
     await sut.connect(ws, "room", ANA)
-    await sut.mark_agent_active("room", "Claude", seconds=60)
-    await sut.mark_agent_active("room", "Claude", seconds=60)
+    await sut.mark_agent_active("room", OWNERLESS_CLAUDE, seconds=60)
+    await sut.mark_agent_active("room", OWNERLESS_CLAUDE, seconds=60)
     assert len(sent(ws)) == 1
 
 
 async def test_should_remove_agent_when_it_goes_quiet(sut: ConnectionManager) -> None:
     ws = make_ws()
     await sut.connect(ws, "room", ANA)
-    await sut.mark_agent_active("room", "Claude", seconds=0.01)
+    await sut.mark_agent_active("room", OWNERLESS_CLAUDE, seconds=0.01)
     await asyncio.sleep(0.05)
     assert CLAUDE not in sut.participants("room")
     assert CLAUDE not in last_presence_users(ws)
 
 
 async def test_should_keep_agent_listed_while_it_stays_active(sut: ConnectionManager) -> None:
-    await sut.mark_agent_active("room", "Claude", seconds=0.1)
+    await sut.mark_agent_active("room", OWNERLESS_CLAUDE, seconds=0.1)
     await asyncio.sleep(0.06)
-    await sut.mark_agent_active("room", "Claude", seconds=0.1)
+    await sut.mark_agent_active("room", OWNERLESS_CLAUDE, seconds=0.1)
     await asyncio.sleep(0.06)
     assert sut.participants("room") == [CLAUDE]
 
@@ -160,3 +163,52 @@ async def test_should_share_profile_photo_in_presence(sut: ConnectionManager) ->
     assert sent(ws)[-1]["users"] == [
         {"id": "user-ana", "name": "Ana", "kind": "person", "picture_url": photo}
     ]
+
+
+OWNER_IDS = {"Ana": uuid.uuid4(), "Bruno": uuid.uuid4()}
+
+
+def personal_agent(owner_name: str, label: str) -> AgentIdentity:
+    return AgentIdentity(
+        id=f"agent:key:{owner_name}",
+        name="Claude",
+        owner_id=OWNER_IDS[owner_name],
+        owner_name=owner_name,
+        label=label,
+    )
+
+
+async def test_should_list_agents_of_different_owners_as_separate_avatars(
+    sut: ConnectionManager,
+) -> None:
+    await sut.mark_agent_active("room", personal_agent("Bruno", "desktop"), seconds=60)
+    await sut.mark_agent_active("room", personal_agent("Ana", "laptop"), seconds=60)
+    assert sut.participants("room") == [
+        {
+            "id": "agent:key:Ana",
+            "name": "Claude",
+            "kind": "agent",
+            "owner_id": str(OWNER_IDS["Ana"]),
+            "owner_name": "Ana",
+            "label": "laptop",
+        },
+        {
+            "id": "agent:key:Bruno",
+            "name": "Claude",
+            "kind": "agent",
+            "owner_id": str(OWNER_IDS["Bruno"]),
+            "owner_name": "Bruno",
+            "label": "desktop",
+        },
+    ]
+
+
+async def test_should_announce_agent_again_when_its_identity_changes(
+    sut: ConnectionManager,
+) -> None:
+    ws = make_ws()
+    await sut.connect(ws, "room", ANA)
+    await sut.mark_agent_active("room", personal_agent("Ana", "laptop"), seconds=60)
+    await sut.mark_agent_active("room", personal_agent("Ana", "work laptop"), seconds=60)
+    assert len(sent(ws)) == 2
+    assert last_presence_users(ws)[-1]["label"] == "work laptop"

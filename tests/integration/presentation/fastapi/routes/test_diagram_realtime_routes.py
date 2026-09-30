@@ -8,6 +8,9 @@ from fastapi.testclient import TestClient
 
 from app.domain.contracts.diagram_repository import DiagramRepository
 from app.domain.entities.models.diagram import Diagram
+from app.domain.entities.models.revision_author import RevisionAuthor
+from app.domain.enums.revision_origin import RevisionOrigin
+from app.domain.services.revision_recorder import RevisionRecorder
 from app.domain.usecases.diagram.update_diagram import UpdateDiagram, UpdateDiagramParams
 from app.infra.realtime.connection_manager import manager
 from app.infra.realtime.realtime_diagram_update_notifier import RealtimeDiagramUpdateNotifier
@@ -69,7 +72,9 @@ def test_should_push_saved_diagram_to_open_editors(client: TestClient, diagram: 
     repo.get_by_id = AsyncMock(return_value=diagram)  # type: ignore[method-assign]
     repo.update = AsyncMock(side_effect=lambda updated: updated)  # type: ignore[method-assign]
     app.dependency_overrides[update_diagram_factory] = lambda: UpdateDiagram(
-        repo, RealtimeDiagramUpdateNotifier(manager)
+        repo,
+        RealtimeDiagramUpdateNotifier(manager),
+        create_autospec(RevisionRecorder, instance=True),
     )
     with client.websocket_connect(f"/ws/diagrams/{diagram.id}") as editor:
         assert editor.receive_json()["type"] == "presence"
@@ -83,3 +88,27 @@ def test_should_push_saved_diagram_to_open_editors(client: TestClient, diagram: 
     assert message["client_id"] is None
     assert message["diagram"]["name"] == "Checkout v2"
     assert message["diagram"]["canvas_state"] == {"shapes": ["box", "arrow"]}
+
+
+def test_should_record_agent_changes_with_their_summary(
+    client: TestClient, diagram: Diagram
+) -> None:
+    mock_uc = use_case_with_mocked_execute(diagram)
+    response = client.put(
+        f"/projects/{diagram.project_id}/diagrams/{diagram.id}",
+        json={"name": "Checkout", "revision_summary": "Added the payment queue"},
+        headers={"X-Agent-Name": "Claude"},
+    )
+    assert response.status_code == 200
+    params = mock_uc.execute.await_args.args[0]
+    assert params.revision_summary == "Added the payment queue"
+    assert params.author == RevisionAuthor(origin=RevisionOrigin.AGENT, agent_name="Claude")
+
+
+def test_should_record_editor_saves_as_human_changes(client: TestClient, diagram: Diagram) -> None:
+    mock_uc = use_case_with_mocked_execute(diagram)
+    response = client.put(
+        f"/projects/{diagram.project_id}/diagrams/{diagram.id}", json={"name": "Checkout"}
+    )
+    assert response.status_code == 200
+    assert mock_uc.execute.await_args.args[0].author == RevisionAuthor()
