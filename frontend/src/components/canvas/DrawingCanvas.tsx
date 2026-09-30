@@ -5,9 +5,6 @@ import {
   DefaultContextMenuContent,
   loadSnapshot,
   Tldraw,
-  TldrawUiMenuGroup,
-  TldrawUiMenuItem,
-  useEditor,
   type Editor,
   type TLComponents,
   type TLStoreSnapshot,
@@ -22,9 +19,9 @@ import { useAppStore } from '../../store/useAppStore'
 import { useThemeStore } from '../../store/useThemeStore'
 import { registerGeoDefaults } from '../../shapes/CustomGeoShapeUtil'
 import { registerSloppinessDefaults } from '../../shapes/sloppiness'
-import { GALLERY_DRAG_TYPE, insertGalleryItem, saveSelectionToGallery } from '../../utils/gallery'
-import { canRunSelection, runSelection, SELECTION_COMMANDS } from '../../utils/shapeSelection'
+import { GALLERY_DRAG_TYPE, insertGalleryItem } from '../../utils/gallery'
 import CommentBadge from '../comments/CommentBadge'
+import AppContextMenuItems from './AppContextMenuItems'
 import ConnectHandles from './ConnectHandles'
 import StylePanel, { MenuPanelWithStyles } from './StylePanel'
 import RichTextToolbar, { textOptions } from './RichTextToolbar'
@@ -36,55 +33,9 @@ interface DrawingCanvasProps {
 }
 
 function CustomContextMenu(props: TLUiContextMenuProps) {
-  const editor = useEditor()
-  const commentOnElement = useAppStore((state) => state.commentOnElement)
-  const selectedId = editor.getOnlySelectedShapeId()
-  const hasSelection = editor.getSelectedShapeIds().length > 0
-
-  function handleComment(): void {
-    if (selectedId !== null) {
-      commentOnElement(selectedId)
-    }
-  }
-
   return (
     <DefaultContextMenu {...props}>
-      {selectedId !== null ? (
-        <TldrawUiMenuGroup id="app-comments">
-          <TldrawUiMenuItem
-            id="app-comment"
-            label="Comment"
-            icon="chat"
-            readonlyOk
-            onSelect={handleComment}
-          />
-        </TldrawUiMenuGroup>
-      ) : null}
-      {hasSelection ? (
-        <TldrawUiMenuGroup id="app-gallery">
-          <TldrawUiMenuItem
-            id="app-save-to-gallery"
-            label="Save to gallery"
-            icon="bookmark"
-            readonlyOk
-            onSelect={() => void saveSelectionToGallery(editor)}
-          />
-        </TldrawUiMenuGroup>
-      ) : null}
-      <TldrawUiMenuGroup id="app-select">
-        {SELECTION_COMMANDS.filter(({ command }) => canRunSelection(command, editor)).map((entry) => (
-          <TldrawUiMenuItem
-            key={entry.command}
-            id={`app-select-${entry.command}`}
-            label={entry.label}
-            kbd={entry.kbd}
-            readonlyOk
-            onSelect={() => {
-              runSelection(entry.command, editor, useAppStore.getState().semanticMetadata)
-            }}
-          />
-        ))}
-      </TldrawUiMenuGroup>
+      <AppContextMenuItems />
       <DefaultContextMenuContent />
     </DefaultContextMenu>
   )
