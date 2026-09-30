@@ -81,6 +81,7 @@ Health checks: `curl http://localhost:8000/health` (liveness, never touches the 
 | `make smoke-mcp` | MCP smoke only: streamable-http server, `/health`, `initialize` and `tools/list` |
 | `make lint-imports` | Check the architecture contracts (import-linter) of the API and the MCP server |
 | `make mutation` | Mutation testing (mutmut) of the use cases and domain services; report in `mutants/report.md` |
+| `make mutation-changed` | What the PR job runs: mutation testing of only the use cases and domain services changed against `BASE` (default `origin/main`) |
 | `make migrate` | Apply database migrations (requires running DB) |
 | `make migration msg="desc"` | Generate a new Alembic migration |
 
@@ -211,7 +212,7 @@ mcp/                      Python MCP server
   settings.py             Settings read from APP_NAME and MCP_* env vars
   tools/                  MCP tools (diagrams, projects) and the API client
   tests/                  MCP tests (`make test-mcp`)
-scripts/                  Validation tooling: boot smoke (API and MCP) and the mutation report
+scripts/                  Validation tooling: boot smoke (API and MCP), mutation testing helpers and the CI Quality Report
 ```
 
 ## API routes (placeholder)
@@ -276,7 +277,8 @@ without owner.
 ## Validation of agent-generated code
 
 Three deterministic checks catch what unit tests with mocks miss. Agents run `make smoke` and
-`make lint-imports` before opening a PR (see `CLAUDE.md`).
+`make lint-imports` before opening a PR (see `CLAUDE.md`). Their results, with every other CI analysis, land
+in a single [Quality Report](#quality-report) comment on the PR.
 
 ### Boot smoke (`make smoke`, CI job `smoke`)
 
@@ -325,23 +327,70 @@ when given an API, that `tools/call list_workspaces` reaches it.
 reason. import-linter fails when an entry no longer matches, so fixing one forces removing it. Adding
 entries or relaxing a contract needs the owner's approval.
 
-### Mutation testing (`make mutation`, weekly workflow)
+### Mutation testing (`make mutation-changed` on PRs, `make mutation` weekly)
 
-[mutmut](https://mutmut.readthedocs.io/) changes the code of `app/domain/usecases/` and
-`app/domain/services/` one small edit at a time (a `<` becomes `<=`, an argument becomes `None`...) and runs
-the unit tests against each change. It takes about 10 minutes, so it runs in the *Mutation testing*
-workflow every Monday and on demand (`workflow_dispatch`, with an optional minimum score), never on PRs.
+[mutmut](https://mutmut.readthedocs.io/) changes the code one small edit at a time (a `<` becomes `<=`, an
+argument becomes `None`...) and runs the unit tests against each change. The scope is `only_mutate` in
+`[tool.mutmut]` of `pyproject.toml`: `app/domain/usecases/` and `app/domain/services/`.
+
+- **On every PR** (CI job `mutation`, `make mutation-changed` locally): `scripts/mutation.py changed` diffs
+  the branch against the base, keeps the files in scope and maps the changed lines to the functions and
+  methods that contain them, so only their mutants run. A change outside any function (a constant, a class
+  attribute) mutates the whole file; imports, blank lines and comments are ignored. The job fails when the
+  score of what it mutated is below `MUTATION_MIN_SCORE`, and the Quality Report lists the survivors of the
+  changed code with their diffs. It has a 20-minute timeout and caches `mutants/`.
+- **Weekly** (*Mutation testing* workflow, Mondays 06:00 UTC, and on demand with `workflow_dispatch` and an
+  optional minimum score): mutates the whole scope (787 mutants, about 10 minutes locally) and publishes the
+  per-package and per-file report in the job summary and the `mutation-report` artifact. It never gates.
+
+`MUTATION_MIN_SCORE` is a **ratchet**: a floor a bit below the current baseline (67.7% on the first full
+run), 60 by default. It only goes up: raise it as tests improve, in the repository variable
+`MUTATION_MIN_SCORE` (Settings → Secrets and variables → Actions → Variables) or the default in
+`scripts/mutation.py` and `ci.yml`. To change what is mutated, edit `only_mutate`; both runs follow it.
 
 Reading the result (`mutants/report.md` locally, job summary and `mutation-report` artifact in CI):
 
-- **killed**: a test failed, so the tests pin that behaviour down;
+- **killed**: a test failed, so the tests pin that behaviour down (timeouts count as killed);
 - **survived**: every test still passed, so nothing checks that line; `uv run mutmut show <name>` prints the diff;
-- **no tests**: no unit test runs that code at all;
+- **no tests**: no unit test runs that code at all (counts as not killed);
 - **score** = killed / all mutants. Survivors that only change an error message are usually noise; survivors
   that change a comparison, a condition or the id passed to a repository are real gaps.
 
 Results are cached in `mutants/` (git-ignored): the next run only re-tests what changed. Delete it for a
 clean run; `uv run mutmut browse` explores the results interactively.
+
+### Quality Report
+
+Every PR gets **one** comment titled *Quality Report* (found and updated through the
+`<!-- quality-report -->` marker), rebuilt on each push by the `quality-report` job:
+
+- the top line is the verdict (❌ failed, ⚠️ passed with warnings, ✅ all good) and the table has one row per
+  analysis: backend lint/format, types (API and MCP), security, dead code, complexity, tests and coverage
+  (API and MCP), architecture contracts (API and MCP), boot smoke, mutation testing, and the frontend lint,
+  types, tests with coverage and build;
+- each section below has the summary and, in a collapsed `<details>`, the evidence: least covered files,
+  broken contracts with the violating import, smoke scenarios with their boot time, surviving mutants with
+  their diffs, lint problems, failures;
+- ✅ passed, ⚠️ warning (advisory vulture findings, ESLint warnings, models/migrations drift), ❌ failed,
+  ⏭️ not run (job cancelled or skipped, or nothing to mutate). A job that failed before producing its result
+  shows as ❌ with the job result, so the report never breaks.
+
+The report only informs: each job is still the gate for its own checks, with the same thresholds. It is also
+written to the job summary, which is the only place it appears on PRs from forks (their token cannot
+comment).
+
+How it works: each job runs its tools through `scripts/quality_report.py run <analysis> -- <command>`, which
+streams the output, keeps the exit code and stores a JSON fragment in `quality-fragments/`; the job uploads it
+as the `quality-fragment-<job>` artifact. The `quality-report` job (`needs` every analysis job, `if: always()`)
+downloads them and runs `scripts/quality_report.py render`. To add an analysis:
+
+1. add a value to `Analysis` and an `analyze_<tool>` function returning a `Finding` in
+   `scripts/quality_report.py`, registered in `ANALYZERS`;
+2. add a `Check` to a `Section` in `SECTIONS` (or a new `Section`), with the job that runs it;
+3. in `ci.yml`, run the tool through the wrapper (`if: ${{ !cancelled() }}` when it is not the first step),
+   upload `quality-fragments/` as `quality-fragment-<job>` and, for a new job, add it to the `needs` of
+   `quality-report`;
+4. add tests in `tests/unit/scripts/test_quality_report.py` with a sample of the tool's real output.
 
 ## Adding a feature
 

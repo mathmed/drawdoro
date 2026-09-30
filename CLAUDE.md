@@ -31,6 +31,7 @@ make format-code  fix lint issues and format with ruff
 make smoke        boot smoke: clean Postgres + migrations + real API (auth on/off) + MCP
 make lint-imports architecture contracts (import-linter) for app/ and mcp/
 make mutation     mutation testing of use cases and domain services (slow, weekly in CI)
+make mutation-changed  mutation testing of only the domain code changed vs BASE (default origin/main); runs on every PR
 ```
 
 Always use `uv run` for the backend. Frontend: `cd frontend && npm install && npm run dev`. MCP: `cd mcp && uv run python server.py`.
@@ -84,7 +85,17 @@ tests/integration/ HTTP tests with TestClient
 - Never relax an import-linter contract (`[tool.importlinter]` in `pyproject.toml` or `mcp/pyproject.toml`)
   nor add `ignore_imports` without the owner's approval: fix the import instead.
 - Never remove or rename `/health` (liveness) or `/ready` (readiness): deploy probes depend on them.
-- `make mutation` is slow and runs weekly in CI; use it to find weak tests, not as a PR gate.
+- Mutation testing runs on every PR (CI job `mutation`, `make mutation-changed` locally): only the use cases
+  and domain services changed in the diff, down to the changed functions. The job fails when their score is
+  below `MUTATION_MIN_SCORE` (a ratchet, default 60, repository variable). Survivors of the changed code are
+  listed in the Quality Report with their diffs: add the missing assertion; never weaken or delete tests,
+  shrink `only_mutate` or lower the ratchet to get it green. `make mutation` (whole scope, slow) runs weekly.
+  Never commit `mutants/`.
+- CI analyses never post comments on their own. Each job runs its tool through
+  `scripts/quality_report.py run <analysis> -- <command>` (keeps the exit code: the job stays the gate) and
+  uploads `quality-fragment-<job>`; the `quality-report` job builds the single PR comment. A new analysis
+  needs an `Analysis` value, an analyzer, a `Check` in `SECTIONS`, the wrapper and artifact in its job, the
+  job in the `needs` of `quality-report`, and tests (README, "Quality Report").
 
 ## Workflow
 
@@ -100,6 +111,7 @@ tests/integration/ HTTP tests with TestClient
 - **Enums**: always use `enum.StrEnum` for fixed sets of strings.
 - **Data structures**: always use `BaseModel` or `dataclass`. Use `dict` only as last resort.
 - **Identifiers**: every identifier in English.
+- **Language**: all code, comments, logs, docs and user-facing text (including CI reports and step names) in English.
 - **Typing**: every parameter and return value is typed. `Any` only if unavoidable.
 - **Logging**: never `print`; always `logger = logging.getLogger(__name__)`.
 - **Dates**: always timezone-aware UTC: `datetime.now(UTC)`.
