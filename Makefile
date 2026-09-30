@@ -1,4 +1,4 @@
-.PHONY: setup dev dev-build run build test test-unit test-mcp hooks check-code format-code frontend db
+.PHONY: setup dev dev-build run build test test-unit test-mcp test-frontend hooks check-code format-code frontend db
 
 # Install uv (if missing), project dependencies and git hooks
 setup:
@@ -45,6 +45,10 @@ test-unit:
 # Run the MCP server tests and type check (separate uv project in mcp/)
 test-mcp:
 	cd mcp && uv run pytest && uv run mypy .
+
+# Run the frontend lint, type check and tests with coverage (same steps as CI)
+test-frontend:
+	cd frontend && npm run lint && npm run typecheck && npm run test:coverage
 
 # Run all quality checks (ruff, mypy, bandit, vulture, xenon, pip-audit)
 hooks:
