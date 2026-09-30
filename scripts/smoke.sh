@@ -94,13 +94,19 @@ request() {
     printf '   ok  %-6s %-60s %s\n' "$method" "${url#http://127.0.0.1:*/}" "$status"
 }
 
+elapsed_since() {
+    awk -v start="$1" -v now="$EPOCHREALTIME" 'BEGIN { printf "%.1f", now - start }'
+}
+
+# The "ready in" line is read by scripts/quality_report.py for the Quality Report.
 wait_for() {
-    local url="$1" pid="$2" name="$3" deadline=$((SECONDS + TIMEOUT))
+    local url="$1" pid="$2" name="$3" deadline=$((SECONDS + TIMEOUT)) started="$EPOCHREALTIME"
     until curl -sf -o /dev/null "$url"; do
         kill -0 "$pid" 2>/dev/null || fail "$name exited before answering $url"
         ((SECONDS < deadline)) || fail "$name did not answer $url within ${TIMEOUT}s"
-        sleep 1
+        sleep 0.5
     done
+    printf '   ok  %s ready in %ss\n' "$name" "$(elapsed_since "$started")"
 }
 
 start_database() {

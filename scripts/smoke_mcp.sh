@@ -88,11 +88,15 @@ log "Starting the MCP server (streamable-http) against $API_URL"
 MCP_PID=$!
 
 deadline=$((SECONDS + TIMEOUT))
+started="$EPOCHREALTIME"
 until curl -sf -o /dev/null "$MCP_URL/health"; do
     kill -0 "$MCP_PID" 2>/dev/null || fail "the MCP server exited before answering /health"
     ((SECONDS < deadline)) || fail "the MCP server did not answer /health within ${TIMEOUT}s"
-    sleep 1
+    sleep 0.5
 done
+# The "ready in" line is read by scripts/quality_report.py for the Quality Report.
+printf '   ok  MCP server ready in %ss\n' \
+    "$(awk -v start="$started" -v now="$EPOCHREALTIME" 'BEGIN { printf "%.1f", now - start }')"
 echo "   ok  GET /health"
 
 rpc 200 "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {

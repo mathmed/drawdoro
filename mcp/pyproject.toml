@@ -19,6 +19,7 @@ dev = [
     "import-linter>=2.15",
     "mypy>=1.18.0",
     "pytest>=8.4.0",
+    "pytest-cov>=7.1.0",
 ]
 
 [build-system]
@@ -32,6 +33,11 @@ packages = ["."]
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "--import-mode=importlib"
+
+# Coverage is reported in the Quality Report only; there is no minimum for the MCP server.
+[tool.coverage.run]
+source = ["."]
+omit = ["tests/*"]
 
 [tool.mypy]
 strict = true

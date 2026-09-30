@@ -172,3 +172,6 @@ frontend/.env.*.local
 
 # mutmut
 mutants/
+# Quality Report fragments and output (scripts/quality_report.py)
+quality-fragments/
+quality-report.md
