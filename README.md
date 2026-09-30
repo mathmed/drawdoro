@@ -47,7 +47,7 @@ modules (branding, auth session, Zustand stores, formatting and validation utili
 canvas is not unit tested. Tests always run with `VITE_APP_NAME=Test App` (set in `vitest.config.ts`), so they never
 depend on the product name or on a local `.env`.
 
-Coverage thresholds (`vitest.config.ts`) fail the run when coverage drops: a low global floor (about 15%, since the
+Coverage thresholds (`vitest.config.ts`) fail the run when coverage drops: a low global floor (10%; about 15% is covered today, since the
 canvas and most views are untested) and stricter per-file floors for the covered modules (90% for the auth session,
 branding and utilities; 60% for the stores). Raise them as tests are added.
 
