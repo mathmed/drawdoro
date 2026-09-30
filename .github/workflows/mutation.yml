@@ -1,7 +1,9 @@
 name: Mutation testing
 
-# Slow (about 10 minutes) and informative: it measures how well the unit tests pin down the use
-# cases and domain services. It never gates a PR; read the job summary or the report artifact.
+# Full run: mutates every use case and domain service (slow, about 10 minutes locally). It measures
+# how well the unit tests pin down the business rules and reports; it never gates a PR. PRs run the
+# cheap version instead (the `mutation` job in ci.yml mutates only the changed code). Read the job
+# summary or the mutation-report artifact.
 on:
   schedule:
     - cron: "0 6 * * 1"
@@ -38,7 +40,7 @@ jobs:
         env:
           MIN_SCORE: ${{ inputs.min_score || '0' }}
         run: |
-          uv run --locked python scripts/mutation_report.py --min-score "$MIN_SCORE" \
+          uv run --locked python scripts/mutation.py report --min-score "$MIN_SCORE" \
             > mutation-report.md || EXIT=$?
           # The job summary has a size limit: keep the tables and point to the artifact for diffs.
           sed '/^### Surviving mutants/,$d' mutation-report.md >> "$GITHUB_STEP_SUMMARY"

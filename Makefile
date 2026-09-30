@@ -1,5 +1,5 @@
 .PHONY: setup dev dev-build run build test test-unit test-mcp test-frontend hooks check-code format-code frontend db \
-	smoke smoke-mcp lint-imports mutation mutation-report
+	smoke smoke-mcp lint-imports mutation mutation-report mutation-changed
 
 # Install uv (if missing), project dependencies and git hooks
 setup:
@@ -76,9 +76,15 @@ mutation:
 	@$(MAKE) --no-print-directory mutation-report
 
 mutation-report:
-	uv run python scripts/mutation_report.py > mutants/report.md
+	uv run python scripts/mutation.py report > mutants/report.md
 	@sed -n '1,4p' mutants/report.md
 	@echo ">> full report: mutants/report.md | inspect a mutant: uv run mutmut show <name>"
+
+# What the PR job runs: mutates only the use cases and domain services changed against BASE, down
+# to the changed functions, and fails below MUTATION_MIN_SCORE (default 60, the ratchet).
+BASE ?= origin/main
+mutation-changed:
+	uv run python scripts/mutation.py changed --base $(BASE)
 
 # Lint and check formatting
 check-code:
