@@ -1,12 +1,48 @@
+diff --git a/node_modules/tldraw/dist-cjs/index.d.ts b/node_modules/tldraw/dist-cjs/index.d.ts
+index 5a6f288..90c846a 100644
+--- a/node_modules/tldraw/dist-cjs/index.d.ts
++++ b/node_modules/tldraw/dist-cjs/index.d.ts
+@@ -1078,6 +1078,7 @@ export declare interface DrawPathBuilderDOpts {
+     roundness?: number;
+     passes?: number;
+     onlyFilled?: boolean;
++    offsetScale?: number;
+ }
+ 
+ /** @public */
 diff --git a/node_modules/tldraw/dist-cjs/lib/shapes/arrow/ArrowPath.js b/node_modules/tldraw/dist-cjs/lib/shapes/arrow/ArrowPath.js
-index 91b918d..999ccd8 100644
+index 91b918d..8db2cef 100644
 --- a/node_modules/tldraw/dist-cjs/lib/shapes/arrow/ArrowPath.js
 +++ b/node_modules/tldraw/dist-cjs/lib/shapes/arrow/ArrowPath.js
-@@ -28,15 +28,15 @@ var import_getElbowArrowInfo = require("./elbow/getElbowArrowInfo");
+@@ -25,18 +25,39 @@ module.exports = __toCommonJS(ArrowPath_exports);
+ var import_editor = require("@tldraw/editor");
+ var import_PathBuilder = require("../shared/PathBuilder");
+ var import_getElbowArrowInfo = require("./elbow/getElbowArrowInfo");
++// A straight body is a single segment: offsetting its two ends keeps it straight, so it is split
++// into curved pieces whose inner joints the draw offset (seeded by the shape id) can move. The ends
++// stay put so the body still meets its bindings and arrowheads.
++function getSloppyStraightBodyPath(start, end) {
++  const segments = Math.max(2, Math.min(6, Math.round(import_editor.Vec.Dist(start, end) / 80)));
++  const path = new import_PathBuilder.PathBuilder().moveTo(start.x, start.y, { offset: 0, roundness: 0 });
++  for (let i = 1; i <= segments; i++) {
++    const from = import_editor.Vec.Lrp(start, end, (i - 1) / segments);
++    const to = import_editor.Vec.Lrp(start, end, i / segments);
++    const cp1 = import_editor.Vec.Lrp(from, to, 1 / 3);
++    const cp2 = import_editor.Vec.Lrp(from, to, 2 / 3);
++    path.cubicBezierTo(to.x, to.y, cp1.x, cp1.y, cp2.x, cp2.y, {
++      offset: i === segments ? 0 : void 0,
++      roundness: 0
++    });
++  }
++  return path;
++}
  function getArrowBodyPath(shape, info, opts) {
    switch (info.type) {
      case "straight":
 -      return new import_PathBuilder.PathBuilder().moveTo(info.start.point.x, info.start.point.y, { offset: 0, roundness: 0 }).lineTo(info.end.point.x, info.end.point.y, { offset: 0, roundness: 0 }).toSvg(opts);
++      if (opts.style === "draw" && !opts.forceSolid) {
++        return getSloppyStraightBodyPath(info.start.point, info.end.point).toSvg(opts);
++      }
 +      return new import_PathBuilder.PathBuilder().moveTo(info.start.point.x, info.start.point.y, { roundness: 0 }).lineTo(info.end.point.x, info.end.point.y, { roundness: 0 }).toSvg(opts);
      case "arc":
 -      return new import_PathBuilder.PathBuilder().moveTo(info.start.point.x, info.start.point.y, { offset: 0, roundness: 0 }).circularArcTo(
@@ -22,10 +58,10 @@ index 91b918d..999ccd8 100644
      case "elbow": {
        const path = new import_PathBuilder.PathBuilder();
 diff --git a/node_modules/tldraw/dist-cjs/lib/shapes/arrow/ArrowShapeUtil.js b/node_modules/tldraw/dist-cjs/lib/shapes/arrow/ArrowShapeUtil.js
-index 98079f6..cda5c8c 100644
+index 98079f6..b5551aa 100644
 --- a/node_modules/tldraw/dist-cjs/lib/shapes/arrow/ArrowShapeUtil.js
 +++ b/node_modules/tldraw/dist-cjs/lib/shapes/arrow/ArrowShapeUtil.js
-@@ -670,8 +670,8 @@ class ArrowShapeUtil extends import_editor.ShapeUtil {
+@@ -670,8 +670,9 @@ class ArrowShapeUtil extends import_editor.ShapeUtil {
                  style: "draw",
                  randomSeed: shape.id,
                  strokeWidth: 1,
@@ -33,20 +69,43 @@ index 98079f6..cda5c8c 100644
 -                offset: 0,
 +                passes: 2,
 +                offset: strokeWidth * 2,
++                offsetScale: import_PathBuilder.getSloppinessOffsetScale(shape),
                  roundness: strokeWidth * 2,
                  props: { strokeWidth: void 0 }
                } : { style: "solid", strokeWidth: 1, props: { strokeWidth: void 0 } }
-@@ -868,7 +868,9 @@ const ArrowSvg = (0, import_editor.track)(function ArrowSvg2({
+@@ -868,7 +869,10 @@ const ArrowSvg = (0, import_editor.track)(function ArrowSvg2({
                    style: shape.props.dash,
                    strokeWidth,
                    forceSolid: isForceSolid,
 -                  randomSeed: shape.id
 +                  randomSeed: shape.id,
 +                  passes: 2,
-+                  offset: strokeWidth * 2
++                  offset: strokeWidth * 2,
++                  offsetScale: import_PathBuilder.getSloppinessOffsetScale(shape)
                  })
                ]
              }
+diff --git a/node_modules/tldraw/dist-cjs/lib/shapes/arrow/arrowLabel.js b/node_modules/tldraw/dist-cjs/lib/shapes/arrow/arrowLabel.js
+index 016223b..c5dcc9f 100644
+--- a/node_modules/tldraw/dist-cjs/lib/shapes/arrow/arrowLabel.js
++++ b/node_modules/tldraw/dist-cjs/lib/shapes/arrow/arrowLabel.js
+@@ -92,6 +92,7 @@ const labelSizeCache = (0, import_editor.createComputedCache)(
+   },
+   {
+     areRecordsEqual: (a, b) => {
++      if (a.meta?.fontSize !== b.meta?.fontSize) return false;
+       if (a.props === b.props) return true;
+       const changedKeys = (0, import_editor.getChangedKeys)(a.props, b.props);
+       return changedKeys.length === 1 && changedKeys[0] === "labelPosition";
+@@ -202,7 +203,7 @@ function furthest(from, candidates) {
+   return furthest2;
+ }
+ function getArrowLabelFontSize(shape) {
+-  return import_default_shape_constants.ARROW_LABEL_FONT_SIZES[shape.props.size] * shape.props.scale;
++  return (import_default_shape_constants.getCustomFontSize(shape) ?? import_default_shape_constants.ARROW_LABEL_FONT_SIZES[shape.props.size]) * shape.props.scale;
+ }
+ function getArrowLabelDefaultPosition(editor, shape) {
+   const info = (0, import_shared.getArrowInfo)(editor, shape);
 diff --git a/node_modules/tldraw/dist-cjs/lib/shapes/arrow/arrowheads.js b/node_modules/tldraw/dist-cjs/lib/shapes/arrow/arrowheads.js
 index fb527b1..4dbe893 100644
 --- a/node_modules/tldraw/dist-cjs/lib/shapes/arrow/arrowheads.js
@@ -76,11 +135,61 @@ index fb527b1..4dbe893 100644
        int = previousPoint ? import_editor.Vec.Nudge(point, previousPoint, length) : point;
        break;
      }
+diff --git a/node_modules/tldraw/dist-cjs/lib/shapes/geo/components/GeoShapeBody.js b/node_modules/tldraw/dist-cjs/lib/shapes/geo/components/GeoShapeBody.js
+index dfcf755..1fe086c 100644
+--- a/node_modules/tldraw/dist-cjs/lib/shapes/geo/components/GeoShapeBody.js
++++ b/node_modules/tldraw/dist-cjs/lib/shapes/geo/components/GeoShapeBody.js
+@@ -26,6 +26,7 @@ var import_ShapeFill = require("../../shared/ShapeFill");
+ var import_default_shape_constants = require("../../shared/default-shape-constants");
+ var import_useDefaultColorTheme = require("../../shared/useDefaultColorTheme");
+ var import_getGeoShapePath = require("../getGeoShapePath");
++var import_PathBuilder = require("../../shared/PathBuilder");
+ function GeoShapeBody({
+   shape,
+   shouldScale,
+@@ -45,6 +46,7 @@ function GeoShapeBody({
+       strokeWidth,
+       forceSolid,
+       randomSeed: shape.id,
++      offsetScale: import_PathBuilder.getSloppinessOffsetScale(shape),
+       props: { fill: "none", stroke: theme[color].solid }
+     })
+   ] });
+diff --git a/node_modules/tldraw/dist-cjs/lib/shapes/line/LineShapeUtil.js b/node_modules/tldraw/dist-cjs/lib/shapes/line/LineShapeUtil.js
+index dbe94cd..efb5660 100644
+--- a/node_modules/tldraw/dist-cjs/lib/shapes/line/LineShapeUtil.js
++++ b/node_modules/tldraw/dist-cjs/lib/shapes/line/LineShapeUtil.js
+@@ -277,6 +277,7 @@ function LineShapeSvg({
+     strokeWidth,
+     forceSolid,
+     randomSeed: shape.id,
++    offsetScale: import_PathBuilder.getSloppinessOffsetScale(shape),
+     props: { transform: `scale(${scale})`, stroke: theme[color].solid, fill: "none" }
+   });
+ }
 diff --git a/node_modules/tldraw/dist-cjs/lib/shapes/shared/PathBuilder.js b/node_modules/tldraw/dist-cjs/lib/shapes/shared/PathBuilder.js
-index 762117a..d282952 100644
+index 762117a..f6ae3de 100644
 --- a/node_modules/tldraw/dist-cjs/lib/shapes/shared/PathBuilder.js
 +++ b/node_modules/tldraw/dist-cjs/lib/shapes/shared/PathBuilder.js
-@@ -413,7 +413,7 @@ class PathBuilder {
+@@ -19,11 +19,16 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
+ var PathBuilder_exports = {};
+ __export(PathBuilder_exports, {
+   PathBuilder: () => PathBuilder,
+-  PathBuilderGeometry2d: () => PathBuilderGeometry2d
++  PathBuilderGeometry2d: () => PathBuilderGeometry2d,
++  getSloppinessOffsetScale: () => getSloppinessOffsetScale
+ });
+ module.exports = __toCommonJS(PathBuilder_exports);
+ var import_jsx_runtime = require("react/jsx-runtime");
+ var import_editor = require("@tldraw/editor");
++// Sloppiness level on top of the "draw" dash: meta.sloppiness "moderate" halves the offset.
++function getSloppinessOffsetScale(shape) {
++  return shape?.meta?.sloppiness === "moderate" ? 0.5 : 1;
++}
+ class PathBuilder {
+   static lineThroughPoints(points, opts) {
+     const path = new PathBuilder();
+@@ -413,10 +418,11 @@ class PathBuilder {
      const {
        strokeWidth,
        randomSeed,
@@ -88,16 +197,152 @@ index 762117a..d282952 100644
 +      offset: defaultOffset = strokeWidth * 3.5,
        roundness: defaultRoundness = strokeWidth * 2,
        passes = 2,
-       onlyFilled = false
+-      onlyFilled = false
++      onlyFilled = false,
++      offsetScale = 1
+     } = opts;
+     const parts = [];
+     const commandInfo = this.getCommandInfo();
+@@ -424,7 +430,7 @@ class PathBuilder {
+     let lastMoveCommandIdx = null;
+     for (let i = 0; i < this.commands.length; i++) {
+       const command = this.commands[i];
+-      const offset = command.opts?.offset ?? defaultOffset;
++      const offset = (command.opts?.offset ?? defaultOffset) * offsetScale;
+       const roundness = command.opts?.roundness ?? defaultRoundness;
+       if (command.type === "move") {
+         lastMoveCommandIdx = i;
+diff --git a/node_modules/tldraw/dist-cjs/lib/shapes/shared/default-shape-constants.js b/node_modules/tldraw/dist-cjs/lib/shapes/shared/default-shape-constants.js
+index c2ba5d9..62927d7 100644
+--- a/node_modules/tldraw/dist-cjs/lib/shapes/shared/default-shape-constants.js
++++ b/node_modules/tldraw/dist-cjs/lib/shapes/shared/default-shape-constants.js
+@@ -18,6 +18,7 @@ var __copyProps = (to, from, except, desc) => {
+ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+ var default_shape_constants_exports = {};
+ __export(default_shape_constants_exports, {
++  getCustomFontSize: () => getCustomFontSize,
+   ARROW_LABEL_FONT_SIZES: () => ARROW_LABEL_FONT_SIZES,
+   ARROW_LABEL_PADDING: () => ARROW_LABEL_PADDING,
+   FONT_FAMILIES: () => FONT_FAMILIES,
+@@ -29,6 +30,11 @@ __export(default_shape_constants_exports, {
+   TEXT_PROPS: () => TEXT_PROPS
+ });
+ module.exports = __toCommonJS(default_shape_constants_exports);
++// Custom font size in px (meta.fontSize) that overrides the size preset of text and labels.
++function getCustomFontSize(shape) {
++  const value = shape?.meta?.fontSize;
++  return typeof value === "number" && value > 0 ? value : void 0;
++}
+ const TEXT_PROPS = {
+   lineHeight: 1.35,
+   fontWeight: "normal",
+diff --git a/node_modules/tldraw/dist-cjs/lib/shapes/text/TextShapeUtil.js b/node_modules/tldraw/dist-cjs/lib/shapes/text/TextShapeUtil.js
+index 7f81453..0f910eb 100644
+--- a/node_modules/tldraw/dist-cjs/lib/shapes/text/TextShapeUtil.js
++++ b/node_modules/tldraw/dist-cjs/lib/shapes/text/TextShapeUtil.js
+@@ -32,9 +32,9 @@ const sizeCache = (0, import_editor.createComputedCache)(
+   "text size",
+   (editor, shape) => {
+     editor.fonts.trackFontsForShape(shape);
+-    return getTextSize(editor, shape.props);
++    return getTextSize(editor, shape.props, import_default_shape_constants.getCustomFontSize(shape));
+   },
+-  { areRecordsEqual: (a, b) => a.props === b.props }
++  { areRecordsEqual: (a, b) => a.props === b.props && a.meta?.fontSize === b.meta?.fontSize }
+ );
+ class TextShapeUtil extends import_editor.ShapeUtil {
+   static type = "text";
+@@ -103,7 +103,7 @@ class TextShapeUtil extends import_editor.ShapeUtil {
+         classNamePrefix: "tl-text-shape",
+         type: "text",
+         font,
+-        fontSize: import_default_shape_constants.FONT_SIZES[size],
++        fontSize: import_default_shape_constants.getCustomFontSize(shape) ?? import_default_shape_constants.FONT_SIZES[size],
+         lineHeight: import_default_shape_constants.TEXT_PROPS.lineHeight,
+         align: textAlign,
+         verticalAlign: "middle",
+@@ -136,7 +136,7 @@ class TextShapeUtil extends import_editor.ShapeUtil {
+     return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+       import_RichTextLabel.RichTextSVG,
+       {
+-        fontSize: import_default_shape_constants.FONT_SIZES[shape.props.size],
++        fontSize: import_default_shape_constants.getCustomFontSize(shape) ?? import_default_shape_constants.FONT_SIZES[shape.props.size],
+         font: shape.props.font,
+         align: shape.props.textAlign,
+         verticalAlign: "middle",
+@@ -178,11 +178,11 @@ class TextShapeUtil extends import_editor.ShapeUtil {
+   }
+   onBeforeUpdate(prev, next) {
+     if (!next.props.autoSize) return;
+-    const styleDidChange = prev.props.size !== next.props.size || prev.props.textAlign !== next.props.textAlign || prev.props.font !== next.props.font || prev.props.scale !== 1 && next.props.scale === 1;
++    const styleDidChange = prev.props.size !== next.props.size || prev.props.textAlign !== next.props.textAlign || prev.props.font !== next.props.font || prev.props.scale !== 1 && next.props.scale === 1 || prev.meta?.fontSize !== next.meta?.fontSize;
+     const textDidChange = !(0, import_editor.isEqual)(prev.props.richText, next.props.richText);
+     if (!styleDidChange && !textDidChange) return;
+     const boundsA = this.getMinDimensions(prev);
+-    const boundsB = getTextSize(this.editor, next.props);
++    const boundsB = getTextSize(this.editor, next.props, import_default_shape_constants.getCustomFontSize(next));
+     const wA = boundsA.width * prev.props.scale;
+     const hA = boundsA.height * prev.props.scale;
+     const wB = boundsB.width * next.props.scale;
+@@ -244,10 +244,10 @@ class TextShapeUtil extends import_editor.ShapeUtil {
+   // 	}
+   // }
+ }
+-function getTextSize(editor, props) {
++function getTextSize(editor, props, customFontSize) {
+   const { font, richText, size, w } = props;
+   const minWidth = 16;
+-  const fontSize = import_default_shape_constants.FONT_SIZES[size];
++  const fontSize = customFontSize ?? import_default_shape_constants.FONT_SIZES[size];
+   const maybeFixedWidth = props.autoSize ? null : Math.max(minWidth, Math.floor(w));
+   const html = (0, import_richText.renderHtmlFromRichTextForMeasurement)(editor, richText);
+   const result = editor.textMeasure.measureHtml(html, {
+diff --git a/node_modules/tldraw/dist-esm/index.d.mts b/node_modules/tldraw/dist-esm/index.d.mts
+index 5a6f288..90c846a 100644
+--- a/node_modules/tldraw/dist-esm/index.d.mts
++++ b/node_modules/tldraw/dist-esm/index.d.mts
+@@ -1078,6 +1078,7 @@ export declare interface DrawPathBuilderDOpts {
+     roundness?: number;
+     passes?: number;
+     onlyFilled?: boolean;
++    offsetScale?: number;
+ }
+ 
+ /** @public */
 diff --git a/node_modules/tldraw/dist-esm/lib/shapes/arrow/ArrowPath.mjs b/node_modules/tldraw/dist-esm/lib/shapes/arrow/ArrowPath.mjs
-index ed9bbaf..db41d65 100644
+index ed9bbaf..a8a8a6a 100644
 --- a/node_modules/tldraw/dist-esm/lib/shapes/arrow/ArrowPath.mjs
 +++ b/node_modules/tldraw/dist-esm/lib/shapes/arrow/ArrowPath.mjs
-@@ -4,15 +4,15 @@ import { getRouteHandlePath } from "./elbow/getElbowArrowInfo.mjs";
+@@ -1,18 +1,39 @@
+-import { exhaustiveSwitchError } from "@tldraw/editor";
++import { Vec, exhaustiveSwitchError } from "@tldraw/editor";
+ import { PathBuilder } from "../shared/PathBuilder.mjs";
+ import { getRouteHandlePath } from "./elbow/getElbowArrowInfo.mjs";
++// A straight body is a single segment: offsetting its two ends keeps it straight, so it is split
++// into curved pieces whose inner joints the draw offset (seeded by the shape id) can move. The ends
++// stay put so the body still meets its bindings and arrowheads.
++function getSloppyStraightBodyPath(start, end) {
++  const segments = Math.max(2, Math.min(6, Math.round(Vec.Dist(start, end) / 80)));
++  const path = new PathBuilder().moveTo(start.x, start.y, { offset: 0, roundness: 0 });
++  for (let i = 1; i <= segments; i++) {
++    const from = Vec.Lrp(start, end, (i - 1) / segments);
++    const to = Vec.Lrp(start, end, i / segments);
++    const cp1 = Vec.Lrp(from, to, 1 / 3);
++    const cp2 = Vec.Lrp(from, to, 2 / 3);
++    path.cubicBezierTo(to.x, to.y, cp1.x, cp1.y, cp2.x, cp2.y, {
++      offset: i === segments ? 0 : void 0,
++      roundness: 0
++    });
++  }
++  return path;
++}
  function getArrowBodyPath(shape, info, opts) {
    switch (info.type) {
      case "straight":
 -      return new PathBuilder().moveTo(info.start.point.x, info.start.point.y, { offset: 0, roundness: 0 }).lineTo(info.end.point.x, info.end.point.y, { offset: 0, roundness: 0 }).toSvg(opts);
++      if (opts.style === "draw" && !opts.forceSolid) {
++        return getSloppyStraightBodyPath(info.start.point, info.end.point).toSvg(opts);
++      }
 +      return new PathBuilder().moveTo(info.start.point.x, info.start.point.y, { roundness: 0 }).lineTo(info.end.point.x, info.end.point.y, { roundness: 0 }).toSvg(opts);
      case "arc":
 -      return new PathBuilder().moveTo(info.start.point.x, info.start.point.y, { offset: 0, roundness: 0 }).circularArcTo(
@@ -113,10 +358,19 @@ index ed9bbaf..db41d65 100644
      case "elbow": {
        const path = new PathBuilder();
 diff --git a/node_modules/tldraw/dist-esm/lib/shapes/arrow/ArrowShapeUtil.mjs b/node_modules/tldraw/dist-esm/lib/shapes/arrow/ArrowShapeUtil.mjs
-index 295f3ac..6c0e4a3 100644
+index 295f3ac..befb715 100644
 --- a/node_modules/tldraw/dist-esm/lib/shapes/arrow/ArrowShapeUtil.mjs
 +++ b/node_modules/tldraw/dist-esm/lib/shapes/arrow/ArrowShapeUtil.mjs
-@@ -686,8 +686,8 @@ class ArrowShapeUtil extends ShapeUtil {
+@@ -32,7 +32,7 @@ import {
+ } from "@tldraw/editor";
+ import { useMemo } from "react";
+ import { updateArrowTerminal } from "../../bindings/arrow/ArrowBindingUtil.mjs";
+-import { PathBuilder } from "../shared/PathBuilder.mjs";
++import { PathBuilder, getSloppinessOffsetScale } from "../shared/PathBuilder.mjs";
+ import { PlainTextLabel } from "../shared/PlainTextLabel.mjs";
+ import { ShapeFill } from "../shared/ShapeFill.mjs";
+ import { SvgTextLabel } from "../shared/SvgTextLabel.mjs";
+@@ -686,8 +686,9 @@ class ArrowShapeUtil extends ShapeUtil {
                  style: "draw",
                  randomSeed: shape.id,
                  strokeWidth: 1,
@@ -124,20 +378,51 @@ index 295f3ac..6c0e4a3 100644
 -                offset: 0,
 +                passes: 2,
 +                offset: strokeWidth * 2,
++                offsetScale: getSloppinessOffsetScale(shape),
                  roundness: strokeWidth * 2,
                  props: { strokeWidth: void 0 }
                } : { style: "solid", strokeWidth: 1, props: { strokeWidth: void 0 } }
-@@ -884,7 +884,9 @@ const ArrowSvg = track(function ArrowSvg2({
+@@ -884,7 +885,10 @@ const ArrowSvg = track(function ArrowSvg2({
                    style: shape.props.dash,
                    strokeWidth,
                    forceSolid: isForceSolid,
 -                  randomSeed: shape.id
 +                  randomSeed: shape.id,
 +                  passes: 2,
-+                  offset: strokeWidth * 2
++                  offset: strokeWidth * 2,
++                  offsetScale: getSloppinessOffsetScale(shape)
                  })
                ]
              }
+diff --git a/node_modules/tldraw/dist-esm/lib/shapes/arrow/arrowLabel.mjs b/node_modules/tldraw/dist-esm/lib/shapes/arrow/arrowLabel.mjs
+index aa47dd1..d552d40 100644
+--- a/node_modules/tldraw/dist-esm/lib/shapes/arrow/arrowLabel.mjs
++++ b/node_modules/tldraw/dist-esm/lib/shapes/arrow/arrowLabel.mjs
+@@ -16,6 +16,7 @@ import {
+   ARROW_LABEL_FONT_SIZES,
+   ARROW_LABEL_PADDING,
+   FONT_FAMILIES,
++  getCustomFontSize,
+   LABEL_TO_ARROW_PADDING,
+   STROKE_SIZES,
+   TEXT_PROPS
+@@ -86,6 +87,7 @@ const labelSizeCache = createComputedCache(
+   },
+   {
+     areRecordsEqual: (a, b) => {
++      if (a.meta?.fontSize !== b.meta?.fontSize) return false;
+       if (a.props === b.props) return true;
+       const changedKeys = getChangedKeys(a.props, b.props);
+       return changedKeys.length === 1 && changedKeys[0] === "labelPosition";
+@@ -196,7 +198,7 @@ function furthest(from, candidates) {
+   return furthest2;
+ }
+ function getArrowLabelFontSize(shape) {
+-  return ARROW_LABEL_FONT_SIZES[shape.props.size] * shape.props.scale;
++  return (getCustomFontSize(shape) ?? ARROW_LABEL_FONT_SIZES[shape.props.size]) * shape.props.scale;
+ }
+ function getArrowLabelDefaultPosition(editor, shape) {
+   const info = getArrowInfo(editor, shape);
 diff --git a/node_modules/tldraw/dist-esm/lib/shapes/arrow/arrowheads.mjs b/node_modules/tldraw/dist-esm/lib/shapes/arrow/arrowheads.mjs
 index 0e5a12d..0224e1d 100644
 --- a/node_modules/tldraw/dist-esm/lib/shapes/arrow/arrowheads.mjs
@@ -167,11 +452,52 @@ index 0e5a12d..0224e1d 100644
        int = previousPoint ? Vec.Nudge(point, previousPoint, length) : point;
        break;
      }
+diff --git a/node_modules/tldraw/dist-esm/lib/shapes/geo/components/GeoShapeBody.mjs b/node_modules/tldraw/dist-esm/lib/shapes/geo/components/GeoShapeBody.mjs
+index 3549482..4729ce3 100644
+--- a/node_modules/tldraw/dist-esm/lib/shapes/geo/components/GeoShapeBody.mjs
++++ b/node_modules/tldraw/dist-esm/lib/shapes/geo/components/GeoShapeBody.mjs
+@@ -3,6 +3,7 @@ import { ShapeFill } from "../../shared/ShapeFill.mjs";
+ import { STROKE_SIZES } from "../../shared/default-shape-constants.mjs";
+ import { useDefaultColorTheme } from "../../shared/useDefaultColorTheme.mjs";
+ import { getGeoShapePath } from "../getGeoShapePath.mjs";
++import { getSloppinessOffsetScale } from "../../shared/PathBuilder.mjs";
+ function GeoShapeBody({
+   shape,
+   shouldScale,
+@@ -22,6 +23,7 @@ function GeoShapeBody({
+       strokeWidth,
+       forceSolid,
+       randomSeed: shape.id,
++      offsetScale: getSloppinessOffsetScale(shape),
+       props: { fill: "none", stroke: theme[color].solid }
+     })
+   ] });
+diff --git a/node_modules/tldraw/dist-esm/lib/shapes/line/LineShapeUtil.mjs b/node_modules/tldraw/dist-esm/lib/shapes/line/LineShapeUtil.mjs
+index 48f4f93..46bb15f 100644
+--- a/node_modules/tldraw/dist-esm/lib/shapes/line/LineShapeUtil.mjs
++++ b/node_modules/tldraw/dist-esm/lib/shapes/line/LineShapeUtil.mjs
+@@ -18,7 +18,7 @@ import {
+   sortByIndex
+ } from "@tldraw/editor";
+ import { STROKE_SIZES } from "../arrow/shared.mjs";
+-import { PathBuilder, PathBuilderGeometry2d } from "../shared/PathBuilder.mjs";
++import { PathBuilder, PathBuilderGeometry2d, getSloppinessOffsetScale } from "../shared/PathBuilder.mjs";
+ import { useDefaultColorTheme } from "../shared/useDefaultColorTheme.mjs";
+ const handlesCache = new WeakCache();
+ class LineShapeUtil extends ShapeUtil {
+@@ -271,6 +271,7 @@ function LineShapeSvg({
+     strokeWidth,
+     forceSolid,
+     randomSeed: shape.id,
++    offsetScale: getSloppinessOffsetScale(shape),
+     props: { transform: `scale(${scale})`, stroke: theme[color].solid, fill: "none" }
+   });
+ }
 diff --git a/node_modules/tldraw/dist-esm/lib/shapes/shared/PathBuilder.mjs b/node_modules/tldraw/dist-esm/lib/shapes/shared/PathBuilder.mjs
-index 0a352e4..634fa74 100644
+index 0a352e4..9e21012 100644
 --- a/node_modules/tldraw/dist-esm/lib/shapes/shared/PathBuilder.mjs
 +++ b/node_modules/tldraw/dist-esm/lib/shapes/shared/PathBuilder.mjs
-@@ -405,7 +405,7 @@ class PathBuilder {
+@@ -405,10 +405,11 @@ class PathBuilder {
      const {
        strokeWidth,
        randomSeed,
@@ -179,4 +505,119 @@ index 0a352e4..634fa74 100644
 +      offset: defaultOffset = strokeWidth * 3.5,
        roundness: defaultRoundness = strokeWidth * 2,
        passes = 2,
-       onlyFilled = false
+-      onlyFilled = false
++      onlyFilled = false,
++      offsetScale = 1
+     } = opts;
+     const parts = [];
+     const commandInfo = this.getCommandInfo();
+@@ -416,7 +417,7 @@ class PathBuilder {
+     let lastMoveCommandIdx = null;
+     for (let i = 0; i < this.commands.length; i++) {
+       const command = this.commands[i];
+-      const offset = command.opts?.offset ?? defaultOffset;
++      const offset = (command.opts?.offset ?? defaultOffset) * offsetScale;
+       const roundness = command.opts?.roundness ?? defaultRoundness;
+       if (command.type === "move") {
+         lastMoveCommandIdx = i;
+@@ -756,8 +757,13 @@ const CubicBezier = {
+     0.0472
+   ]
+ };
++// Sloppiness level on top of the "draw" dash: meta.sloppiness "moderate" halves the offset.
++function getSloppinessOffsetScale(shape) {
++  return shape?.meta?.sloppiness === "moderate" ? 0.5 : 1;
++}
+ export {
+   PathBuilder,
+-  PathBuilderGeometry2d
++  PathBuilderGeometry2d,
++  getSloppinessOffsetScale
+ };
+ //# sourceMappingURL=PathBuilder.mjs.map
+diff --git a/node_modules/tldraw/dist-esm/lib/shapes/shared/default-shape-constants.mjs b/node_modules/tldraw/dist-esm/lib/shapes/shared/default-shape-constants.mjs
+index b718510..b1eff74 100644
+--- a/node_modules/tldraw/dist-esm/lib/shapes/shared/default-shape-constants.mjs
++++ b/node_modules/tldraw/dist-esm/lib/shapes/shared/default-shape-constants.mjs
+@@ -38,7 +38,13 @@ const FONT_FAMILIES = {
+ const LABEL_TO_ARROW_PADDING = 20;
+ const ARROW_LABEL_PADDING = 4.25;
+ const LABEL_PADDING = 16;
++// Custom font size in px (meta.fontSize) that overrides the size preset of text and labels.
++function getCustomFontSize(shape) {
++  const value = shape?.meta?.fontSize;
++  return typeof value === "number" && value > 0 ? value : void 0;
++}
+ export {
++  getCustomFontSize,
+   ARROW_LABEL_FONT_SIZES,
+   ARROW_LABEL_PADDING,
+   FONT_FAMILIES,
+diff --git a/node_modules/tldraw/dist-esm/lib/shapes/text/TextShapeUtil.mjs b/node_modules/tldraw/dist-esm/lib/shapes/text/TextShapeUtil.mjs
+index 6759d0d..2755aa1 100644
+--- a/node_modules/tldraw/dist-esm/lib/shapes/text/TextShapeUtil.mjs
++++ b/node_modules/tldraw/dist-esm/lib/shapes/text/TextShapeUtil.mjs
+@@ -21,15 +21,15 @@ import {
+   renderPlaintextFromRichText
+ } from "../../utils/text/richText.mjs";
+ import { RichTextLabel, RichTextSVG } from "../shared/RichTextLabel.mjs";
+-import { FONT_FAMILIES, FONT_SIZES, TEXT_PROPS } from "../shared/default-shape-constants.mjs";
++import { FONT_FAMILIES, FONT_SIZES, TEXT_PROPS, getCustomFontSize } from "../shared/default-shape-constants.mjs";
+ import { useDefaultColorTheme } from "../shared/useDefaultColorTheme.mjs";
+ const sizeCache = createComputedCache(
+   "text size",
+   (editor, shape) => {
+     editor.fonts.trackFontsForShape(shape);
+-    return getTextSize(editor, shape.props);
++    return getTextSize(editor, shape.props, getCustomFontSize(shape));
+   },
+-  { areRecordsEqual: (a, b) => a.props === b.props }
++  { areRecordsEqual: (a, b) => a.props === b.props && a.meta?.fontSize === b.meta?.fontSize }
+ );
+ class TextShapeUtil extends ShapeUtil {
+   static type = "text";
+@@ -98,7 +98,7 @@ class TextShapeUtil extends ShapeUtil {
+         classNamePrefix: "tl-text-shape",
+         type: "text",
+         font,
+-        fontSize: FONT_SIZES[size],
++        fontSize: getCustomFontSize(shape) ?? FONT_SIZES[size],
+         lineHeight: TEXT_PROPS.lineHeight,
+         align: textAlign,
+         verticalAlign: "middle",
+@@ -131,7 +131,7 @@ class TextShapeUtil extends ShapeUtil {
+     return /* @__PURE__ */ jsx(
+       RichTextSVG,
+       {
+-        fontSize: FONT_SIZES[shape.props.size],
++        fontSize: getCustomFontSize(shape) ?? FONT_SIZES[shape.props.size],
+         font: shape.props.font,
+         align: shape.props.textAlign,
+         verticalAlign: "middle",
+@@ -173,11 +173,11 @@ class TextShapeUtil extends ShapeUtil {
+   }
+   onBeforeUpdate(prev, next) {
+     if (!next.props.autoSize) return;
+-    const styleDidChange = prev.props.size !== next.props.size || prev.props.textAlign !== next.props.textAlign || prev.props.font !== next.props.font || prev.props.scale !== 1 && next.props.scale === 1;
++    const styleDidChange = prev.props.size !== next.props.size || prev.props.textAlign !== next.props.textAlign || prev.props.font !== next.props.font || prev.props.scale !== 1 && next.props.scale === 1 || prev.meta?.fontSize !== next.meta?.fontSize;
+     const textDidChange = !isEqual(prev.props.richText, next.props.richText);
+     if (!styleDidChange && !textDidChange) return;
+     const boundsA = this.getMinDimensions(prev);
+-    const boundsB = getTextSize(this.editor, next.props);
++    const boundsB = getTextSize(this.editor, next.props, getCustomFontSize(next));
+     const wA = boundsA.width * prev.props.scale;
+     const hA = boundsA.height * prev.props.scale;
+     const wB = boundsB.width * next.props.scale;
+@@ -239,10 +239,10 @@ class TextShapeUtil extends ShapeUtil {
+   // 	}
+   // }
+ }
+-function getTextSize(editor, props) {
++function getTextSize(editor, props, customFontSize) {
+   const { font, richText, size, w } = props;
+   const minWidth = 16;
+-  const fontSize = FONT_SIZES[size];
++  const fontSize = customFontSize ?? FONT_SIZES[size];
+   const maybeFixedWidth = props.autoSize ? null : Math.max(minWidth, Math.floor(w));
+   const html = renderHtmlFromRichTextForMeasurement(editor, richText);
+   const result = editor.textMeasure.measureHtml(html, {
