@@ -8,6 +8,7 @@ from app.domain.errors.domain_errors import (
     InvalidInputError,
     NotFoundError,
     PayloadTooLargeError,
+    ServiceUnavailableError,
 )
 from app.presentation.fastapi.handlers.domain_error_handler import register_error_handlers
 
@@ -24,6 +25,7 @@ def client() -> TestClient:
             "conflict": ConflictError,
             "invalid": InvalidInputError,
             "too-large": PayloadTooLargeError,
+            "unavailable": ServiceUnavailableError,
         }
         raise errors.get(kind, DomainError)("some message")
 
@@ -37,6 +39,7 @@ def client() -> TestClient:
         ("conflict", 409),
         ("invalid", 422),
         ("too-large", 413),
+        ("unavailable", 503),
         ("generic", 400),
     ],
 )

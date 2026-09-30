@@ -16,8 +16,10 @@ mcp-server = "server:main"
 
 [dependency-groups]
 dev = [
+    "import-linter>=2.15",
     "mypy>=1.18.0",
     "pytest>=8.4.0",
+    "pytest-cov>=7.1.0",
 ]
 
 [build-system]
@@ -32,6 +34,57 @@ testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "--import-mode=importlib"
 
+# Coverage is reported in the Quality Report only; there is no minimum for the MCP server.
+[tool.coverage.run]
+source = ["."]
+omit = ["tests/*"]
+
 [tool.mypy]
 strict = true
 explicit_package_bases = true
+
+# Architecture contracts, checked by `make lint-imports` (pre-commit and CI too). Do not add
+# ignore_imports or relax a contract without the owner's approval; fix the import instead.
+# Only packages can be roots, so the top-level modules (server, settings, caller_key) are seen
+# from `tools` as external modules.
+[tool.importlinter]
+root_packages = ["tools"]
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+id = "tools-no-wiring"
+name = "Tools get their configuration injected: they import neither server nor settings"
+type = "forbidden"
+source_modules = ["tools"]
+forbidden_modules = ["server", "settings"]
+
+[[tool.importlinter.contracts]]
+id = "tools-layers"
+name = "Tools: tool groups -> diagrams -> canvas -> api"
+type = "layers"
+containers = ["tools"]
+layers = [
+    "comments | documentation | folders | projects | render | revisions | workspaces",
+    "diagrams",
+    "canvas",
+    "api",
+]
+exhaustive = true
+
+[[tool.importlinter.contracts]]
+id = "http-client-only-in-api"
+name = "Tool groups go through BackendApi: only tools.api imports the HTTP client"
+type = "forbidden"
+source_modules = [
+    "tools.canvas",
+    "tools.comments",
+    "tools.diagrams",
+    "tools.documentation",
+    "tools.folders",
+    "tools.projects",
+    "tools.render",
+    "tools.revisions",
+    "tools.workspaces",
+]
+forbidden_modules = ["httpx"]
+allow_indirect_imports = true

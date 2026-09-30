@@ -10,9 +10,11 @@ from app.domain.entities.models.user import User
 from app.domain.entities.models.workspace import Workspace
 from app.domain.errors.domain_errors import UnauthorizedError
 from app.domain.usecases.auth.authenticate_user import AuthenticateUser
+from app.domain.usecases.health.check_readiness import CheckReadiness
 from app.domain.usecases.workspace.list_workspaces import ListWorkspaces
 from app.main.main import app
 from app.presentation.factories.auth_factories import authenticate_user_factory
+from app.presentation.factories.health_factories import check_readiness_factory
 from app.presentation.factories.workspace_factories import list_workspaces_factory
 from app.presentation.fastapi.configs.configs import make_fastapi_app
 
@@ -65,6 +67,12 @@ def test_should_reject_wrong_api_key(client: TestClient, authenticate: AsyncMock
 
 def test_should_keep_health_public(client: TestClient) -> None:
     assert client.get("/health").status_code == 200
+
+
+def test_should_keep_readiness_public(client: TestClient, authenticate: AsyncMock) -> None:
+    app.dependency_overrides[check_readiness_factory] = lambda: AsyncMock(spec=CheckReadiness)
+    assert client.get("/ready").status_code == 200
+    authenticate.execute.assert_not_awaited()
 
 
 def test_should_return_signed_in_user(client: TestClient, authenticate: AsyncMock) -> None:

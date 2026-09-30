@@ -26,3 +26,7 @@ class InvalidInputError(DomainError):
 
 class PayloadTooLargeError(DomainError):
     pass
+
+
+class ServiceUnavailableError(DomainError):
+    pass

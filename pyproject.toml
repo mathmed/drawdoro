@@ -20,6 +20,8 @@ dev = [
     "bandit>=1.9.4",
     "faker>=40.39.0",
     "httpx2>=2.13.1",
+    "import-linter>=2.15",
+    "mutmut>=3.8.0",
     "mypy>=2.3.1",
     "pip-audit>=2.10.1",
     "pre-commit>=4.6.2",
@@ -69,3 +71,110 @@ paths = ["app"]
 max-absolute = "B"
 max-modules = "A"
 max-average = "A"
+
+# Mutation testing (`make mutation`, weekly workflow). Only the business rules are mutated: use
+# cases and domain services. Infra, presentation, entities, migrations and tests are out of scope.
+# The whole app/ is copied because the unit tests import it; only_mutate narrows what changes.
+[tool.mutmut]
+source_paths = ["app/"]
+only_mutate = ["app/domain/usecases/*", "app/domain/services/*"]
+pytest_add_cli_args_test_selection = ["tests/unit/"]
+# mutants/ holds a copy of app/ and tests/ only, and the tests of scripts/ kill no domain mutant.
+pytest_add_cli_args = ["-p", "no:cacheprovider", "--ignore=tests/unit/scripts"]
+
+# Architecture contracts, checked by `make lint-imports` (pre-commit and CI too). They mirror the
+# Clean Architecture described in CLAUDE.md. `ignore_imports` entries are the baseline of imports
+# that already broke a contract when it was introduced: each one says why it is tolerated. Do not
+# add entries or relax a contract without the owner's approval; fix the import instead.
+[tool.importlinter]
+root_packages = ["app"]
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+id = "layers"
+name = "Layers: main -> presentation -> infra -> domain"
+type = "layers"
+layers = ["app.main", "app.presentation", "app.infra", "app.domain"]
+
+[[tool.importlinter.contracts]]
+id = "domain-layers"
+name = "Domain: usecases -> services -> contracts -> entities -> enums/errors/constants"
+type = "layers"
+containers = ["app.domain"]
+layers = ["usecases", "services", "contracts", "entities", "enums | errors | constants"]
+exhaustive = true
+
+[[tool.importlinter.contracts]]
+id = "domain-pure"
+name = "Domain does not import app.common nor frameworks, drivers or I/O libraries"
+type = "forbidden"
+source_modules = ["app.domain"]
+forbidden_modules = [
+    "app.common",
+    "alembic",
+    "asyncpg",
+    "fastapi",
+    "httpx",
+    "jwt",
+    "pydantic_settings",
+    "sqlalchemy",
+    "starlette",
+    "uvicorn",
+]
+
+[[tool.importlinter.contracts]]
+id = "common-leaf"
+name = "app.common is a leaf: it imports no other app layer"
+type = "forbidden"
+source_modules = ["app.common"]
+forbidden_modules = ["app.domain", "app.infra", "app.presentation", "app.main"]
+
+[[tool.importlinter.contracts]]
+id = "usecases-independent"
+name = "Use case groups are independent of each other"
+type = "independence"
+modules = ["app.domain.usecases.*"]
+
+[[tool.importlinter.contracts]]
+id = "infra-independent"
+name = "Infra adapters (auth, database, realtime) are independent of each other"
+type = "independence"
+modules = ["app.infra.*"]
+
+[[tool.importlinter.contracts]]
+id = "infra-no-web"
+name = "Infra does not import the web framework"
+type = "forbidden"
+source_modules = ["app.infra"]
+forbidden_modules = ["fastapi", "starlette"]
+ignore_imports = [
+    # Baseline: the WebSocket room registry keeps FastAPI WebSocket objects to relay messages.
+    # Moving it behind a domain contract is a refactor this contract does not force.
+    "app.infra.realtime.connection_manager -> fastapi",
+]
+
+[[tool.importlinter.contracts]]
+id = "presentation-wiring"
+name = "Only factories wire infra: routes, dependencies, schemas, handlers and middlewares do not"
+type = "forbidden"
+source_modules = [
+    "app.presentation.fastapi.routes",
+    "app.presentation.fastapi.dependencies",
+    "app.presentation.fastapi.schemas",
+    "app.presentation.fastapi.handlers",
+    "app.presentation.fastapi.middlewares",
+]
+forbidden_modules = ["app.infra", "sqlalchemy", "asyncpg"]
+allow_indirect_imports = true
+ignore_imports = [
+    # Baseline: the WebSocket route joins and leaves rooms on the shared ConnectionManager
+    # singleton directly instead of through a factory-built use case.
+    "app.presentation.fastapi.routes.websocket_routes -> app.infra.realtime.connection_manager",
+]
+
+[[tool.importlinter.contracts]]
+id = "presentation-layers"
+name = "Presentation: fastapi -> factories"
+type = "layers"
+containers = ["app.presentation"]
+layers = ["fastapi", "factories"]
