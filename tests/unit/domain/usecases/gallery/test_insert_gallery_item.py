@@ -20,6 +20,7 @@ from app.domain.enums.placement_side import PlacementSide
 from app.domain.enums.revision_origin import RevisionOrigin
 from app.domain.errors.domain_errors import InvalidInputError, NotFoundError, PayloadTooLargeError
 from app.domain.services.revision_recorder import RevisionRecorder
+from app.domain.usecases.gallery import insert_gallery_item
 from app.domain.usecases.gallery.insert_gallery_item import (
     InsertGalleryItem,
     InsertGalleryItemParams,
@@ -290,12 +291,16 @@ async def test_should_accept_the_scale_bounds(
 
 
 async def test_should_refuse_to_go_over_the_shapes_per_page(
-    sut: InsertGalleryItem, diagram: Diagram, diagrams: DiagramRepository
+    sut: InsertGalleryItem,
+    diagram: Diagram,
+    diagrams: DiagramRepository,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    diagram.canvas_state = canvas(*(geo(f"shape:{n}", index="a1") for n in range(3999)))
+    monkeypatch.setattr(insert_gallery_item, "CANVAS_MAX_SHAPES_PER_PAGE", 3)
+    diagram.canvas_state = canvas(geo("shape:1"), geo("shape:2"))
     await sut.execute(params(diagram))
 
-    with pytest.raises(InvalidInputError, match="more than 4000 shapes"):
+    with pytest.raises(InvalidInputError, match="more than 3 shapes"):
         await sut.execute(params(diagram))
     assert diagrams.update.await_count == 1  # type: ignore[attr-defined]
 

@@ -11,6 +11,7 @@ from app.domain.entities.objects.gallery_placement import GalleryPlacement
 from app.domain.enums.image_mime_type import ImageMimeType
 from app.domain.enums.placement_side import PlacementSide
 from app.domain.errors.domain_errors import ConflictError, InvalidInputError
+from app.domain.services import canvas_insertion
 from app.domain.services.canvas_insertion import CanvasInsertion
 from tests.tldraw_records import (
     PAGE_ID,
@@ -332,10 +333,10 @@ def test_should_give_up_when_ids_keep_colliding() -> None:
         sut.place_shapes(content([geo("shape:a")]), AUTO, 1)
 
 
-def test_should_refuse_more_new_shapes_than_indexes() -> None:
-    shapes = [geo(f"shape:{number}") for number in range(62 * 61 + 1)]
+def test_should_refuse_more_new_shapes_than_indexes(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(canvas_insertion, "indexes_above", lambda top: iter([f"{top}01"]))
     with pytest.raises(InvalidInputError, match="too many shapes"):
-        make_sut().place_shapes(content(shapes), AUTO, 1)
+        make_sut().place_shapes(content([geo("shape:a"), geo("shape:b")]), AUTO, 1)
 
 
 def test_should_only_stack_above_shapes_on_the_page_itself() -> None:
