@@ -182,6 +182,57 @@ def test_should_copy_assets_with_new_ids_and_reuse_identical_ones() -> None:
     assert shapes == {"asset:there", assets[0]["id"], None}
 
 
+def test_should_store_an_image_repeated_inside_the_item_once() -> None:
+    saved = content(
+        [
+            shape("shape:a", "image", w=64, h=32, assetId="asset:first"),
+            shape("shape:b", "image", w=64, h=32, assetId="asset:again", index="a2"),
+        ],
+        assets=[image_asset("asset:first", DATA_URL), image_asset("asset:again", DATA_URL)],
+    )
+
+    plan = make_sut().place_shapes(saved, AUTO, 1)
+
+    assets = [record for record in plan.records if record["typeName"] == "asset"]
+    shapes = [record for record in plan.records if record["typeName"] == "shape"]
+    assert len(assets) == 1
+    assert {placed["props"]["assetId"] for placed in shapes} == {assets[0]["id"]}
+
+
+def test_should_ignore_canvas_assets_without_readable_props() -> None:
+    broken = {"id": "asset:broken", "typeName": "asset", "type": "image", "props": "src"}
+    sut = make_sut(broken, image_asset("asset:there", DATA_URL))
+    saved = content(
+        [shape("shape:a", "image", w=1, h=1, assetId="asset:x")],
+        assets=[image_asset("asset:x", DATA_URL)],
+    )
+
+    plan = sut.place_shapes(saved, AUTO, 1)
+
+    assert [record["typeName"] for record in plan.records] == ["shape"]
+    assert plan.records[0]["props"]["assetId"] == "asset:there"
+
+
+# Mapping parents to children once per insertion keeps it linear in the number of shapes.
+def test_should_map_the_saved_shapes_to_their_parents_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[int] = []
+    original = canvas_insertion.children_by_parent
+
+    def counted(records: Any) -> dict[str, list[dict[str, Any]]]:
+        calls.append(1)
+        return original(records)
+
+    monkeypatch.setattr(canvas_insertion, "children_by_parent", counted)
+    roots = [geo(f"shape:r{number}", number * 10, 0, index=f"a{number}") for number in range(1, 9)]
+
+    plan = make_sut().place_shapes(content(roots), GalleryPlacement(x=0, y=0), 1)
+
+    assert len(plan.root_shape_ids) == 8
+    assert len(calls) == 1
+
+
 def test_should_not_reuse_assets_without_a_source() -> None:
     sut = make_sut(image_asset("asset:there", ""))
     saved = content(

@@ -1,6 +1,6 @@
 import base64
 import copy
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from typing import Any
 
@@ -53,6 +53,7 @@ class CanvasInsertion:
         self._new_id = new_id
         self._reserved: set[str] = set()
         self._indexes: Iterator[str] | None = None
+        self._assets_by_source = _assets_by_source(self._store.values())
 
     def place_shapes(
         self, content: dict[str, Any], placement: GalleryPlacement, scale: float
@@ -63,7 +64,8 @@ class CanvasInsertion:
         ensure_same_versions(content.get("schema"), self._schema, shapes + bindings + assets)
         shape_ids = {str(shape["id"]): self._fresh_id("shape") for shape in shapes}
         roots = _roots(content, shapes)
-        origin = union_bounds(shape_bounds(root, children_by_parent(shapes)) for root in roots)
+        children = children_by_parent(shapes)
+        origin = union_bounds(shape_bounds(root, children) for root in roots)
         origin = origin or Bounds(0, 0, 0, 0)
         width, height = origin.width * scale, origin.height * scale
         x, y = self._corner(placement, width, height)
@@ -144,21 +146,13 @@ class CanvasInsertion:
             copied = copy.deepcopy(asset) | {"id": self._fresh_id("asset"), "typeName": "asset"}
             ids[str(asset["id"])] = copied["id"]
             created.append(copied)
+            # Repeats of the same image inside the item share this copy too.
+            self._assets_by_source.update(_assets_by_source([copied]))
         return ids, created
 
     # The same image inserted twice is stored once: big data URLs are most of a canvas's size.
     def _existing_asset(self, src: object) -> CanvasRecord | None:
-        if not isinstance(src, str) or src == "":
-            return None
-        return next(
-            (
-                record
-                for record in self._store.values()
-                if record.get("typeName") == "asset"
-                and (record.get("props") or {}).get("src") == src
-            ),
-            None,
-        )
+        return self._assets_by_source.get(src) if isinstance(src, str) else None
 
     def _corner(
         self, placement: GalleryPlacement, width: float, height: float
@@ -225,6 +219,17 @@ class CanvasInsertion:
                 self._reserved.add(candidate)
                 return candidate
         raise ConflictError("Could not generate unique ids for the inserted records")
+
+
+# Assets by their source, the first one of each; assets without a source are never shared.
+def _assets_by_source(records: Iterable[CanvasRecord]) -> dict[str, CanvasRecord]:
+    found: dict[str, CanvasRecord] = {}
+    for record in records:
+        props = record.get("props")
+        src = props.get("src") if isinstance(props, dict) else None
+        if record.get("typeName") == "asset" and isinstance(src, str) and src != "":
+            found.setdefault(src, record)
+    return found
 
 
 def _records(value: object) -> list[CanvasRecord]:
