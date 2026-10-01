@@ -1,6 +1,7 @@
 import { BookOpenText, History, Images, MessageSquare, Tags, X } from 'lucide-react'
 
 import { useAppStore, type InspectorTab } from '../../store/useAppStore'
+import { openComments } from '../../utils/comments'
 import CommentsPanel from '../comments/CommentsPanel'
 import DocsPanel from '../docs/DocsPanel'
 import GalleryPanel from '../gallery/GalleryPanel'
@@ -19,7 +20,7 @@ export default function Inspector() {
   const inspectorTab = useAppStore((state) => state.inspectorTab)
   const openInspector = useAppStore((state) => state.openInspector)
   const closeInspector = useAppStore((state) => state.closeInspector)
-  const commentCount = useAppStore((state) => state.comments.length)
+  const commentCount = useAppStore((state) => openComments(state.comments).length)
 
   const counts: Partial<Record<InspectorTab, number>> = { comments: commentCount }
 

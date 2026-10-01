@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import type { TLShapeId } from 'tldraw'
 
 import { useAppStore } from '../../store/useAppStore'
+import { openComments } from '../../utils/comments'
 
 interface BadgePosition {
   elementId: string
@@ -11,7 +12,7 @@ interface BadgePosition {
   y: number
 }
 
-// Overlay drawn on top of the canvas: for every element that has comments it
+// Overlay drawn on top of the canvas: for every element that has open comments it
 // places a small pin near the shape's top-right corner, recomputed whenever the
 // tldraw store changes (camera panning/zooming, shape edits).
 export default function CommentBadge() {
@@ -33,9 +34,12 @@ export default function CommentBadge() {
     return null
   }
 
+  // Only open comments get a pin: resolved ones are done, and diagram-wide ones have no shape.
   const counts = new Map<string, number>()
-  for (const comment of comments) {
-    counts.set(comment.element_id, (counts.get(comment.element_id) ?? 0) + 1)
+  for (const comment of openComments(comments)) {
+    if (comment.element_id !== null) {
+      counts.set(comment.element_id, (counts.get(comment.element_id) ?? 0) + 1)
+    }
   }
 
   const positions: BadgePosition[] = []
@@ -55,7 +59,7 @@ export default function CommentBadge() {
           key={position.elementId}
           type="button"
           className="comment-pin"
-          aria-label={`${position.count} comment${position.count === 1 ? '' : 's'}`}
+          aria-label={`${position.count} open comment${position.count === 1 ? '' : 's'}`}
           onClick={() => commentOnElement(position.elementId)}
           style={{ left: position.x, top: position.y }}
         >
