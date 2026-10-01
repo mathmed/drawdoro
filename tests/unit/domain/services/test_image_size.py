@@ -22,6 +22,13 @@ def webp(chunk: bytes, payload: bytes) -> bytes:
     return b"RIFF" + b"\x00" * 4 + b"WEBP" + chunk + b"\x00" * 4 + payload
 
 
+# Signature, IHDR length and type, width and height: the 24 bytes the reader needs, no pixels.
+def png_header(width: int, height: int) -> bytes:
+    return (
+        b"\x89PNG\r\n\x1a\n" + struct.pack(">I", 13) + b"IHDR" + struct.pack(">II", width, height)
+    )
+
+
 def test_should_read_png_size() -> None:
     assert read_image_size(png(640, 480), ImageMimeType.PNG) == (640, 480)
 
@@ -50,12 +57,59 @@ def test_should_read_extended_webp_size() -> None:
     assert read_image_size(webp(b"VP8X", payload), ImageMimeType.WEBP) == (2000, 1000)
 
 
+def test_should_read_the_smallest_image() -> None:
+    assert read_image_size(png(1, 1), ImageMimeType.PNG) == (1, 1)
+
+
+def test_should_read_a_png_header_without_the_rest_of_the_file() -> None:
+    assert read_image_size(png(640, 480)[:24], ImageMimeType.PNG) == (640, 480)
+
+
+def test_should_read_every_byte_of_large_png_sizes() -> None:
+    data = png_header(0x01020304, 0x05060708)
+    assert len(data) == 24
+    assert read_image_size(data, ImageMimeType.PNG) == (0x01020304, 0x05060708)
+
+
+def test_should_read_a_gif_header_without_the_rest_of_the_file() -> None:
+    assert read_image_size(gif(300, 200)[:10], ImageMimeType.GIF) == (300, 200)
+
+
+def test_should_read_gif_size_before_the_screen_flags() -> None:
+    data = b"GIF89a" + struct.pack("<HH", 300, 200) + b"\xf7\x00\x00"
+    assert read_image_size(data, ImageMimeType.GIF) == (300, 200)
+
+
+def test_should_read_a_jpeg_frame_that_ends_the_data() -> None:
+    frame = b"\xff\xc0" + struct.pack(">HBHH", 17, 8, 768, 1024)
+    assert read_image_size(b"\xff\xd8" + frame, ImageMimeType.JPEG) == (1024, 768)
+
+
+def test_should_skip_any_number_of_jpeg_padding_bytes() -> None:
+    frame = b"\xff\xc0" + struct.pack(">HBHH", 17, 8, 768, 1024) + b"\x00" * 10
+    data = b"\xff\xd8" + b"\xff" * 3 + frame[1:]
+    assert read_image_size(data, ImageMimeType.JPEG) == (1024, 768)
+
+
+@pytest.mark.parametrize("payload_length", [0, 1, 300])
+def test_should_skip_jpeg_segments_of_any_length(payload_length: int) -> None:
+    segment = b"\xff\xe1" + struct.pack(">H", payload_length + 2) + b"\x00" * payload_length
+    frame = b"\xff\xc0" + struct.pack(">HBHH", 17, 8, 768, 1024) + b"\x00" * 10
+    assert read_image_size(b"\xff\xd8" + segment + frame, ImageMimeType.JPEG) == (1024, 768)
+
+
+def test_should_read_extended_webp_size_before_the_next_chunk() -> None:
+    size = (2000 - 1).to_bytes(3, "little") + (1000 - 1).to_bytes(3, "little")
+    payload = b"\x00" * 4 + size + b"ICCP"
+    assert read_image_size(webp(b"VP8X", payload), ImageMimeType.WEBP) == (2000, 1000)
+
+
 @pytest.mark.parametrize(
     ("data", "mime_type"),
     [
         (b"\x89PNG\r\n\x1a\n", ImageMimeType.PNG),
         (png(10, 10)[:20], ImageMimeType.PNG),
-        (b"\x89PNG\r\n\x1a\n" + b"\x00" * 4 + b"XXXX" + b"\x00" * 8, ImageMimeType.PNG),
+        (b"\x89PNG\r\n\x1a\n" + b"\x00" * 4 + b"XXXX" + b"\x01" * 8, ImageMimeType.PNG),
         (png(0, 10), ImageMimeType.PNG),
         (b"GIF89a\x01", ImageMimeType.GIF),
         (b"\xff\xd8\xff\xe0", ImageMimeType.JPEG),

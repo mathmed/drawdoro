@@ -159,8 +159,18 @@ def content(
     }
 
 
-# A real, decodable PNG of the given size (one grey pixel per row is enough for any reader).
+# Largest image png() builds: its pixel buffer takes about width x height bytes of memory.
+PNG_MAX_PIXELS = 1_000_000
+
+
+# A real, decodable, all-grey PNG of the given size. It holds every pixel, so it refuses sizes
+# above PNG_MAX_PIXELS: build only the header by hand to test larger sizes.
 def png(width: int, height: int) -> bytes:
+    if width * height > PNG_MAX_PIXELS:
+        raise ValueError(
+            f"png({width}, {height}) would allocate a buffer of {width * height} bytes"
+        )
+
     def chunk(kind: bytes, data: bytes) -> bytes:
         return (
             struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
