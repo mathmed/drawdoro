@@ -6,5 +6,4 @@ GALLERY_MAX_TAGS = 10
 GALLERY_MAX_TAG_LENGTH = 32
 GALLERY_MAX_DESCRIPTION_LENGTH = 500
 # Agents read gallery listings, so they stay short however large the gallery grows.
-GALLERY_DEFAULT_LISTED_ITEMS = 50
 GALLERY_MAX_LISTED_ITEMS = 200
