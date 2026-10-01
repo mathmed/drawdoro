@@ -9,6 +9,7 @@ from tools.api import BackendApi
 from tools.gallery import (
     GALLERY_NOTICE,
     MAX_DESCRIBED_SHAPES,
+    MAX_LISTED_ITEMS,
     ContentShape,
     GalleryItemKind,
     GalleryTools,
@@ -105,6 +106,16 @@ def test_should_say_when_more_items_match(sut: GalleryTools, api: MagicMock) -> 
 
     assert len(listing.items) == 2
     assert listing.truncated is True
+
+
+# The API refuses limits above 200, and the tool asks it for one more item than its own limit.
+def test_should_ask_for_at_most_what_the_api_lists(sut: GalleryTools, api: MagicMock) -> None:
+    api.get_list.return_value = []
+
+    sut.list_gallery_items(limit=MAX_LISTED_ITEMS)
+
+    assert listed_query(api)["limit"] == [str(MAX_LISTED_ITEMS + 1)]
+    assert MAX_LISTED_ITEMS + 1 <= 200
 
 
 def test_should_shorten_long_descriptions_in_listings(sut: GalleryTools, api: MagicMock) -> None:

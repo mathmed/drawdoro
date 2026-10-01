@@ -661,7 +661,7 @@
         {
           "name": "limit",
           "required": false,
-          "description": "How many items to return (1 to 200)."
+          "description": "How many items to return (1 to 100)."
         }
       ]
     },

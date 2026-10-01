@@ -182,6 +182,10 @@ if [[ "${SMOKE_MCP_GALLERY:-}" == "personal" ]]; then
         "list_gallery_items finds the item by name and tag"
     assert_message 'all("thumbnail_base64" not in i and i["untrusted_user_content"]["name"] for i in m["result"]["structuredContent"]["items"])' \
         "list_gallery_items returns names as untrusted content and no image data"
+    # The tool asks the API for one item more than its limit: the largest one must still pass.
+    call_tool 26 list_gallery_items '{"limit": 100}'
+    assert_message 'len(m["result"]["structuredContent"]["items"]) >= 2' \
+        "list_gallery_items accepts its largest limit"
     call_tool 22 get_gallery_item "{$SHAPES_ITEM}"
     assert_message 'm["result"]["structuredContent"]["contents"]["shape_types"] == {"group": 1, "geo": 2, "arrow": 1} and m["result"]["structuredContent"]["contents"]["connections"] == 2' \
         "get_gallery_item describes the shapes and connections"

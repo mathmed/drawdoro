@@ -11,7 +11,9 @@ from tools.canvas import shape_size, shape_text
 from tools.diagrams import REVISION_SUMMARY_MAX_LENGTH, UtcDatetime
 
 DEFAULT_LISTED_ITEMS = 50
-MAX_LISTED_ITEMS = 200
+# One item more than the limit is asked for, to tell whether more match, and the API lists at
+# most 200 per request: this has to stay below that.
+MAX_LISTED_ITEMS = 100
 # What the tools return stays small and bounded whatever people saved.
 MAX_DESCRIBED_SHAPES = 40
 MAX_TEXT_LENGTH = 200
@@ -134,7 +136,7 @@ class GalleryTools:
                 e.g. "kubernetes logo"; omit to list everything.
             kind: Only "shapes" or only "image" items.
             tag: Only items with exactly this tag, e.g. "aws".
-            limit: How many items to return (1 to 200).
+            limit: How many items to return (1 to 100).
         """
         params: dict[str, str | int] = {"include_thumbnails": "false", "limit": limit + 1}
         filters = {"query": query, "kind": kind, "tag": tag}
