@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.domain.errors.domain_errors import (
@@ -10,6 +11,9 @@ from app.domain.errors.domain_errors import (
     PayloadTooLargeError,
     ServiceUnavailableError,
     UnauthorizedError,
+)
+from app.presentation.fastapi.handlers.validation_error_handler import (
+    request_validation_error_handler,
 )
 
 STATUS_BY_ERROR: dict[type[DomainError], int] = {
@@ -34,3 +38,4 @@ async def domain_error_handler(_: Request, exc: Exception) -> JSONResponse:
 
 def register_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(DomainError, domain_error_handler)
+    app.add_exception_handler(RequestValidationError, request_validation_error_handler)

@@ -5,7 +5,7 @@ from typing import Annotated, Any
 
 from pydantic import Base64Bytes, BaseModel, ConfigDict, Field, PlainSerializer
 
-from app.domain.constants.canvas import CANVAS_DEFAULT_GAP
+from app.domain.constants.canvas import CANVAS_DEFAULT_GAP, CANVAS_MAX_COORDINATE
 from app.domain.constants.gallery import (
     GALLERY_MAX_DESCRIPTION_LENGTH,
     GALLERY_MAX_NAME_LENGTH,
@@ -25,6 +25,10 @@ EncodedBytes = Annotated[
 RawTags = Annotated[
     list[Annotated[str, Field(max_length=GALLERY_MAX_TAG_LENGTH * 2)]],
     Field(max_length=GALLERY_MAX_TAGS * 2),
+]
+# A canvas is JSON: NaN and Infinity, which Python's JSON parser accepts, can't be stored in it.
+Coordinate = Annotated[
+    float, Field(ge=-CANVAS_MAX_COORDINATE, le=CANVAS_MAX_COORDINATE, allow_inf_nan=False)
 ]
 
 
@@ -70,12 +74,12 @@ class GalleryItemResponse(GalleryItemSummaryResponse):
 
 class InsertGalleryItemRequest(BaseModel):
     item_id: uuid.UUID
-    x: float | None = None
-    y: float | None = None
+    x: Coordinate | None = None
+    y: Coordinate | None = None
     near_shape_id: str | None = Field(default=None, max_length=255)
     side: PlacementSide = PlacementSide.RIGHT
-    gap: float = Field(default=CANVAS_DEFAULT_GAP, ge=0, le=10_000)
-    scale: float = Field(default=1, gt=0)
+    gap: float = Field(default=CANVAS_DEFAULT_GAP, ge=0, le=10_000, allow_inf_nan=False)
+    scale: float = Field(default=1, gt=0, allow_inf_nan=False)
     revision_summary: str | None = Field(default=None, max_length=REVISION_SUMMARY_MAX_LENGTH)
 
 

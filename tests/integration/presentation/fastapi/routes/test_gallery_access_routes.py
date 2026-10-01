@@ -368,6 +368,33 @@ def test_should_validate_the_insertion_request(
     assert insert(client, diagram, AGENT, **body).status_code == 422
 
 
+# Python's JSON parser reads NaN and Infinity, which a canvas can't store, so the body is raw text.
+@pytest.mark.parametrize(
+    "numbers",
+    ['"x": NaN, "y": 0', '"x": 0, "y": Infinity', '"x": -Infinity, "y": 0', '"x": 1e10, "y": 0'],
+)
+def test_should_refuse_coordinates_a_canvas_cannot_hold(
+    client: TestClient, diagram: Diagram, notifier: AsyncMock, numbers: str
+) -> None:
+    response = client.post(
+        f"/diagrams/{diagram.id}/gallery-insertions",
+        headers=AGENT | {"Content-Type": "application/json"},
+        content=f'{{"item_id": "{ANAS_ITEM.id}", {numbers}}}',
+    )
+
+    assert response.status_code == 422
+    notifier.notify_updated.assert_not_awaited()
+
+
+def test_should_accept_coordinates_far_from_the_origin(
+    client: TestClient, diagram: Diagram
+) -> None:
+    response = insert(client, diagram, AGENT, x=-1e9, y=1e9)
+
+    assert response.status_code == 201
+    assert (response.json()["x"], response.json()["y"]) == (-1e9, 1e9)
+
+
 def test_should_explain_why_an_insertion_is_refused(client: TestClient, diagram: Diagram) -> None:
     response = insert(client, diagram, AGENT, x=1, near_shape_id="shape:api")
 
