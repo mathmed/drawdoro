@@ -1,9 +1,9 @@
-import { BookmarkPlus, CircleAlert, ImagePlus, Images, Loader2, Pencil, RotateCw, Search, Shapes, Trash2 } from 'lucide-react'
+import { BookmarkPlus, CircleAlert, ImagePlus, Images, Loader2, Pencil, RotateCw, Search, Shapes, Trash2, X } from 'lucide-react'
 import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react'
 
 import type { GalleryItemSummary } from '../../api/types'
 import { useAppStore } from '../../store/useAppStore'
-import { confirmDialog, promptDialog } from '../../store/useDialogStore'
+import { confirmDialog } from '../../store/useDialogStore'
 import { useGalleryStore } from '../../store/useGalleryStore'
 import {
   addImageToGallery,
@@ -13,22 +13,27 @@ import {
   insertGalleryItem,
   saveSelectionToGallery,
 } from '../../utils/gallery'
+import { matchesGallerySearch } from '../../utils/galleryLabels'
 import EmptyState from '../ui/EmptyState'
+import GalleryItemDialog from './GalleryItemDialog'
 
 function hasFiles(event: DragEvent): boolean {
   return event.dataTransfer.types.includes('Files')
 }
 
-function GalleryTile({ item, busy, onInsert }: { item: GalleryItemSummary; busy: boolean; onInsert: () => void }) {
-  const rename = useGalleryStore((state) => state.rename)
-  const remove = useGalleryStore((state) => state.remove)
+// Tiles show a few tags; the rest are still searchable.
+const TILE_TAGS = 3
 
-  async function handleRename(): Promise<void> {
-    const name = await promptDialog({ title: 'Rename item', label: 'Name', initialValue: item.name, confirmLabel: 'Rename' })
-    if (name !== null && name !== item.name) {
-      await rename(item.id, name)
-    }
-  }
+interface GalleryTileProps {
+  item: GalleryItemSummary
+  busy: boolean
+  onInsert: () => void
+  onTagClick: (tag: string) => void
+}
+
+function GalleryTile({ item, busy, onInsert, onTagClick }: GalleryTileProps) {
+  const remove = useGalleryStore((state) => state.remove)
+  const [editing, setEditing] = useState(false)
 
   async function handleDelete(): Promise<void> {
     const confirmed = await confirmDialog({
@@ -47,7 +52,7 @@ function GalleryTile({ item, busy, onInsert }: { item: GalleryItemSummary; busy:
       <button
         type="button"
         className="gallery-tile-preview"
-        title={`Insert “${item.name}” — or drag it onto the canvas`}
+        title={`Insert “${item.name}” — or drag it onto the canvas${item.description !== null ? `\n\n${item.description}` : ''}`}
         draggable
         onDragStart={(event) => {
           event.dataTransfer.setData(GALLERY_DRAG_TYPE, item.id)
@@ -70,13 +75,40 @@ function GalleryTile({ item, busy, onInsert }: { item: GalleryItemSummary; busy:
         <span className="gallery-tile-name" title={item.name}>
           {item.name}
         </span>
-        <button type="button" className="btn btn-ghost btn-icon btn-sm" aria-label={`Rename ${item.name}`} onClick={() => void handleRename()}>
+        <button
+          type="button"
+          className="btn btn-ghost btn-icon btn-sm"
+          aria-label={`Edit ${item.name}`}
+          title="Rename, tag or describe"
+          onClick={() => setEditing(true)}
+        >
           <Pencil size={12} />
         </button>
         <button type="button" className="btn btn-ghost btn-icon btn-sm" aria-label={`Delete ${item.name}`} onClick={() => void handleDelete()}>
           <Trash2 size={12} />
         </button>
       </div>
+      {item.tags.length > 0 ? (
+        <div className="gallery-tags gallery-tile-tags">
+          {item.tags.slice(0, TILE_TAGS).map((tag) => (
+            <button
+              key={tag}
+              type="button"
+              className="gallery-tag"
+              title={`Show items tagged “${tag}”`}
+              onClick={() => onTagClick(tag)}
+            >
+              {tag}
+            </button>
+          ))}
+          {item.tags.length > TILE_TAGS ? (
+            <span className="gallery-tag-more" title={item.tags.slice(TILE_TAGS).join(', ')}>
+              +{item.tags.length - TILE_TAGS}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+      {editing ? <GalleryItemDialog item={item} onClose={() => setEditing(false)} /> : null}
     </div>
   )
 }
@@ -88,6 +120,7 @@ export default function GalleryPanel() {
   const load = useGalleryStore((state) => state.load)
 
   const [query, setQuery] = useState('')
+  const [activeTag, setActiveTag] = useState<string | null>(null)
   const [insertingId, setInsertingId] = useState<string | null>(null)
   const [uploading, setUploading] = useState(0)
   const [isDropTarget, setIsDropTarget] = useState(false)
@@ -108,8 +141,7 @@ export default function GalleryPanel() {
     return editor.store.listen(update, { scope: 'session' })
   }, [editor])
 
-  const normalizedQuery = query.trim().toLowerCase()
-  const visible = items.filter((item) => item.name.toLowerCase().includes(normalizedQuery))
+  const visible = items.filter((item) => matchesGallerySearch(item, query, activeTag))
 
   async function insert(itemId: string): Promise<void> {
     if (editor === null) {
@@ -179,12 +211,19 @@ export default function GalleryPanel() {
       )
     }
     if (visible.length === 0) {
-      return <EmptyState icon={<Search size={20} />} title={`No items match “${query.trim()}”`} />
+      const searched = [query.trim(), activeTag !== null ? `tag “${activeTag}”` : ''].filter((part) => part !== '')
+      return <EmptyState icon={<Search size={20} />} title={`No items match ${searched.join(' with ')}`} />
     }
     return (
       <div className="gallery-grid">
         {visible.map((item) => (
-          <GalleryTile key={item.id} item={item} busy={insertingId === item.id} onInsert={() => void insert(item.id)} />
+          <GalleryTile
+            key={item.id}
+            item={item}
+            busy={insertingId === item.id}
+            onInsert={() => void insert(item.id)}
+            onTagClick={setActiveTag}
+          />
         ))}
       </div>
     )
@@ -210,7 +249,13 @@ export default function GalleryPanel() {
       <div className="panel-toolbar">
         <div className="gallery-search">
           <Search size={13} />
-          <input className="input" placeholder="Search gallery…" value={query} onChange={(event) => setQuery(event.target.value)} />
+          <input
+            className="input"
+            placeholder="Search names and tags…"
+            aria-label="Search gallery"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
         </div>
         <button
           type="button"
@@ -234,6 +279,14 @@ export default function GalleryPanel() {
         </button>
         <input ref={fileInputRef} type="file" accept={GALLERY_IMAGE_TYPES.join(',')} multiple hidden onChange={handleFileInput} />
       </div>
+      {activeTag !== null ? (
+        <div className="gallery-filter">
+          <span>Tagged</span>
+          <button type="button" className="gallery-tag" aria-label={`Stop filtering by ${activeTag}`} onClick={() => setActiveTag(null)}>
+            {activeTag} <X size={11} />
+          </button>
+        </div>
+      ) : null}
       <div className="scroll" style={{ flex: 1 }}>
         {renderBody()}
       </div>

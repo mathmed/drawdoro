@@ -1,5 +1,5 @@
 import apiClient from './client'
-import type { CreateGalleryItemInput, GalleryItem, GalleryItemSummary } from './types'
+import type { CreateGalleryItemInput, GalleryItem, GalleryItemChanges, GalleryItemSummary } from './types'
 
 export async function listGalleryItems(): Promise<GalleryItemSummary[]> {
   const { data } = await apiClient.get<GalleryItemSummary[]>('/gallery')
@@ -16,8 +16,8 @@ export async function createGalleryItem(input: CreateGalleryItemInput): Promise<
   return data
 }
 
-export async function renameGalleryItem(itemId: string, name: string): Promise<GalleryItemSummary> {
-  const { data } = await apiClient.patch<GalleryItemSummary>(`/gallery/${itemId}`, { name })
+export async function updateGalleryItem(itemId: string, changes: GalleryItemChanges): Promise<GalleryItemSummary> {
+  const { data } = await apiClient.patch<GalleryItemSummary>(`/gallery/${itemId}`, changes)
   return data
 }
 

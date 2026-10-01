@@ -5,9 +5,9 @@ import {
   deleteGalleryItem,
   getGalleryItem,
   listGalleryItems,
-  renameGalleryItem,
+  updateGalleryItem,
 } from '../api/gallery'
-import type { CreateGalleryItemInput, GalleryItem, GalleryItemSummary } from '../api/types'
+import type { CreateGalleryItemInput, GalleryItem, GalleryItemChanges, GalleryItemSummary } from '../api/types'
 
 export type GalleryStatus = 'idle' | 'loading' | 'ready' | 'error'
 
@@ -20,7 +20,7 @@ interface GalleryState {
   load: () => Promise<void>
   add: (input: CreateGalleryItemInput) => Promise<GalleryItem | null>
   fetchItem: (itemId: string) => Promise<GalleryItem | null>
-  rename: (itemId: string, name: string) => Promise<void>
+  update: (itemId: string, changes: GalleryItemChanges) => Promise<boolean>
   remove: (itemId: string) => Promise<void>
 }
 
@@ -71,17 +71,18 @@ export const useGalleryStore = create<GalleryState>((set, get) => ({
     }
   },
 
-  rename: async (itemId, name) => {
+  update: async (itemId, changes) => {
     try {
-      const renamed = await renameGalleryItem(itemId, name)
+      const updated = await updateGalleryItem(itemId, changes)
       const cached = get().loadedItems[itemId]
       set({
-        items: get().items.map((item) => (item.id === itemId ? renamed : item)),
-        loadedItems:
-          cached === undefined ? get().loadedItems : { ...get().loadedItems, [itemId]: { ...cached, name: renamed.name } },
+        items: get().items.map((item) => (item.id === itemId ? updated : item)),
+        loadedItems: cached === undefined ? get().loadedItems : { ...get().loadedItems, [itemId]: { ...cached, ...updated } },
       })
+      return true
     } catch {
       // Already reported to the user.
+      return false
     }
   },
 
