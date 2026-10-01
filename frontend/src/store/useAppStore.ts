@@ -4,7 +4,7 @@ import { create } from 'zustand'
 import { authConfig } from '../auth/config'
 import { storageKey } from '../config/branding'
 
-import { createComment as apiCreateComment, listComments } from '../api/comments'
+import { createComment as apiCreateComment, listComments, setCommentResolved as apiSetCommentResolved } from '../api/comments'
 import { getDocumentation, upsertDocumentation } from '../api/documentation'
 import {
   createDiagram as apiCreateDiagram,
@@ -149,6 +149,7 @@ interface AppState {
   closeNewDiagram: () => void
   loadComments: (diagramId: string) => Promise<void>
   addComment: (elementId: string, content: string) => Promise<void>
+  setCommentResolved: (commentId: string, resolved: boolean) => Promise<void>
   setActiveElement: (id: string | null) => void
   commentOnElement: (id: string) => void
   enterPresentation: () => void
@@ -594,7 +595,10 @@ export const useAppStore = create<AppState>((set, get) => {
 
     loadComments: async (diagramId) => {
       const comments = await listComments(diagramId)
-      set({ comments })
+      // A reload triggered by a realtime push may land after the user opened another diagram.
+      if (get().activeDiagram?.id === diagramId) {
+        set({ comments })
+      }
     },
 
     addComment: async (elementId, content) => {
@@ -603,7 +607,17 @@ export const useAppStore = create<AppState>((set, get) => {
         return
       }
       const comment = await apiCreateComment(activeDiagram.id, elementId, content)
-      set({ comments: [...get().comments, comment] })
+      // The realtime push for this comment may already have reloaded the list.
+      set({ comments: [...get().comments.filter((existing) => existing.id !== comment.id), comment] })
+    },
+
+    setCommentResolved: async (commentId, resolved) => {
+      const { activeDiagram } = get()
+      if (activeDiagram === null) {
+        return
+      }
+      const updated = await apiSetCommentResolved(activeDiagram.id, commentId, resolved)
+      set({ comments: get().comments.map((comment) => (comment.id === updated.id ? updated : comment)) })
     },
 
     setActiveElement: (id) => set({ activeElementId: id }),

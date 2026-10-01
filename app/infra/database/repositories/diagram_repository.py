@@ -38,6 +38,15 @@ class DiagramRepositoryImpl(DiagramRepository):
         orm = result.scalar_one_or_none()
         return _to_domain(orm) if orm else None
 
+    async def exists(self, diagram_id: uuid.UUID) -> bool:
+        result = await self._session.execute(
+            select(DiagramORM.id).where(
+                DiagramORM.id == diagram_id,
+                DiagramORM.deleted_at.is_(None),
+            )
+        )
+        return result.scalar_one_or_none() is not None
+
     async def get_by_share_token(self, share_token: str) -> Diagram | None:
         result = await self._session.execute(
             select(DiagramORM).where(

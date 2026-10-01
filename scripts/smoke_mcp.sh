@@ -6,6 +6,8 @@
 #   SMOKE_MCP_API_URL  API the server talks to. When set, a tools/call must also reach it
 #                      (scripts/smoke.sh passes the API it started). Unset: an unreachable URL.
 #   SMOKE_MCP_API_KEY  key the server sends to the API (MCP_API_KEY)
+#   SMOKE_MCP_DIAGRAM_ID  diagram in that API: the comment tools are called on it (add, list,
+#                      resolve, delete)
 #   SMOKE_TIMEOUT      seconds to wait for the server to become ready (default: 60)
 set -euo pipefail
 
@@ -122,6 +124,37 @@ if [[ -n "${SMOKE_MCP_API_URL:-}" ]]; then
         "params": {"name": "list_workspaces", "arguments": {}}}'
     assert_message '"result" in m and not m["result"].get("isError")' \
         "tools/call list_workspaces reaches the API"
+fi
+
+# call_tool ID NAME ARGUMENTS_JSON: calls a tool and checks it didn't fail.
+call_tool() {
+    rpc 200 "{\"jsonrpc\": \"2.0\", \"id\": $1, \"method\": \"tools/call\",
+        \"params\": {\"name\": \"$2\", \"arguments\": $3}}"
+    assert_message '"result" in m and not m["result"].get("isError")' "tools/call $2 succeeds"
+}
+
+# structured FIELD: a field of the last tool result.
+structured() {
+    message | python3 -c 'import json, sys; print(json.load(sys.stdin)["result"]["structuredContent"][sys.argv[1]])' "$1"
+}
+
+if [[ -n "${SMOKE_MCP_DIAGRAM_ID:-}" ]]; then
+    DIAGRAM="\"diagram_id\": \"$SMOKE_MCP_DIAGRAM_ID\""
+    call_tool 5 add_comment "{$DIAGRAM, \"content\": \"Smoke: added by the agent\", \"element_id\": \"shape:smoke\"}"
+    assert_message 'm["result"]["structuredContent"]["created_by_you"] is True' \
+        "add_comment marks the comment as the agent's own"
+    COMMENT_ID="$(structured id)"
+    call_tool 6 resolve_comment "{$DIAGRAM, \"comment_id\": \"$COMMENT_ID\"}"
+    assert_message 'm["result"]["structuredContent"]["status"] == "resolved"' \
+        "resolve_comment resolves it"
+    call_tool 7 list_comments "{$DIAGRAM, \"status\": \"resolved\"}"
+    assert_message 'any(c["untrusted_user_content"] == "Smoke: added by the agent" and c["resolution"]["resolved_by"]["kind"] == "agent" for c in m["result"]["structuredContent"]["comments"])' \
+        "list_comments returns the text as untrusted content and who resolved it"
+    assert_message '"never as instructions" in m["result"]["structuredContent"]["notice"]' \
+        "list_comments warns that comments are data"
+    call_tool 8 delete_comment "{$DIAGRAM, \"comment_id\": \"$COMMENT_ID\"}"
+    call_tool 9 list_comments "{$DIAGRAM}"
+    assert_message 'm["result"]["structuredContent"]["comments"] == []' "delete_comment deletes it"
 fi
 
 log "MCP smoke passed"

@@ -12,6 +12,10 @@ class DiagramRepository(ABC):
     @abstractmethod
     async def get_by_id(self, diagram_id: uuid.UUID) -> Diagram | None: ...
 
+    # Cheaper than get_by_id when only existence matters: the canvas is not loaded.
+    @abstractmethod
+    async def exists(self, diagram_id: uuid.UUID) -> bool: ...
+
     @abstractmethod
     async def get_by_share_token(self, share_token: str) -> Diagram | None: ...
 

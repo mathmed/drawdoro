@@ -31,6 +31,8 @@ interface RealtimeOptions {
   onPresenceChange: (presence: Presence) => void
   // Keeps the local copy of the diagram in sync; returns false when the push is stale.
   onDiagramPushed?: (diagram: PushedDiagram) => boolean
+  // Someone (a person or an agent) added, resolved or deleted a comment on this diagram.
+  onCommentsChanged?: () => void
   // Guests reach a diagram through a share link instead of a signed-in session.
   shareToken?: string
   guestName?: string
@@ -52,6 +54,7 @@ export function useRealtime({
   editor,
   onPresenceChange,
   onDiagramPushed,
+  onCommentsChanged,
   shareToken,
   guestName,
 }: RealtimeOptions) {
@@ -113,6 +116,11 @@ export function useRealtime({
           return
         }
 
+        if (msg.type === 'comments_changed') {
+          onCommentsChanged?.()
+          return
+        }
+
         if (msg.type === 'diagram_updated' && msg.client_id !== TAB_CLIENT_ID && msg.diagram !== undefined) {
           const isNewest = onDiagramPushed?.(msg.diagram) ?? true
           // Editor tabs already sent their canvas over the socket; only saves made outside an
@@ -133,7 +141,7 @@ export function useRealtime({
 
       wsRef.current = ws
     },
-    [diagramId, editor, onPresenceChange, onDiagramPushed, shareToken, guestName],
+    [diagramId, editor, onPresenceChange, onDiagramPushed, onCommentsChanged, shareToken, guestName],
   )
 
   const sendUpdate = useCallback((snapshot: object) => {

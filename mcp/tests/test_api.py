@@ -80,3 +80,37 @@ def test_should_raise_tool_error_when_api_is_unreachable() -> None:
     )
     with pytest.raises(ToolError, match=f"Could not reach the {APP_NAME} API at {BASE_URL}"):
         sut.get_list("/things")
+
+
+def test_should_send_patch_body_as_json() -> None:
+    sent: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(request)
+        return httpx.Response(200, json={"resolved": True})
+
+    sut = BackendApi(
+        httpx.Client(base_url=BASE_URL, transport=httpx.MockTransport(handler)), APP_NAME
+    )
+    assert sut.patch("/things/abc", {"resolved": True}) == {"resolved": True}
+    assert (sent[0].method, sent[0].content) == ("PATCH", b'{"resolved":true}')
+
+
+def test_should_delete_without_reading_a_body() -> None:
+    sent: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(request)
+        return httpx.Response(204)
+
+    sut = BackendApi(
+        httpx.Client(base_url=BASE_URL, transport=httpx.MockTransport(handler)), APP_NAME
+    )
+    sut.delete("/things/abc")
+    assert (sent[0].method, sent[0].url.path) == ("DELETE", "/things/abc")
+
+
+def test_should_report_refused_deletions() -> None:
+    sut = api_answering(httpx.Response(403, json={"detail": "Resolve this comment instead"}))
+    with pytest.raises(ToolError, match="403 for DELETE /things/abc: Resolve this comment instead"):
+        sut.delete("/things/abc")

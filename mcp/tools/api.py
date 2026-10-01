@@ -13,6 +13,8 @@ class HttpMethod(StrEnum):
     GET = "GET"
     POST = "POST"
     PUT = "PUT"
+    PATCH = "PATCH"
+    DELETE = "DELETE"
 
 
 class BackendApi:
@@ -31,6 +33,13 @@ class BackendApi:
 
     def put(self, path: str, body: JsonObject) -> JsonObject:
         return cast(JsonObject, self._request(HttpMethod.PUT, path, body).json())
+
+    def patch(self, path: str, body: JsonObject) -> JsonObject:
+        return cast(JsonObject, self._request(HttpMethod.PATCH, path, body).json())
+
+    # Deletions answer 204 without a body.
+    def delete(self, path: str) -> None:
+        self._request(HttpMethod.DELETE, path)
 
     def _request(
         self, method: HttpMethod, path: str, body: JsonObject | None = None

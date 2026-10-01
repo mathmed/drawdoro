@@ -61,14 +61,30 @@ export interface DocumentationPage {
   updated_at?: string
 }
 
+export type CommentStatus = 'open' | 'resolved' | 'all'
+
+// A comment by a person or an agent. For agent comments, author_* is the person the agent works
+// for; resolved_by_* follows the same rule. content is plain text: always render it as text.
 export interface Comment {
   id: string
   diagram_id: string
-  element_id: string
+  // null for a comment on the whole diagram.
+  element_id: string | null
   content: string
   author_id: string | null
   author_name: string | null
+  origin: RevisionOrigin
+  agent_name: string | null
+  agent_label: string | null
   created_at: string
+  resolved: boolean
+  resolved_at: string | null
+  resolved_by_id: string | null
+  resolved_by_name: string | null
+  resolved_by_origin: RevisionOrigin | null
+  resolved_by_agent_name: string | null
+  resolved_by_agent_label: string | null
+  created_by_you: boolean
 }
 
 export type SemanticType =

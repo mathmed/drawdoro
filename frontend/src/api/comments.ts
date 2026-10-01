@@ -1,14 +1,14 @@
 import apiClient from './client'
-import type { Comment } from './types'
+import type { Comment, CommentStatus } from './types'
 
-export async function listComments(diagramId: string): Promise<Comment[]> {
-  const { data } = await apiClient.get<Comment[]>(`/diagrams/${diagramId}/comments`)
+export async function listComments(diagramId: string, status: CommentStatus = 'all'): Promise<Comment[]> {
+  const { data } = await apiClient.get<Comment[]>(`/diagrams/${diagramId}/comments`, { params: { status } })
   return data
 }
 
 export async function createComment(
   diagramId: string,
-  elementId: string,
+  elementId: string | null,
   content: string,
   authorId?: string,
 ): Promise<Comment> {
@@ -17,5 +17,10 @@ export async function createComment(
     content,
     author_id: authorId ?? null,
   })
+  return data
+}
+
+export async function setCommentResolved(diagramId: string, commentId: string, resolved: boolean): Promise<Comment> {
+  const { data } = await apiClient.patch<Comment>(`/diagrams/${diagramId}/comments/${commentId}`, { resolved })
   return data
 }

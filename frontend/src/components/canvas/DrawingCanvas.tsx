@@ -1,4 +1,4 @@
-import { useEffect, type DragEvent } from 'react'
+import { useCallback, useEffect, type DragEvent } from 'react'
 import {
   ArrowShapeKindStyle,
   DefaultContextMenu,
@@ -70,11 +70,15 @@ export default function DrawingCanvas({ diagram }: DrawingCanvasProps) {
     editor?.updateInstanceState({ isReadonly: isViewer })
   }, [editor, isViewer])
 
+  const loadComments = useAppStore((state) => state.loadComments)
+  const reloadComments = useCallback(() => void loadComments(diagram.id), [loadComments, diagram.id])
+
   const { sendUpdate } = useRealtime({
     diagramId: diagram.id,
     editor,
     onPresenceChange: setPresence,
     onDiagramPushed: applyPushedDiagram,
+    onCommentsChanged: reloadComments,
   })
 
   function handleMount(mountedEditor: Editor): () => void {

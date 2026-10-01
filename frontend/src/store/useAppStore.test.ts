@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { listComments } from '../api/comments'
+import { createComment, listComments, setCommentResolved } from '../api/comments'
 import { getDocumentation } from '../api/documentation'
 import { deleteDiagram, getDiagramById, updateDiagram } from '../api/diagrams'
 import { removeMember, listMembers } from '../api/members'
 import { deleteProject, getProjectTree, listProjects } from '../api/projects'
 import { listWorkspaces } from '../api/workspaces'
 import type { Diagram, Project, ProjectTree, Workspace, WorkspaceMember } from '../api/types'
+import { makeComment } from '../test/comments'
 import { useAppStore } from './useAppStore'
 import { useAuthStore } from './useAuthStore'
 
@@ -447,5 +448,51 @@ describe('ui state', () => {
     useAppStore.getState().runValidation()
 
     expect(useAppStore.getState()).toMatchObject({ validationResults: [], isValidationOpen: true })
+  })
+})
+
+describe('comments', () => {
+  const COMMENT = makeComment({ id: 'c1' })
+
+  it('should keep the comments of the open diagram only', async () => {
+    useAppStore.setState({ activeDiagram: diagram({ id: 'd2' }), comments: [] })
+    vi.mocked(listComments).mockResolvedValue([COMMENT])
+
+    await useAppStore.getState().loadComments('d1')
+    expect(useAppStore.getState().comments).toEqual([])
+
+    await useAppStore.getState().loadComments('d2')
+    expect(useAppStore.getState().comments).toEqual([COMMENT])
+  })
+
+  it('should not list a new comment twice when the realtime reload got it first', async () => {
+    useAppStore.setState({ activeDiagram: diagram(), comments: [COMMENT] })
+    vi.mocked(createComment).mockResolvedValue(COMMENT)
+
+    await useAppStore.getState().addComment('shape:a', 'Missing the queue')
+
+    expect(createComment).toHaveBeenCalledWith('d1', 'shape:a', 'Missing the queue')
+    expect(useAppStore.getState().comments).toEqual([COMMENT])
+  })
+
+  it('should replace a comment with its resolved version', async () => {
+    const other = makeComment({ id: 'c2' })
+    const resolved = { ...COMMENT, resolved: true, resolved_at: '2026-01-01T12:00:00Z' }
+    useAppStore.setState({ activeDiagram: diagram(), comments: [COMMENT, other] })
+    vi.mocked(setCommentResolved).mockResolvedValue(resolved)
+
+    await useAppStore.getState().setCommentResolved('c1', true)
+
+    expect(setCommentResolved).toHaveBeenCalledWith('d1', 'c1', true)
+    expect(useAppStore.getState().comments).toEqual([resolved, other])
+  })
+
+  it('should do nothing without an open diagram', async () => {
+    useAppStore.setState({ activeDiagram: null })
+    vi.mocked(setCommentResolved).mockClear()
+
+    await useAppStore.getState().setCommentResolved('c1', true)
+
+    expect(setCommentResolved).not.toHaveBeenCalled()
   })
 })

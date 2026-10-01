@@ -6,6 +6,7 @@ from app.common.settings import Settings
 from app.domain.usecases.comment.create_comment import CreateComment
 from app.domain.usecases.comment.delete_comment import DeleteComment
 from app.domain.usecases.comment.list_comments import ListComments
+from app.domain.usecases.comment.update_comment_resolution import UpdateCommentResolution
 from app.domain.usecases.diagram.create_diagram import CreateDiagram
 from app.domain.usecases.diagram.delete_diagram import DeleteDiagram
 from app.domain.usecases.diagram.get_diagram import GetDiagram
@@ -40,6 +41,7 @@ from app.presentation.factories.comment_factories import (
     create_comment_factory,
     delete_comment_factory,
     list_comments_factory,
+    update_comment_resolution_factory,
 )
 from app.presentation.factories.diagram_factories import (
     create_diagram_factory,
@@ -128,6 +130,7 @@ async def test_comment_factories() -> None:
     assert isinstance(await create_comment_factory(session), CreateComment)
     assert isinstance(await list_comments_factory(session), ListComments)
     assert isinstance(await delete_comment_factory(session), DeleteComment)
+    assert isinstance(await update_comment_resolution_factory(session), UpdateCommentResolution)
 
 
 async def test_documentation_factories() -> None:
