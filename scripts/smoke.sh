@@ -28,6 +28,7 @@ API_PID=""
 API_LOG=""
 DB_CONTAINER=""
 BODY=""
+SMOKE_DIAGRAM_ID=""
 
 log() { printf '\n>> %s\n' "$*"; }
 
@@ -176,7 +177,26 @@ check_probes() {
     request GET "$API_URL/openapi.json" 200
 }
 
-# Walks workspace -> project -> diagram -> revision so the newest tables and indexes get used.
+# Comment lifecycle on the newest columns: create, resolve, filter by status, delete.
+check_comments() {
+    local diagram_id="$1"
+    shift
+    local base="$API_URL/diagrams/$diagram_id/comments" comment_id
+    request POST "$base" 201 '{"element_id": "shape:smoke", "content": "Smoke <b>comment</b>"}' "$@"
+    comment_id="$(json_field "$BODY" id)"
+    [[ "$(json_field "$BODY" content)" == "Smoke <b>comment</b>" ]] || fail "comment text changed: $BODY"
+    request PATCH "$base/$comment_id" 200 '{"resolved": true}' "$@"
+    [[ "$(json_field "$BODY" resolved)" == "True" ]] || fail "comment not resolved: $BODY"
+    request GET "$base?status=resolved" 200 "" "$@"
+    [[ "$BODY" == *"$comment_id"* ]] || fail "resolved comment missing from ?status=resolved: $BODY"
+    request GET "$base?status=open" 200 "" "$@"
+    [[ "$BODY" == "[]" ]] || fail "resolved comment listed as open: $BODY"
+    request PATCH "$base/$comment_id" 200 '{"resolved": false}' "$@"
+    request DELETE "$base/$comment_id" 204 "" "$@"
+}
+
+# Walks workspace -> project -> diagram -> revision and comments so the newest tables and indexes
+# get used. Leaves the diagram id in SMOKE_DIAGRAM_ID for the MCP smoke.
 check_crud() {
     local slug="$1"
     shift
@@ -190,6 +210,8 @@ check_crud() {
     request PUT "$API_URL/projects/$project_id/diagrams/$diagram_id" 200 \
         '{"name": "Smoke", "canvas_state": {"store": {}}, "revision_summary": "smoke"}' "$@"
     request GET "$API_URL/diagrams/$diagram_id/revisions" 200 "" "$@"
+    check_comments "$diagram_id" "$@"
+    SMOKE_DIAGRAM_ID="$diagram_id"
     request GET "$API_URL/projects/$project_id/tree" 200 "" "$@"
     request GET "$API_URL/projects/$project_id/diagrams" 200 "" "$@"
     request GET "$API_URL/workspaces" 200 "" "$@"
@@ -219,7 +241,8 @@ request GET "$API_URL/workspaces" 401
 request GET "$API_URL/workspaces" 401 "" -H "X-API-Key: wrong-key"
 check_crud auth-enabled -H "X-API-Key: $SERVICE_KEY"
 if [[ "${SMOKE_SKIP_MCP:-0}" != "1" ]]; then
-    SMOKE_MCP_API_URL="$API_URL" SMOKE_MCP_API_KEY="$SERVICE_KEY" "$ROOT/scripts/smoke_mcp.sh" \
+    SMOKE_MCP_API_URL="$API_URL" SMOKE_MCP_API_KEY="$SERVICE_KEY" \
+        SMOKE_MCP_DIAGRAM_ID="$SMOKE_DIAGRAM_ID" "$ROOT/scripts/smoke_mcp.sh" \
         || fail "MCP smoke failed"
 fi
 stop_api
