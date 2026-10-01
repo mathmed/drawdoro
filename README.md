@@ -7,13 +7,15 @@
 | app/common/logger.py                                                     |       16 |        0 |    100% |           |
 | app/common/settings.py                                                   |       34 |        0 |    100% |           |
 | app/domain/constants/api\_keys.py                                        |        5 |        0 |    100% |           |
+| app/domain/constants/comments.py                                         |        2 |        0 |    100% |           |
 | app/domain/constants/gallery.py                                          |        2 |        0 |    100% |           |
 | app/domain/constants/presence.py                                         |        1 |        0 |    100% |           |
 | app/domain/constants/revisions.py                                        |        1 |        0 |    100% |           |
 | app/domain/constants/user.py                                             |        1 |        0 |    100% |           |
 | app/domain/contracts/agent\_presence.py                                  |        4 |        0 |    100% |           |
 | app/domain/contracts/api\_key\_repository.py                             |        5 |        0 |    100% |           |
-| app/domain/contracts/comment\_repository.py                              |        4 |        0 |    100% |           |
+| app/domain/contracts/comment\_change\_notifier.py                        |        3 |        0 |    100% |           |
+| app/domain/contracts/comment\_repository.py                              |        5 |        0 |    100% |           |
 | app/domain/contracts/diagram\_repository.py                              |        5 |        0 |    100% |           |
 | app/domain/contracts/diagram\_revision\_repository.py                    |        5 |        0 |    100% |           |
 | app/domain/contracts/diagram\_update\_notifier.py                        |        3 |        0 |    100% |           |
@@ -31,7 +33,8 @@
 | app/domain/entities/models/api\_key.py                                   |        9 |        0 |    100% |           |
 | app/domain/entities/models/api\_key\_owner.py                            |        4 |        0 |    100% |           |
 | app/domain/entities/models/base\_model.py                                |        3 |        0 |    100% |           |
-| app/domain/entities/models/comment.py                                    |        9 |        0 |    100% |           |
+| app/domain/entities/models/comment.py                                    |       25 |        0 |    100% |           |
+| app/domain/entities/models/comment\_actor.py                             |       19 |        0 |    100% |           |
 | app/domain/entities/models/created\_api\_key.py                          |        3 |        0 |    100% |           |
 | app/domain/entities/models/diagram.py                                    |       14 |        0 |    100% |           |
 | app/domain/entities/models/diagram\_revision.py                          |       21 |        0 |    100% |           |
@@ -50,6 +53,7 @@
 | app/domain/entities/models/workspace\_member\_details.py                 |        4 |        0 |    100% |           |
 | app/domain/entities/objects/gallery\_limits.py                           |        3 |        0 |    100% |           |
 | app/domain/entities/objects/revision\_policy.py                          |        6 |        0 |    100% |           |
+| app/domain/enums/comment\_status.py                                      |        5 |        0 |    100% |           |
 | app/domain/enums/gallery\_item\_kind.py                                  |        4 |        0 |    100% |           |
 | app/domain/enums/image\_mime\_type.py                                    |        6 |        0 |    100% |           |
 | app/domain/enums/revision\_kind.py                                       |        5 |        0 |    100% |           |
@@ -57,6 +61,8 @@
 | app/domain/enums/workspace\_role.py                                      |        8 |        0 |    100% |           |
 | app/domain/errors/domain\_errors.py                                      |       18 |        0 |    100% |           |
 | app/domain/services/api\_key\_secret.py                                  |        7 |        0 |    100% |           |
+| app/domain/services/comment\_content.py                                  |       24 |        0 |    100% |           |
+| app/domain/services/comment\_ownership.py                                |        7 |        0 |    100% |           |
 | app/domain/services/gallery\_item\_name.py                               |        7 |        0 |    100% |           |
 | app/domain/services/gallery\_ownership.py                                |        9 |        0 |    100% |           |
 | app/domain/services/image\_type\_detector.py                             |        9 |        0 |    100% |           |
@@ -67,9 +73,10 @@
 | app/domain/usecases/auth/authenticate\_api\_key.py                       |       26 |        0 |    100% |           |
 | app/domain/usecases/auth/authenticate\_user.py                           |       22 |        0 |    100% |           |
 | app/domain/usecases/auth/authorize\_workspace\_access.py                 |       51 |        0 |    100% |           |
-| app/domain/usecases/comment/create\_comment.py                           |       12 |        2 |     83% |     20-26 |
-| app/domain/usecases/comment/delete\_comment.py                           |        9 |        1 |     89% |        16 |
-| app/domain/usecases/comment/list\_comments.py                            |       10 |        1 |     90% |        17 |
+| app/domain/usecases/comment/create\_comment.py                           |       34 |        0 |    100% |           |
+| app/domain/usecases/comment/delete\_comment.py                           |       24 |        0 |    100% |           |
+| app/domain/usecases/comment/list\_comments.py                            |       21 |        0 |    100% |           |
+| app/domain/usecases/comment/update\_comment\_resolution.py               |       34 |        0 |    100% |           |
 | app/domain/usecases/diagram/create\_diagram.py                           |       14 |        2 |     86% |     21-27 |
 | app/domain/usecases/diagram/delete\_diagram.py                           |       13 |        4 |     69% |     17-20 |
 | app/domain/usecases/diagram/get\_diagram.py                              |       14 |        0 |    100% |           |
@@ -112,7 +119,7 @@
 | app/infra/auth/cognito\_token\_verifier.py                               |       39 |        0 |    100% |           |
 | app/infra/database/database\_readiness\_probe.py                         |       22 |        0 |    100% |           |
 | app/infra/database/models/api\_key.py                                    |       15 |        0 |    100% |           |
-| app/infra/database/models/comment.py                                     |       13 |        0 |    100% |           |
+| app/infra/database/models/comment.py                                     |       23 |        0 |    100% |           |
 | app/infra/database/models/custom\_shape.py                               |       14 |        0 |    100% |           |
 | app/infra/database/models/diagram.py                                     |       18 |        0 |    100% |           |
 | app/infra/database/models/diagram\_revision.py                           |       26 |        0 |    100% |           |
@@ -124,8 +131,8 @@
 | app/infra/database/models/workspace.py                                   |       14 |        0 |    100% |           |
 | app/infra/database/models/workspace\_member.py                           |       12 |        0 |    100% |           |
 | app/infra/database/repositories/api\_key\_repository.py                  |       35 |       18 |     49% |17-28, 31-36, 39-43, 46-54, 57-60, 63-66, 70 |
-| app/infra/database/repositories/comment\_repository.py                   |       31 |       16 |     48% |17-27, 30-33, 36-42, 45-48, 52 |
-| app/infra/database/repositories/diagram\_repository.py                   |       55 |       33 |     40% |18-29, 32-39, 42-49, 52-62, 82-88, 91-104, 107-115, 119 |
+| app/infra/database/repositories/comment\_repository.py                   |       62 |        0 |    100% |           |
+| app/infra/database/repositories/diagram\_repository.py                   |       58 |       33 |     43% |18-29, 32-39, 51-58, 61-71, 91-97, 100-113, 116-124, 128 |
 | app/infra/database/repositories/diagram\_revision\_repository.py         |       62 |       39 |     37% |23-44, 47-57, 60-67, 70-77, 80-90, 95-115, 118-121, 125-134 |
 | app/infra/database/repositories/documentation\_page\_repository.py       |       25 |       13 |     48% |16-20, 23-38, 42 |
 | app/infra/database/repositories/folder\_repository.py                    |       38 |       22 |     42% |17-26, 29-36, 39-45, 48-59, 62-70, 74 |
@@ -137,11 +144,12 @@
 | app/infra/database/session.py                                            |        9 |        0 |    100% |           |
 | app/infra/realtime/connection\_manager.py                                |       82 |        0 |    100% |           |
 | app/infra/realtime/realtime\_agent\_presence.py                          |        9 |        0 |    100% |           |
+| app/infra/realtime/realtime\_comment\_change\_notifier.py                |       13 |        0 |    100% |           |
 | app/infra/realtime/realtime\_diagram\_update\_notifier.py                |       17 |        0 |    100% |           |
 | app/main/main.py                                                         |        6 |        0 |    100% |           |
 | app/presentation/factories/api\_key\_factories.py                        |       13 |        3 |     77% |12, 16, 20 |
 | app/presentation/factories/auth\_factories.py                            |       27 |        0 |    100% |           |
-| app/presentation/factories/comment\_factories.py                         |       13 |        0 |    100% |           |
+| app/presentation/factories/comment\_factories.py                         |       19 |        0 |    100% |           |
 | app/presentation/factories/diagram\_factories.py                         |       28 |        0 |    100% |           |
 | app/presentation/factories/documentation\_factories.py                   |       10 |        0 |    100% |           |
 | app/presentation/factories/folder\_factories.py                          |       19 |        0 |    100% |           |
@@ -154,6 +162,7 @@
 | app/presentation/factories/workspace\_member\_factories.py               |       18 |        4 |     78% |21, 27, 37, 43 |
 | app/presentation/fastapi/configs/configs.py                              |       21 |        0 |    100% |           |
 | app/presentation/fastapi/dependencies/agent\_presence.py                 |       20 |        0 |    100% |           |
+| app/presentation/fastapi/dependencies/comment\_actor.py                  |        7 |        0 |    100% |           |
 | app/presentation/fastapi/dependencies/current\_user.py                   |       38 |        0 |    100% |           |
 | app/presentation/fastapi/dependencies/revision\_author.py                |       19 |        0 |    100% |           |
 | app/presentation/fastapi/dependencies/workspace\_access.py               |       31 |        2 |     94% |     26-28 |
@@ -161,7 +170,7 @@
 | app/presentation/fastapi/middlewares/request\_logging\_middleware.py     |       11 |        0 |    100% |           |
 | app/presentation/fastapi/routes/api\_key\_routes.py                      |       21 |        0 |    100% |           |
 | app/presentation/fastapi/routes/auth\_routes.py                          |       11 |        0 |    100% |           |
-| app/presentation/fastapi/routes/comment\_routes.py                       |       22 |        0 |    100% |           |
+| app/presentation/fastapi/routes/comment\_routes.py                       |       29 |        0 |    100% |           |
 | app/presentation/fastapi/routes/diagram\_routes.py                       |       39 |        0 |    100% |           |
 | app/presentation/fastapi/routes/documentation\_routes.py                 |       16 |        0 |    100% |           |
 | app/presentation/fastapi/routes/folder\_routes.py                        |       30 |        0 |    100% |           |
@@ -175,7 +184,7 @@
 | app/presentation/fastapi/routes/workspace\_member\_routes.py             |       26 |        0 |    100% |           |
 | app/presentation/fastapi/routes/workspace\_routes.py                     |       32 |        0 |    100% |           |
 | app/presentation/fastapi/schemas/api\_key\_schemas.py                    |        9 |        0 |    100% |           |
-| app/presentation/fastapi/schemas/comment\_schemas.py                     |        7 |        0 |    100% |           |
+| app/presentation/fastapi/schemas/comment\_schemas.py                     |       11 |        0 |    100% |           |
 | app/presentation/fastapi/schemas/diagram\_schemas.py                     |       21 |        0 |    100% |           |
 | app/presentation/fastapi/schemas/documentation\_schemas.py               |        6 |        0 |    100% |           |
 | app/presentation/fastapi/schemas/folder\_schemas.py                      |        9 |        0 |    100% |           |
@@ -186,7 +195,7 @@
 | app/presentation/fastapi/schemas/user\_schemas.py                        |        5 |        0 |    100% |           |
 | app/presentation/fastapi/schemas/workspace\_member\_schemas.py           |        8 |        0 |    100% |           |
 | app/presentation/fastapi/schemas/workspace\_schemas.py                   |        7 |        0 |    100% |           |
-| **TOTAL**                                                                | **2955** |  **300** | **90%** |           |
+| **TOTAL**                                                                | **3195** |  **280** | **91%** |           |
 
 
 ## Setup coverage badge
