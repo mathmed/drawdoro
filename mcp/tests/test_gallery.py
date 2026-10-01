@@ -177,6 +177,40 @@ def test_should_summarise_the_shapes_of_an_item(sut: GalleryTools, api: MagicMoc
     assert arrow.untrusted_text is None
 
 
+def test_should_describe_malformed_content_without_failing(
+    sut: GalleryTools, api: MagicMock
+) -> None:
+    broken = {"id": "shape:a", "type": "geo", "parentId": 7, "props": ["w"]}
+    odd_geo = {"id": "shape:b", "type": "geo", "parentId": "shape:a", "props": {"geo": 3}}
+    content = {
+        "shapes": [broken, odd_geo],
+        "rootShapeIds": [{"id": "shape:a"}, None],
+        "bindings": "none",
+        "assets": 5,
+    }
+    api.get_object.return_value = api_item(kind="shapes", content=content, image_mime_type=None)
+
+    contents = sut.get_gallery_item(ITEM_ID).contents
+
+    assert contents is not None
+    assert (contents.connections, contents.embedded_images) == (0, 0)
+    assert [shape.model_dump() for shape in contents.shapes] == [
+        {"id": "shape:a", "type": "geo"},
+        {"id": "shape:b", "type": "geo", "parent": "shape:a"},
+    ]
+
+
+def test_should_ignore_saved_shapes_that_are_not_a_list(sut: GalleryTools, api: MagicMock) -> None:
+    api.get_object.return_value = api_item(
+        kind="shapes", content={"shapes": 5}, image_mime_type=None
+    )
+
+    contents = sut.get_gallery_item(ITEM_ID).contents
+
+    assert contents is not None
+    assert (contents.shape_types, contents.shapes) == ({}, [])
+
+
 def test_should_cap_the_shapes_described(sut: GalleryTools, api: MagicMock) -> None:
     box = geo("shape:x", 0, 0, "a1")
     box["props"]["richText"] = rich_text("x" * 500)

@@ -274,11 +274,15 @@ def _summary(item: JsonObject, description_length: int | None = None) -> Gallery
     )
 
 
+# Saved content is stored as the editor sent it, so every part of it is checked before use.
 def _contents(content: JsonObject) -> GalleryContents:
-    shapes = [shape for shape in content.get("shapes") or [] if isinstance(shape, dict)]
-    roots = set(content.get("rootShapeIds") or [])
-    bindings = [b for b in content.get("bindings") or [] if isinstance(b, dict)]
-    assets = [a for a in content.get("assets") or [] if isinstance(a, dict)]
+    shapes = _objects(content.get("shapes"))
+    listed = content.get("rootShapeIds")
+    roots = (
+        {root for root in listed if isinstance(root, str)} if isinstance(listed, list) else set()
+    )
+    bindings = _objects(content.get("bindings"))
+    assets = _objects(content.get("assets"))
     return GalleryContents(
         shape_types=dict(Counter(str(shape.get("type")) for shape in shapes)),
         connections=sum(1 for binding in bindings if binding.get("type") == "arrow"),
@@ -289,19 +293,25 @@ def _contents(content: JsonObject) -> GalleryContents:
 
 
 def _shape(shape: JsonObject, roots: set[str]) -> ContentShape:
-    props: JsonObject = shape.get("props") or {}
+    saved_props = shape.get("props")
+    props: JsonObject = saved_props if isinstance(saved_props, dict) else {}
     width, height = shape_size(props)
     text = shape_text(props)
     shape_id = str(shape.get("id"))
+    parent, geo = shape.get("parentId"), props.get("geo")
     return ContentShape(
         id=shape_id,
         type=str(shape.get("type")),
         w=width,
         h=height,
-        parent=None if shape_id in roots else shape.get("parentId"),
-        geo=props.get("geo"),
+        parent=parent if isinstance(parent, str) and shape_id not in roots else None,
+        geo=geo if isinstance(geo, str) else None,
         untrusted_text=_cut(text, MAX_TEXT_LENGTH) if text else None,
     )
+
+
+def _objects(value: object) -> list[JsonObject]:
+    return [item for item in value if isinstance(item, dict)] if isinstance(value, list) else []
 
 
 def _cut(text: str, length: int) -> str:
