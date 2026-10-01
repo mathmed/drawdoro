@@ -15,8 +15,16 @@ class GalleryItemSummary(BaseModel):
     owner_id: uuid.UUID | None = None
     name: str
     kind: GalleryItemKind
+    # Lower-case words that make the item findable; empty for items saved before tags existed.
+    tags: list[str] = Field(default_factory=list)
+    description: str | None = None
     image_mime_type: ImageMimeType | None = None
     thumbnail: bytes | None = None
+    # Pixels for images, canvas units for shapes; None for items saved before they were measured.
+    width: float | None = None
+    height: float | None = None
+    # Bytes of the image, or of the shapes as JSON.
+    size_bytes: int | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 

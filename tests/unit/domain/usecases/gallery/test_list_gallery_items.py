@@ -12,19 +12,48 @@ from app.domain.usecases.gallery.list_gallery_items import (
 
 from .conftest import OWNER_ID
 
+LOGO = GalleryItemSummary(
+    owner_id=OWNER_ID, name="Temporal", kind=GalleryItemKind.IMAGE, tags=["workflow"]
+)
+CLUSTER = GalleryItemSummary(
+    owner_id=OWNER_ID, name="Cluster", kind=GalleryItemKind.SHAPES, tags=["k8s"]
+)
+
 
 @pytest.fixture
 def sut(repo: GalleryItemRepository) -> ListGalleryItems:
+    repo.list_by_owner = AsyncMock(return_value=[LOGO, CLUSTER])  # type: ignore[method-assign]
     return ListGalleryItems(repo)
 
 
 async def test_should_list_only_the_owner_items(
     sut: ListGalleryItems, repo: GalleryItemRepository
 ) -> None:
-    summaries = [GalleryItemSummary(owner_id=OWNER_ID, name="a", kind=GalleryItemKind.IMAGE)]
-    repo.list_by_owner = AsyncMock(return_value=summaries)  # type: ignore[method-assign]
-
     result = await sut.execute(ListGalleryItemsParams(owner_id=OWNER_ID))
 
-    assert result == summaries
-    repo.list_by_owner.assert_awaited_once_with(OWNER_ID)
+    assert result == [LOGO, CLUSTER]
+    repo.list_by_owner.assert_awaited_once_with(OWNER_ID, True)  # type: ignore[attr-defined]
+
+
+async def test_should_leave_thumbnails_out_when_asked(
+    sut: ListGalleryItems, repo: GalleryItemRepository
+) -> None:
+    await sut.execute(ListGalleryItemsParams(owner_id=OWNER_ID, include_thumbnails=False))
+
+    repo.list_by_owner.assert_awaited_once_with(OWNER_ID, False)  # type: ignore[attr-defined]
+
+
+@pytest.mark.parametrize(
+    ("params", "expected"),
+    [
+        (ListGalleryItemsParams(query="temporal"), [LOGO]),
+        (ListGalleryItemsParams(tag="K8S"), [CLUSTER]),
+        (ListGalleryItemsParams(kind=GalleryItemKind.IMAGE), [LOGO]),
+        (ListGalleryItemsParams(query="workflow", kind=GalleryItemKind.SHAPES), []),
+        (ListGalleryItemsParams(limit=1), [LOGO]),
+    ],
+)
+async def test_should_search_and_limit(
+    sut: ListGalleryItems, params: ListGalleryItemsParams, expected: list[GalleryItemSummary]
+) -> None:
+    assert await sut.execute(params) == expected

@@ -1,4 +1,3 @@
-import json
 import uuid
 from typing import Any
 
@@ -7,9 +6,19 @@ from app.domain.contracts.gallery_item_repository import GalleryItemRepository
 from app.domain.contracts.usecase import InputData, Usecase
 from app.domain.entities.models.gallery_item import GalleryItem
 from app.domain.entities.objects.gallery_limits import GalleryLimits
+from app.domain.entities.objects.gallery_measure import GalleryMeasure
 from app.domain.enums.gallery_item_kind import GalleryItemKind
 from app.domain.enums.image_mime_type import ImageMimeType
 from app.domain.errors.domain_errors import InvalidInputError, PayloadTooLargeError
+from app.domain.services.gallery_item_labels import (
+    normalize_gallery_item_description,
+    normalize_gallery_item_tags,
+)
+from app.domain.services.gallery_item_measure import (
+    content_size_bytes,
+    measure_image,
+    measure_shapes,
+)
 from app.domain.services.gallery_item_name import normalize_gallery_item_name
 from app.domain.services.image_type_detector import detect_image_mime_type
 
@@ -21,6 +30,8 @@ class CreateGalleryItemParams(InputData):
     content: dict[str, Any] | None = None
     image_data: bytes | None = None
     thumbnail: bytes | None = None
+    tags: list[str] = []
+    description: str | None = None
 
 
 class CreateGalleryItem(Usecase[CreateGalleryItemParams, GalleryItem]):
@@ -30,15 +41,24 @@ class CreateGalleryItem(Usecase[CreateGalleryItemParams, GalleryItem]):
 
     async def execute(self, params: CreateGalleryItemParams) -> GalleryItem:
         name = normalize_gallery_item_name(params.name)
+        tags = normalize_gallery_item_tags(params.tags)
+        description = normalize_gallery_item_description(params.description)
         _validate_thumbnail(params.thumbnail)
         item = GalleryItem(
-            owner_id=params.owner_id, name=name, kind=params.kind, thumbnail=params.thumbnail
+            owner_id=params.owner_id,
+            name=name,
+            kind=params.kind,
+            tags=tags,
+            description=description,
+            thumbnail=params.thumbnail,
         )
         if params.kind == GalleryItemKind.SHAPES:
             item.content = self._validate_shapes(params)
+            measure = measure_shapes(item.content)
         else:
             item.image_data, item.image_mime_type = self._validate_image(params)
-        return await self._repo.create(item)
+            measure = measure_image(item.image_data, item.image_mime_type)
+        return await self._repo.create(_measured(item, measure))
 
     def _validate_shapes(self, params: CreateGalleryItemParams) -> dict[str, Any]:
         content = params.content
@@ -47,7 +67,7 @@ class CreateGalleryItem(Usecase[CreateGalleryItemParams, GalleryItem]):
         shapes = content.get("shapes")
         if not isinstance(shapes, list) or len(shapes) == 0:
             raise InvalidInputError("A shapes item needs at least one shape")
-        size = len(json.dumps(content).encode())
+        size = content_size_bytes(content)
         if size > self._limits.max_shapes_bytes:
             raise PayloadTooLargeError(
                 f"The selection is too large ({size} bytes, limit {self._limits.max_shapes_bytes})"
@@ -66,6 +86,12 @@ class CreateGalleryItem(Usecase[CreateGalleryItemParams, GalleryItem]):
         if mime_type is None:
             raise InvalidInputError("Unsupported image type: use PNG, JPEG, GIF or WebP")
         return data, mime_type
+
+
+def _measured(item: GalleryItem, measure: GalleryMeasure) -> GalleryItem:
+    return item.model_copy(
+        update={"width": measure.width, "height": measure.height, "size_bytes": measure.size_bytes}
+    )
 
 
 def _validate_thumbnail(thumbnail: bytes | None) -> None:

@@ -10,6 +10,9 @@ from app.domain.enums.gallery_item_kind import GalleryItemKind
 from app.domain.enums.image_mime_type import ImageMimeType
 from app.infra.database.models.gallery_item import GalleryItemORM
 
+# The payloads can be megabytes each; summaries only need names, tags and thumbnails.
+_SUMMARY_ONLY = (defer(GalleryItemORM.content), defer(GalleryItemORM.image_data))
+
 
 class GalleryItemRepositoryImpl(GalleryItemRepository):
     def __init__(self, session: AsyncSession) -> None:
@@ -21,10 +24,15 @@ class GalleryItemRepositoryImpl(GalleryItemRepository):
             owner_id=item.owner_id,
             name=item.name,
             kind=item.kind.value,
+            tags=item.tags,
+            description=item.description,
             content=item.content,
             image_data=item.image_data,
             image_mime_type=item.image_mime_type.value if item.image_mime_type else None,
             thumbnail=item.thumbnail,
+            width=item.width,
+            height=item.height,
+            size_bytes=item.size_bytes,
         )
         self._session.add(orm)
         await self._session.commit()
@@ -38,31 +46,39 @@ class GalleryItemRepositoryImpl(GalleryItemRepository):
         orm = result.scalar_one_or_none()
         return _to_domain(orm) if orm else None
 
-    async def list_by_owner(self, owner_id: uuid.UUID | None) -> list[GalleryItemSummary]:
+    async def list_by_owner(
+        self, owner_id: uuid.UUID | None, include_thumbnails: bool = True
+    ) -> list[GalleryItemSummary]:
         owner_filter = (
             GalleryItemORM.owner_id.is_(None)
             if owner_id is None
             else GalleryItemORM.owner_id == owner_id
         )
-        # The payloads can be megabytes each; listing only needs names and thumbnails.
+        options = (
+            _SUMMARY_ONLY
+            if include_thumbnails
+            else (*_SUMMARY_ONLY, defer(GalleryItemORM.thumbnail))
+        )
         result = await self._session.execute(
             select(GalleryItemORM)
-            .options(defer(GalleryItemORM.content), defer(GalleryItemORM.image_data))
+            .options(*options)
             .where(owner_filter)
             .order_by(GalleryItemORM.created_at.desc())
         )
-        return [_to_summary(row) for row in result.scalars().all()]
+        return [_to_summary(row, include_thumbnails) for row in result.scalars().all()]
 
-    async def rename(self, item_id: uuid.UUID, name: str) -> GalleryItemSummary:
+    async def update_details(self, item: GalleryItemSummary) -> GalleryItemSummary:
         result = await self._session.execute(
-            select(GalleryItemORM)
-            .options(defer(GalleryItemORM.content), defer(GalleryItemORM.image_data))
-            .where(GalleryItemORM.id == item_id)
+            select(GalleryItemORM).options(*_SUMMARY_ONLY).where(GalleryItemORM.id == item.id)
         )
         orm = result.scalar_one()
-        orm.name = name
+        orm.name = item.name
+        orm.tags = list(item.tags)
+        orm.description = item.description
         await self._session.commit()
-        await self._session.refresh(orm, attribute_names=["name", "updated_at"])
+        await self._session.refresh(
+            orm, attribute_names=["name", "tags", "description", "updated_at"]
+        )
         return _to_summary(orm)
 
     async def delete(self, item_id: uuid.UUID) -> None:
@@ -74,14 +90,19 @@ class GalleryItemRepositoryImpl(GalleryItemRepository):
         await self._session.commit()
 
 
-def _to_summary(orm: GalleryItemORM) -> GalleryItemSummary:
+def _to_summary(orm: GalleryItemORM, include_thumbnail: bool = True) -> GalleryItemSummary:
     return GalleryItemSummary(
         id=orm.id,
         owner_id=orm.owner_id,
         name=orm.name,
         kind=GalleryItemKind(orm.kind),
+        tags=list(orm.tags or []),
+        description=orm.description,
         image_mime_type=ImageMimeType(orm.image_mime_type) if orm.image_mime_type else None,
-        thumbnail=orm.thumbnail,
+        thumbnail=orm.thumbnail if include_thumbnail else None,
+        width=orm.width,
+        height=orm.height,
+        size_bytes=orm.size_bytes,
         created_at=orm.created_at,
         updated_at=orm.updated_at,
     )

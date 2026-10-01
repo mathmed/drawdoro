@@ -1,3 +1,4 @@
+import json
 import uuid
 from typing import Any, cast
 from unittest.mock import AsyncMock, create_autospec
@@ -15,6 +16,7 @@ from app.domain.usecases.gallery.create_gallery_item import (
     CreateGalleryItem,
     CreateGalleryItemParams,
 )
+from tests.tldraw_records import content, geo, png
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
 JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 16
@@ -128,3 +130,53 @@ async def test_should_return_what_the_repository_stored(
     )
 
     assert item is stored
+
+
+async def test_should_normalize_tags_and_description(sut: CreateGalleryItem) -> None:
+    item = await sut.execute(
+        CreateGalleryItemParams(
+            name="Logo",
+            kind=GalleryItemKind.IMAGE,
+            image_data=JPEG,
+            tags=[" Kubernetes ", "K8S", "kubernetes"],
+            description="  The wheel  ",
+        )
+    )
+
+    assert item.tags == ["kubernetes", "k8s"]
+    assert item.description == "The wheel"
+
+
+async def test_should_reject_invalid_tags(
+    sut: CreateGalleryItem, repo: GalleryItemRepository
+) -> None:
+    with pytest.raises(InvalidInputError, match="unsupported characters"):
+        await sut.execute(
+            CreateGalleryItemParams(
+                name="Logo", kind=GalleryItemKind.IMAGE, image_data=JPEG, tags=["<b>"]
+            )
+        )
+    repo.create.assert_not_called()  # type: ignore[attr-defined]
+
+
+async def test_should_measure_images(repo: GalleryItemRepository) -> None:
+    data = png(40, 30)
+    sut = CreateGalleryItem(repo, GalleryLimits(max_image_bytes=10_000, max_shapes_bytes=200))
+
+    item = await sut.execute(
+        CreateGalleryItemParams(name="Logo", kind=GalleryItemKind.IMAGE, image_data=data)
+    )
+
+    assert (item.width, item.height, item.size_bytes) == (40, 30, len(data))
+
+
+async def test_should_measure_shapes(repo: GalleryItemRepository) -> None:
+    saved = content([geo("shape:a", 10, 10, 120, 60)])
+    sut = CreateGalleryItem(repo, GalleryLimits(max_image_bytes=64, max_shapes_bytes=10_000))
+
+    item = await sut.execute(
+        CreateGalleryItemParams(name="Box", kind=GalleryItemKind.SHAPES, content=saved)
+    )
+
+    assert (item.width, item.height) == (120, 60)
+    assert item.size_bytes == len(json.dumps(saved).encode())

@@ -3,6 +3,7 @@ import uuid
 from app.domain.contracts.gallery_item_repository import GalleryItemRepository
 from app.domain.contracts.usecase import InputData, Usecase
 from app.domain.entities.models.gallery_item import GalleryItem
+from app.domain.services.gallery_item_measure import measure_gallery_item
 from app.domain.services.gallery_ownership import get_owned_gallery_item
 
 
@@ -16,4 +17,15 @@ class GetGalleryItem(Usecase[GetGalleryItemParams, GalleryItem]):
         self._repo = repo
 
     async def execute(self, params: GetGalleryItemParams) -> GalleryItem:
-        return await get_owned_gallery_item(self._repo, params.item_id, params.owner_id)
+        item = await get_owned_gallery_item(self._repo, params.item_id, params.owner_id)
+        if item.width is not None and item.size_bytes is not None:
+            return item
+        # Items saved before they were measured get their size from the payload.
+        measure = measure_gallery_item(item)
+        return item.model_copy(
+            update={
+                "width": measure.width,
+                "height": measure.height,
+                "size_bytes": measure.size_bytes,
+            }
+        )

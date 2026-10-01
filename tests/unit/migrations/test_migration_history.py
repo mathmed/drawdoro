@@ -30,3 +30,10 @@ def test_should_add_comment_resolution_on_top_of_the_history_and_api_keys(
     revision = sut.get_revision("0007")
     assert revision is not None
     assert revision.down_revision == "0006"
+
+
+def test_should_add_gallery_tags_on_top_of_comment_resolution(sut: ScriptDirectory) -> None:
+    revision = sut.get_revision("0008")
+    assert revision is not None
+    assert revision.down_revision == "0007"
+    assert sut.get_current_head() == "0008"

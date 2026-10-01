@@ -24,8 +24,9 @@ from app.domain.usecases.folder.update_folder import UpdateFolder
 from app.domain.usecases.gallery.create_gallery_item import CreateGalleryItem
 from app.domain.usecases.gallery.delete_gallery_item import DeleteGalleryItem
 from app.domain.usecases.gallery.get_gallery_item import GetGalleryItem
+from app.domain.usecases.gallery.insert_gallery_item import InsertGalleryItem
 from app.domain.usecases.gallery.list_gallery_items import ListGalleryItems
-from app.domain.usecases.gallery.rename_gallery_item import RenameGalleryItem
+from app.domain.usecases.gallery.update_gallery_item import UpdateGalleryItem
 from app.domain.usecases.health.check_readiness import CheckReadiness
 from app.domain.usecases.project.create_project import CreateProject
 from app.domain.usecases.project.delete_project import DeleteProject
@@ -67,8 +68,9 @@ from app.presentation.factories.gallery_factories import (
     create_gallery_item_factory,
     delete_gallery_item_factory,
     get_gallery_item_factory,
+    insert_gallery_item_factory,
     list_gallery_items_factory,
-    rename_gallery_item_factory,
+    update_gallery_item_factory,
 )
 from app.presentation.factories.health_factories import check_readiness_factory
 from app.presentation.factories.project_factories import (
@@ -144,7 +146,8 @@ async def test_gallery_factories() -> None:
     assert isinstance(await create_gallery_item_factory(session, Settings()), CreateGalleryItem)
     assert isinstance(await list_gallery_items_factory(session), ListGalleryItems)
     assert isinstance(await get_gallery_item_factory(session), GetGalleryItem)
-    assert isinstance(await rename_gallery_item_factory(session), RenameGalleryItem)
+    assert isinstance(await update_gallery_item_factory(session), UpdateGalleryItem)
+    assert isinstance(await insert_gallery_item_factory(session, Settings()), InsertGalleryItem)
     assert isinstance(await delete_gallery_item_factory(session), DeleteGalleryItem)
 
 

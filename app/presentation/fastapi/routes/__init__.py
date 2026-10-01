@@ -5,6 +5,7 @@ from .diagram_routes import diagram_by_id_router
 from .diagram_routes import router as diagram_router
 from .documentation_routes import router as documentation_router
 from .folder_routes import router as folder_router
+from .gallery_routes import insertion_router as gallery_insertion_router
 from .gallery_routes import router as gallery_router
 from .health_routes import router as health_router
 from .project_routes import router as project_router
@@ -33,6 +34,7 @@ protected_routers = [
     comment_router,
     share_router,
     gallery_router,
+    gallery_insertion_router,
     revision_router,
     api_key_router,
 ]
