@@ -65,6 +65,7 @@ class CanvasInsertion:
         shape_ids = {str(shape["id"]): self._fresh_id("shape") for shape in shapes}
         roots = _roots(content, shapes)
         children = children_by_parent(shapes)
+        _ensure_tree(shapes, roots, children)
         origin = union_bounds(shape_bounds(root, children) for root in roots)
         origin = origin or Bounds(0, 0, 0, 0)
         width, height = origin.width * scale, origin.height * scale
@@ -247,6 +248,9 @@ def _shapes(content: dict[str, Any]) -> list[CanvasRecord]:
     for shape in shapes:
         if not _is_shape(shape):
             raise InvalidInputError(INVALID_CONTENT)
+    # Two shapes with one id would become one record, leaving its children with two parents.
+    if len({shape["id"] for shape in shapes}) != len(shapes):
+        raise InvalidInputError(INVALID_CONTENT)
     return shapes
 
 
@@ -266,6 +270,22 @@ def _roots(content: dict[str, Any], shapes: list[CanvasRecord]) -> list[CanvasRe
     listed = {shape["id"] for shape in content_root_shapes(content)}
     roots = [shape for shape in shapes if shape["id"] in listed or shape.get("parentId") not in ids]
     return sorted(roots, key=lambda shape: str(shape.get("index", "")))
+
+
+# Every saved shape must hang from a root: shapes whose parents loop back to them would be
+# copied into the diagram as a broken tree that never reaches the page.
+def _ensure_tree(
+    shapes: list[CanvasRecord], roots: list[CanvasRecord], children: dict[str, list[CanvasRecord]]
+) -> None:
+    reached: set[str] = set()
+    pending = [str(root["id"]) for root in roots]
+    while pending:
+        shape_id = pending.pop()
+        if shape_id not in reached:
+            reached.add(shape_id)
+            pending.extend(str(child["id"]) for child in children.get(shape_id, []))
+    if len(reached) != len(shapes):
+        raise InvalidInputError(INVALID_CONTENT)
 
 
 # Bindings tie an arrow to the shapes it connects; one with an end outside the item is dropped.

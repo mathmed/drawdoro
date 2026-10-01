@@ -89,6 +89,16 @@ def test_should_survive_a_parent_cycle() -> None:
     assert page_bounds(store, "shape:a") == Bounds(6, 6, 16, 16)
 
 
+def test_should_cut_a_loop_of_groups_inside_each_other() -> None:
+    records = [
+        group("shape:a", 10, 10) | {"parentId": "shape:b"},
+        group("shape:b", 0, 0) | {"parentId": "shape:a"},
+        geo("shape:c", 5, 5, 20, 20, parent="shape:b"),
+    ]
+    # b holds a again, which then counts as a plain shape of the default size.
+    assert shape_bounds(records[0], children_by_parent(records)) == Bounds(15, 15, 120, 120)
+
+
 def test_should_union_bounds() -> None:
     assert union_bounds([]) is None
     assert union_bounds([Bounds(0, 5, 10, 10), Bounds(-5, 0, 3, 20)]) == Bounds(-5, 0, 10, 20)

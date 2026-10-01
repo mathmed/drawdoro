@@ -24,6 +24,18 @@ def test_should_measure_the_bounds_of_the_root_shapes() -> None:
     assert measure.size_bytes == content_size_bytes(saved)
 
 
+def test_should_measure_groups_that_loop_into_each_other() -> None:
+    saved = content(
+        [
+            group("shape:a", 0, 0) | {"parentId": "shape:b"},
+            group("shape:b", 0, 0) | {"parentId": "shape:a"},
+        ],
+        roots=["shape:a"],
+    )
+    measure = measure_shapes(saved)
+    assert (measure.width, measure.height) == (100, 100)
+
+
 def test_should_round_the_measured_size() -> None:
     measure = measure_shapes(content([geo("shape:a", 0, 0, 10.123, 5.456)]))
     assert (measure.width, measure.height) == (10.12, 5.46)

@@ -24,10 +24,19 @@ def children_by_parent(records: Iterable[CanvasRecord]) -> dict[str, list[Canvas
 # Bounds of a shape in its parent's coordinates. Groups have no size of their own: they span
 # their children.
 def shape_bounds(record: CanvasRecord, children: Mapping[str, list[CanvasRecord]]) -> Bounds:
+    return _shape_bounds(record, children, frozenset())
+
+
+def _shape_bounds(
+    record: CanvasRecord, children: Mapping[str, list[CanvasRecord]], ancestors: frozenset[str]
+) -> Bounds:
     x, y = _number(record.get("x")), _number(record.get("y"))
-    if record.get("type") == "group":
+    shape_id = str(record.get("id"))
+    # A broken canvas could make a group its own ancestor: the loop is cut where it repeats.
+    if record.get("type") == "group" and shape_id not in ancestors:
+        inside = ancestors | {shape_id}
         inner = union_bounds(
-            shape_bounds(child, children) for child in children.get(record["id"], [])
+            _shape_bounds(child, children, inside) for child in children.get(shape_id, [])
         )
         if inner is not None:
             return inner.translated(x, y)

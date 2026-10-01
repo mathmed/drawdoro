@@ -361,6 +361,49 @@ def test_should_refuse_invalid_content(sut: CanvasInsertion, shapes: object) -> 
         sut.place_shapes({"schema": SCHEMA, "shapes": shapes}, AUTO, 1)
 
 
+def test_should_refuse_shapes_saved_twice(sut: CanvasInsertion) -> None:
+    saved = content([geo("shape:a", 0, 0), geo("shape:a", 50, 50, index="a2")])
+    with pytest.raises(InvalidInputError, match="invalid shapes"):
+        sut.place_shapes(saved, AUTO, 1)
+
+
+def test_should_refuse_shapes_whose_parents_loop(sut: CanvasInsertion) -> None:
+    saved = content(
+        [
+            geo("shape:root"),
+            group("shape:a") | {"parentId": "shape:b"},
+            group("shape:b") | {"parentId": "shape:a"},
+        ],
+        roots=["shape:root"],
+    )
+    with pytest.raises(InvalidInputError, match="invalid shapes"):
+        sut.place_shapes(saved, AUTO, 1)
+
+
+def test_should_accept_roots_saved_inside_another_saved_shape(sut: CanvasInsertion) -> None:
+    saved = content(
+        [group("shape:g"), geo("shape:a", parent="shape:g")], roots=["shape:g", "shape:a"]
+    )
+
+    plan = sut.place_shapes(saved, GalleryPlacement(x=0, y=0), 1)
+
+    assert len(plan.root_shape_ids) == 2
+    assert all(record["parentId"] == PAGE_ID for record in plan.records)
+
+
+def test_should_place_next_to_a_group_in_a_broken_loop() -> None:
+    sut = make_sut(
+        group("shape:a", 0, 0) | {"parentId": "shape:b"},
+        group("shape:b", 0, 0) | {"parentId": "shape:a"},
+    )
+
+    plan = sut.place_shapes(
+        content([geo("shape:x")]), GalleryPlacement(near_shape_id="shape:a", gap=0), 1
+    )
+
+    assert plan.bounds.min_x == 100
+
+
 def test_should_refuse_content_from_another_editor_version(sut: CanvasInsertion) -> None:
     saved = content([geo("shape:a")]) | {
         "schema": {"schemaVersion": 2, "sequences": {"com.tldraw.shape": 3}}
