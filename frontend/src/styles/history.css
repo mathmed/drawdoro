@@ -242,3 +242,123 @@ pre.copy-field-value {
 .connect-tabs {
   margin-bottom: 10px;
 }
+
+.connect-sections {
+  margin-bottom: 16px;
+}
+
+/* Available MCP tools */
+.mcp-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mcp-tools-filters {
+  display: flex;
+  gap: 8px;
+}
+
+.mcp-tools-filters .select {
+  width: auto;
+  min-width: 170px;
+}
+
+.mcp-tools-count {
+  margin: 0;
+  color: var(--text-subtle);
+  font-size: 11.5px;
+}
+
+.mcp-tool-group .count {
+  margin-left: 4px;
+  color: var(--text-subtle);
+  font-weight: 500;
+}
+
+.mcp-tool-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mcp-tool {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.mcp-tool-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.mcp-tool-name {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.mcp-tool-badges {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.mcp-tool-badges .badge {
+  text-transform: none;
+}
+
+.mcp-tool-summary {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.mcp-tool-details {
+  margin-top: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.mcp-tool-details summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  color: var(--text-subtle);
+  list-style: none;
+}
+
+.mcp-tool-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.mcp-tool-details[open] summary svg {
+  transform: rotate(90deg);
+}
+
+.mcp-tool-details p {
+  margin: 6px 0 0;
+}
+
+.mcp-tool-parameters {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0 0;
+}
+
+.mcp-tool-parameters dd {
+  margin: 0 0 0 12px;
+}
+
+.mcp-tool-required {
+  color: var(--text-subtle);
+  font-size: 11px;
+}

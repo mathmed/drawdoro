@@ -1,5 +1,5 @@
 .PHONY: setup dev dev-build run build test test-unit test-mcp test-frontend hooks check-code format-code frontend db \
-	smoke smoke-mcp lint-imports mutation mutation-report mutation-changed
+	smoke smoke-mcp lint-imports mutation mutation-report mutation-changed mcp-manifest
 
 # Install uv (if missing), project dependencies and git hooks
 setup:
@@ -54,6 +54,12 @@ test-frontend:
 # Run all quality checks (ruff, mypy, bandit, vulture, xenon, pip-audit)
 hooks:
 	uv run pre-commit run --all-files
+
+# Regenerate the frontend's list of MCP tools (frontend/src/config/mcpTools.json) from the tools the
+# MCP server registers. Run it after adding a tool or changing a tool docstring; the MCP tests fail
+# while the file is out of date.
+mcp-manifest:
+	cd mcp && uv run python manifest.py
 
 # Boot smoke: clean Postgres (throwaway container), alembic upgrade head, real API with auth on and
 # off, /health and /ready, then the MCP server against it. Needs docker or SMOKE_DATABASE_URL.

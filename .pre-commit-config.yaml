@@ -37,6 +37,13 @@ repos:
         files: ^mcp/.*(\.py|pyproject\.toml)$
         pass_filenames: false
 
+      - id: mcp-manifest
+        name: MCP tool manifest up to date (make mcp-manifest)
+        entry: bash -c 'cd mcp && uv run python manifest.py --check'
+        language: system
+        files: ^(mcp/.*\.py|frontend/src/config/mcpTools\.json)$
+        pass_filenames: false
+
       - id: bandit
         name: bandit (security)
         entry: uv run bandit -r app -ll -q
