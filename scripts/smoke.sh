@@ -6,8 +6,9 @@
 # Modes, in order:
 #   production-guard  ENV=production with AUTH_ENABLED=false must refuse to start
 #   auth-enabled      ENV=production, AUTH_ENABLED=true (how production runs); also runs the MCP
-#                     smoke against this API with the service key
-#   auth-disabled     ENV=development, AUTH_ENABLED=false (local development)
+#                     smoke against this API with the service key, which has no gallery
+#   auth-disabled     ENV=development, AUTH_ENABLED=false (local development); also runs the MCP
+#                     smoke on the gallery: list, describe, insert into a diagram and tag
 #   database-down     /health stays 200 and /ready answers 503 when the database is unreachable
 #
 # Environment:
@@ -138,11 +139,57 @@ start_database() {
     DATABASE_URL="postgresql+asyncpg://smoke:smoke@127.0.0.1:${port}/smoke"
 }
 
+alembic_run() {
+    DATABASE_URL="$DATABASE_URL" uv run --locked alembic "$@" > "$WORK/alembic.log" 2>&1 \
+        || { cat "$WORK/alembic.log" >&2; fail "alembic $* failed"; }
+    grep -E 'Running (upgrade|downgrade)' "$WORK/alembic.log" | sed -E 's/^.*Running (upgrade|downgrade)/   \1/' || true
+}
+
+# sql STATEMENT: runs one statement on the smoke database and prints the first column of each row.
+sql() {
+    SMOKE_SQL="$1" uv run --locked python - <<'PY'
+import asyncio
+import os
+
+import asyncpg
+
+
+async def main() -> None:
+    url = os.environ["DATABASE_URL"].replace("postgresql+asyncpg://", "postgresql://")
+    connection = await asyncpg.connect(url)
+    try:
+        for row in await connection.fetch(os.environ["SMOKE_SQL"]):
+            print(row[0])
+    finally:
+        await connection.close()
+
+
+asyncio.run(main())
+PY
+}
+
+# The gallery migration (0008) runs over an item saved before tags existed: the item must keep
+# working, without tags and with its size filled in, and the migration must be reversible.
+LEGACY_ITEM_ID="00000000-0000-4000-8000-000000000008"
+
 migrate() {
-    log "alembic upgrade head (clean database)"
-    DATABASE_URL="$DATABASE_URL" uv run --locked alembic upgrade head > "$WORK/alembic.log" 2>&1 \
-        || { cat "$WORK/alembic.log" >&2; fail "alembic upgrade head failed on a clean database"; }
-    grep 'Running upgrade' "$WORK/alembic.log" | sed 's/^.*Running upgrade/   applied/' || true
+    log "alembic upgrade 0007 (clean database), then a gallery item saved before tags existed"
+    alembic_run upgrade 0007
+    sql "INSERT INTO gallery_items (id, owner_id, name, kind, content)
+         VALUES ('$LEGACY_ITEM_ID', NULL, 'Legacy item', 'shapes',
+                 '{\"shapes\": [{\"id\": \"shape:legacy\"}]}') RETURNING id" > /dev/null \
+        || fail "could not seed the legacy gallery item"
+
+    log "alembic upgrade head (over existing data)"
+    alembic_run upgrade head
+    local legacy
+    legacy="$(sql "SELECT CAST(tags AS text) || ' ' || size_bytes FROM gallery_items WHERE id = '$LEGACY_ITEM_ID'")"
+    [[ "$legacy" =~ ^\[\]\ [0-9]+$ ]] || fail "the legacy gallery item was not migrated: '$legacy'"
+    echo "   ok  existing gallery item kept, without tags, size filled in"
+
+    log "alembic downgrade -1 and upgrade head again (the newest migration is reversible)"
+    alembic_run downgrade -1
+    alembic_run upgrade head
 
     log "alembic check (SQLAlchemy models vs migrations)"
     if DATABASE_URL="$DATABASE_URL" uv run --locked alembic check > "$WORK/check.log" 2>&1; then
@@ -217,6 +264,66 @@ check_crud() {
     request GET "$API_URL/workspaces" 200 "" "$@"
 }
 
+# Writes the payloads of the gallery checks to $WORK: a canvas as the editor saves it (tldraw 3.15
+# records, with an anchor shape), a group of two boxes joined by an arrow, and a small PNG.
+write_gallery_payloads() {
+    SMOKE_WORK="$WORK" uv run --locked python - <<'PY'
+import base64
+import json
+import os
+from pathlib import Path
+
+from tests.tldraw_records import arrow, binding, canvas, content, geo, group, png
+
+work = Path(os.environ["SMOKE_WORK"])
+diagram = {"name": "Smoke", "canvas_state": canvas(geo("shape:smoke", 0, 0, 200, 80)), "revision_summary": "smoke canvas"}
+shapes = content(
+    [
+        group("shape:g", 0, 0),
+        geo("shape:a", 0, 0, 100, 50, parent="shape:g", index="a1"),
+        geo("shape:b", 300, 0, 100, 50, parent="shape:g", index="a2"),
+        arrow("shape:arrow", 100, 25, (200, 0), index="a3") | {"parentId": "shape:g"},
+    ],
+    bindings=[
+        binding("binding:start", "shape:arrow", "shape:a", "start"),
+        binding("binding:end", "shape:arrow", "shape:b", "end"),
+    ],
+)
+items = {
+    "shapes-item": {"name": "Smoke service", "kind": "shapes", "content": shapes, "tags": ["Smoke", "Service"]},
+    "image-item": {"name": "Smoke logo", "kind": "image", "image_base64": base64.b64encode(png(48, 24)).decode()},
+}
+(work / "canvas.json").write_text(json.dumps(diagram))
+for name, item in items.items():
+    (work / f"{name}.json").write_text(json.dumps(item))
+PY
+}
+
+# Gallery on the newest columns: the migrated item, tags, search, and a server-side insertion.
+# Leaves the item ids in SMOKE_SHAPES_ITEM_ID and SMOKE_IMAGE_ITEM_ID for the MCP smoke.
+check_gallery() {
+    local diagram_id="$1" project_id
+    write_gallery_payloads || fail "could not write the gallery payloads"
+    request GET "$API_URL/diagrams/$diagram_id" 200
+    project_id="$(json_field "$BODY" project_id)"
+    request PUT "$API_URL/projects/$project_id/diagrams/$diagram_id" 200 "$(cat "$WORK/canvas.json")"
+    request GET "$API_URL/gallery/$LEGACY_ITEM_ID" 200
+    [[ "$(json_field "$BODY" tags)" == "[]" ]] || fail "the migrated item has tags: $BODY"
+    request POST "$API_URL/gallery" 201 "$(cat "$WORK/shapes-item.json")"
+    SMOKE_SHAPES_ITEM_ID="$(json_field "$BODY" id)"
+    [[ "$(json_field "$BODY" tags)" == "['smoke', 'service']" ]] || fail "tags not normalised: $BODY"
+    request POST "$API_URL/gallery" 201 "$(cat "$WORK/image-item.json")"
+    SMOKE_IMAGE_ITEM_ID="$(json_field "$BODY" id)"
+    [[ "$(json_field "$BODY" width)" == "48.0" ]] || fail "image not measured: ${BODY:0:300}"
+    request PATCH "$API_URL/gallery/$SMOKE_IMAGE_ITEM_ID" 200 '{"tags": ["Logo"], "description": "Smoke"}'
+    request GET "$API_URL/gallery?tag=logo&include_thumbnails=false" 200
+    [[ "$BODY" == *"$SMOKE_IMAGE_ITEM_ID"* && "$BODY" != *"$SMOKE_SHAPES_ITEM_ID"* ]] \
+        || fail "search by tag: $BODY"
+    request POST "$API_URL/diagrams/$diagram_id/gallery-insertions" 201 \
+        "{\"item_id\": \"$SMOKE_SHAPES_ITEM_ID\", \"near_shape_id\": \"shape:smoke\", \"side\": \"below\"}"
+    [[ "$(json_field "$BODY" y)" == "160.0" ]] || fail "inserted at the wrong place: $BODY"
+}
+
 load_env_example
 start_database
 export DATABASE_URL
@@ -240,10 +347,13 @@ check_probes
 request GET "$API_URL/workspaces" 401
 request GET "$API_URL/workspaces" 401 "" -H "X-API-Key: wrong-key"
 check_crud auth-enabled -H "X-API-Key: $SERVICE_KEY"
+# The gallery is personal: the shared service key has no owner, so it has no gallery.
+request GET "$API_URL/gallery" 403 "" -H "X-API-Key: $SERVICE_KEY"
+[[ "$BODY" == *"personal API key"* ]] || fail "the service key got no explanation: $BODY"
 if [[ "${SMOKE_SKIP_MCP:-0}" != "1" ]]; then
     SMOKE_MCP_API_URL="$API_URL" SMOKE_MCP_API_KEY="$SERVICE_KEY" \
-        SMOKE_MCP_DIAGRAM_ID="$SMOKE_DIAGRAM_ID" "$ROOT/scripts/smoke_mcp.sh" \
-        || fail "MCP smoke failed"
+        SMOKE_MCP_DIAGRAM_ID="$SMOKE_DIAGRAM_ID" SMOKE_MCP_GALLERY=service \
+        "$ROOT/scripts/smoke_mcp.sh" || fail "MCP smoke failed"
 fi
 stop_api
 
@@ -251,6 +361,12 @@ log "Mode auth-disabled: ENV=development, AUTH_ENABLED=false"
 start_api auth-disabled ENV=development AUTH_ENABLED=false
 check_probes
 check_crud auth-disabled
+check_gallery "$SMOKE_DIAGRAM_ID"
+if [[ "${SMOKE_SKIP_MCP:-0}" != "1" ]]; then
+    SMOKE_MCP_API_URL="$API_URL" SMOKE_MCP_DIAGRAM_ID="$SMOKE_DIAGRAM_ID" SMOKE_MCP_GALLERY=personal \
+        SMOKE_MCP_SHAPES_ITEM_ID="$SMOKE_SHAPES_ITEM_ID" SMOKE_MCP_IMAGE_ITEM_ID="$SMOKE_IMAGE_ITEM_ID" \
+        "$ROOT/scripts/smoke_mcp.sh" || fail "MCP smoke failed"
+fi
 stop_api
 
 log "Mode database-down: liveness stays up, readiness reports the outage"
