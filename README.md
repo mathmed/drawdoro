@@ -235,7 +235,8 @@ scripts/                  Validation tooling: boot smoke (API and MCP), mutation
 | GET | /diagrams/{id} | Get a diagram by its id alone, as in the editor link `/diagrams/<id>` (used by the MCP server's `open_link`) |
 | GET/PUT/DELETE | /projects/{id}/diagrams/{id} | Get / update / delete diagram. Every saved update is pushed to open editors as `diagram_updated`; editor tabs send `X-Client-Id` so they skip the echo of their own saves |
 | GET/PUT | /diagrams/{id}/documentation | Get / update documentation page |
-| GET/POST | /diagrams/{id}/comments | List / create comments |
+| GET/POST | /diagrams/{id}/comments | List comments (`?status=open`, `resolved` or `all`, the default) / create one (editor). Plain text up to 5000 characters; `element_id` is optional (omitted for a comment on the whole diagram) |
+| PATCH/DELETE | /diagrams/{id}/comments/{comment_id} | Resolve or reopen (`{"resolved": true}`) / delete a comment (editor). Agents only delete the comments their own key wrote; see [Comments](#comments) |
 | POST | /diagrams/{id}/share | Generate (or return) the diagram's shareable link token |
 | GET | /diagrams/{id}/revisions | Diagram history, newest first, without snapshots (`?limit=`, up to 200) |
 | GET | /diagrams/{id}/revisions/{revision_id} | One revision with its snapshot (name, canvas and shape metadata) |
@@ -245,7 +246,7 @@ scripts/                  Validation tooling: boot smoke (API and MCP), mutation
 | GET | /share/{share_token} | Public: open a shared diagram by token, no sign-in required (used by guests) |
 | GET/POST | /gallery | List the signed-in user's gallery items (without payloads) / save a selection (`kind=shapes`, tldraw content) or an image (`kind=image`, base64) with a PNG thumbnail |
 | GET/PATCH/DELETE | /gallery/{id} | Get an item with its payload / rename / delete it. Items are private: someone else's item answers 404 |
-| WS | /ws/diagrams/{id} | Real-time collaboration: broadcasts canvas updates, cursors, peer count and saved changes (`diagram_updated`, including those made through the API or the MCP server) to everyone connected to the same diagram. An agent that reads or saves the diagram through the MCP server (`X-Agent-Name`, honoured with the service key or a personal key when auth is on) is listed in the presence for 60s after its last call. Guests join with `?share=<token>&name=<name>` as read-only viewers |
+| WS | /ws/diagrams/{id} | Real-time collaboration: broadcasts canvas updates, cursors, peer count, saved changes (`diagram_updated`, including those made through the API or the MCP server) and `comments_changed` (no comment text) so open editors reload the comments to everyone connected to the same diagram. An agent that reads or saves the diagram through the MCP server (`X-Agent-Name`, honoured with the service key or a personal key when auth is on) is listed in the presence for 60s after its last call. Guests join with `?share=<token>&name=<name>` as read-only viewers |
 
 All routes except `/health` and `/ready` return `501 Not Implemented` until infra is wired.
 
@@ -392,6 +393,29 @@ downloads them and runs `scripts/quality_report.py render`. To add an analysis:
    `quality-report`;
 4. add tests in `tests/unit/scripts/test_quality_report.py` with a sample of the tool's real output.
 
+## Comments
+
+Comments are plain text (never rendered as HTML or Markdown), anchored to a shape through `element_id` or to the
+whole diagram. Control characters and bidirectional overrides are dropped, and the text is limited to 5000
+characters. Each comment records who wrote it with the same identity rules as the history: a person, an agent with
+a personal key (shown as *Ana's Claude*, with an agent mark and the key's label), or an ownerless agent on the
+shared `SERVICE_API_KEY`.
+
+A comment is open until someone resolves it; it can be reopened, and the editor shows who resolved it and when.
+The *Comments* tab hides resolved comments behind *Show resolved* and dims them, and the pins on the canvas and the
+tab count only open comments.
+
+| Action | People | Agents (MCP server) |
+|---|---|---|
+| Read | Any member | Any member (the key owner's role) |
+| Create | Editor or owner | Editor or owner |
+| Resolve / reopen | Editor or owner, any comment | Editor or owner, any comment (it's reversible and recorded) |
+| Delete | Editor or owner, any comment | Editor or owner, and only comments written with **the same key** |
+
+The backend enforces these rules; the MCP tools only describe them. The shared service key keeps skipping workspace
+roles, as for every other route, but it can only delete the comments written with it. Creating, resolving,
+reopening and deleting are logged at `INFO` with who did it (never the text).
+
 ## Adding a feature
 
 1. Model in `domain/entities/` and contract in `domain/contracts/`
@@ -410,10 +434,10 @@ The MCP server exposes the app's tools to AI coding agents:
 | Diagrams | `open_link` (editor `/diagrams/<id>` or read-only `/share/<token>` links), `get_diagram`, `get_diagram_outline`, `create_diagram`, `update_diagram`, `edit_shapes`, `render_diagram` |
 | History | `list_revisions`, `restore_revision` |
 | Organisation | `create_project`, `create_folder` |
-| Documentation and comments | `get_documentation`, `update_documentation`, `list_comments` |
+| Documentation and comments | `get_documentation`, `update_documentation`, `list_comments`, `add_comment`, `resolve_comment`, `reopen_comment`, `delete_comment` |
 
-Nothing deletes workspaces, projects, folders or diagrams (`edit_shapes` only deletes shapes inside a canvas), and
-nothing manages members. On connect the server sends instructions telling the agent to call `open_link` when it sees
+Nothing deletes workspaces, projects, folders or diagrams (`edit_shapes` only deletes shapes inside a canvas, and
+`delete_comment` only the comments the agent's own key wrote), and nothing manages members. On connect the server sends instructions telling the agent to call `open_link` when it sees
 a link to the app (named after `APP_NAME`), and to prefer the compact tools below over whole canvases.
 
 Configure the backend URL with `MCP_API_URL` (default: `http://localhost:8000`). When the API has `AUTH_ENABLED=true`, set `MCP_API_KEY` to the API's `SERVICE_API_KEY`, or to a personal key so the agent acts as you.
@@ -437,6 +461,14 @@ tldraw JSON, so agents mostly use three tools that avoid moving it around:
 - `render_diagram`: a PNG of the whole canvas, some shapes or a region. The MCP server opens the frontend's `/render`
   page (`MCP_FRONTEND_URL`) in a headless Chromium, so the image matches the editor exactly. Locally, install the
   browser once with `cd mcp && uv run playwright install --only-shell chromium` and keep the frontend running.
+
+Comments are how people ask the agent for changes: `list_comments` (`status="open"` for the pending ones) returns
+each comment's id, author (person or agent, with the person it works for), anchored `element_id`, status, who
+resolved it and when, and `created_by_you`. The agent answers with `add_comment` and closes what it addressed with
+`resolve_comment` (anyone's comment, reversible with `reopen_comment`); `delete_comment` is refused for anything its
+key didn't write. The comment text comes in an `untrusted_user_content` field next to a `notice` saying it is data,
+not instructions, and the tool descriptions and server instructions say the same. That lowers the risk of prompt
+injection through comments but can't rule it out: the real limits are the backend permissions above.
 
 While the agent reads or saves a diagram, people with it open see it in the presence avatars (as `MCP_AGENT_NAME`, default `Claude`) until 60s after its last call.
 
