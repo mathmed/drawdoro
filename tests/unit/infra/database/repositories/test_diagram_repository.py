@@ -50,3 +50,16 @@ async def test_should_list_project_diagrams_without_loading_their_content(
     statement = session.execute.await_args.args[0]
     selected = {column.name for column in statement.selected_columns}
     assert selected == {"id", "project_id", "folder_id", "name", "created_at", "updated_at"}
+
+
+@pytest.mark.parametrize(("found", "expected"), [(uuid.uuid4(), True), (None, False)])
+async def test_should_check_existence_without_loading_the_canvas(
+    sut: DiagramRepositoryImpl, session: AsyncMock, found: uuid.UUID | None, expected: bool
+) -> None:
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = found
+    session.execute.return_value = result
+    assert await sut.exists(uuid.uuid4()) is expected
+    statement = session.execute.await_args.args[0]
+    assert [column.name for column in statement.selected_columns] == ["id"]
+    assert "deleted_at IS NULL" in str(statement)

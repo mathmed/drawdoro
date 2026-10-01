@@ -141,7 +141,7 @@ def test_should_record_signed_in_user_as_comment_author(client: TestClient) -> N
     assert (
         client.post(f"/diagrams/{diagram_id}/comments", headers=AUTH, json=body).status_code == 201
     )
-    assert creating.execute.await_args.args[0].author_id == USER.id
+    assert creating.execute.await_args.args[0].actor.user_id == USER.id
 
 
 def test_should_authorize_diagram_links_through_the_diagram(
