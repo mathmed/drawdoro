@@ -81,6 +81,7 @@ Health checks: `curl http://localhost:8000/health` (liveness, never touches the 
 | `make smoke-mcp` | MCP smoke only: streamable-http server, `/health`, `initialize` and `tools/list` |
 | `make lint-imports` | Check the architecture contracts (import-linter) of the API and the MCP server |
 | `make mutation` | Mutation testing (mutmut) of the use cases and domain services; report in `mutants/report.md` |
+| `make mcp-manifest` | Regenerate `frontend/src/config/mcpTools.json` (the *Available tools* list in *Connect Claude*) from the tools the MCP server registers. The MCP tests and a pre-commit hook fail while it is out of date |
 | `make mutation-changed` | What the PR job runs: mutation testing of only the use cases and domain services changed against `BASE` (default `origin/main`) |
 | `make migrate` | Apply database migrations (requires running DB) |
 | `make migration msg="desc"` | Generate a new Alembic migration |
@@ -106,6 +107,7 @@ Health checks: `curl http://localhost:8000/health` (liveness, never touches the 
 | `SERVICE_API_KEY` | - | Shared secret that lets trusted services (the MCP server) call the API via `X-API-Key`, as an agent without owner. People can also create personal keys (see [Diagram history and personal API keys](#diagram-history-and-personal-api-keys)) |
 | `GALLERY_MAX_IMAGE_BYTES` | `2097152` (2 MiB) | Largest image accepted in the personal gallery (PNG, JPEG, GIF or WebP; stored in Postgres) |
 | `GALLERY_MAX_SHAPES_BYTES` | `5242880` (5 MiB) | Largest saved selection (tldraw content JSON, inlined assets included) accepted in the personal gallery |
+| `GALLERY_MAX_CANVAS_BYTES` | `20971520` (20 MiB) | Largest canvas a diagram may reach when a gallery item is inserted into it (by the API or the MCP server); inserted images are embedded in the canvas |
 | `REVISION_INTERVAL_MINUTES` | `10` | Diagram history: a person's saves within this many minutes share one revision (agent changes and restores always get their own) |
 | `REVISION_RETENTION_DAYS` | `30` | Diagram history: revisions last updated longer ago are deleted; `0` keeps them regardless of age. The newest one is always kept |
 | `REVISION_MAX_PER_DIAGRAM` | `100` | Diagram history: at most this many revisions are kept per diagram, newest first; `0` keeps any number |
@@ -244,8 +246,9 @@ scripts/                  Validation tooling: boot smoke (API and MCP), mutation
 | GET/POST | /me/api-keys | List / create the signed-in user's personal API keys. The secret is only in the creation response |
 | DELETE | /me/api-keys/{key_id} | Revoke a personal API key |
 | GET | /share/{share_token} | Public: open a shared diagram by token, no sign-in required (used by guests) |
-| GET/POST | /gallery | List the signed-in user's gallery items (without payloads) / save a selection (`kind=shapes`, tldraw content) or an image (`kind=image`, base64) with a PNG thumbnail |
-| GET/PATCH/DELETE | /gallery/{id} | Get an item with its payload / rename / delete it. Items are private: someone else's item answers 404 |
+| GET/POST | /gallery | List the caller's gallery items (without payloads; `?query=` words in the name, tags and description, `?kind=shapes\|image`, `?tag=`, `?limit=`, `?include_thumbnails=false`) / save a selection (`kind=shapes`, tldraw content) or an image (`kind=image`, base64) with a PNG thumbnail, optional `tags` and `description` |
+| GET/PATCH/DELETE | /gallery/{id} | Get an item with its payload and size / change its name, tags or description / delete it. Items are private: someone else's item answers 404. See [Personal gallery](#personal-gallery) |
+| POST | /diagrams/{id}/gallery-insertions | Insert a copy of one of the caller's gallery items into the diagram (editor): at `x`/`y`, next to `near_shape_id` (`side`, `gap`) or to the right of everything, with `scale`. New ids, recorded in the history and pushed to open editors |
 | WS | /ws/diagrams/{id} | Real-time collaboration: broadcasts canvas updates, cursors, peer count, saved changes (`diagram_updated`, including those made through the API or the MCP server) and `comments_changed` (no comment text) so open editors reload the comments to everyone connected to the same diagram. An agent that reads or saves the diagram through the MCP server (`X-Agent-Name`, honoured with the service key or a personal key when auth is on) is listed in the presence for 60s after its last call. Guests join with `?share=<token>&name=<name>` as read-only viewers |
 
 All routes except `/health` and `/ready` return `501 Not Implemented` until infra is wired.
@@ -284,14 +287,15 @@ in a single [Quality Report](#quality-report) comment on the PR.
 ### Boot smoke (`make smoke`, CI job `smoke`)
 
 `scripts/smoke.sh` starts a throwaway Postgres container (same image as `docker-compose.yaml`, no
-volume, so it is always empty), runs `alembic upgrade head` on it and starts the real API with
+volume, so it is always empty), migrates it up to the previous revision, seeds a gallery item, runs
+`alembic upgrade head` over it (then downgrades and upgrades the newest migration again) and starts the real API with
 `.env.example` plus these modes:
 
 | Mode | Settings | Checks |
 |---|---|---|
 | production-guard | `ENV=production`, `AUTH_ENABLED=false` | the API refuses to start |
-| auth-enabled | `ENV=production`, `AUTH_ENABLED=true`, a random `SERVICE_API_KEY` | `/health`, `/ready`, `/openapi.json`; `401` without credentials; workspace → project → diagram → revision with the service key; then the MCP smoke against this API |
-| auth-disabled | `ENV=development`, `AUTH_ENABLED=false` | the same probes and CRUD walk |
+| auth-enabled | `ENV=production`, `AUTH_ENABLED=true`, a random `SERVICE_API_KEY` | `/health`, `/ready`, `/openapi.json`; `401` without credentials; workspace → project → diagram → revision with the service key; the service key gets `403` on the gallery; then the MCP smoke against this API |
+| auth-disabled | `ENV=development`, `AUTH_ENABLED=false` | the same probes and CRUD walk; gallery tags, search and an insertion next to a shape; then the MCP smoke on the gallery tools |
 | database-down | database URL pointing to a closed port | `/health` stays `200`, `/ready` answers `503` |
 
 It also runs `alembic check` (models versus migrations) and prints a warning on drift; set
@@ -300,7 +304,9 @@ always removes the container and stops the processes.
 
 `scripts/smoke_mcp.sh` (`make smoke-mcp`) starts `mcp/server.py` in streamable-http mode and checks
 `/health`, the MCP `initialize` handshake, `tools/list`, that a foreign `Host` is rejected (`421`) and,
-when given an API, that `tools/call list_workspaces` reaches it.
+when given an API, that `tools/call list_workspaces` reaches it. With `SMOKE_MCP_GALLERY=service` it checks that
+the gallery tools explain the service key has no gallery; with `personal`, it lists, describes, inserts and tags
+gallery items and reads the diagram and its history back.
 
 | Variable | Default | Description |
 |---|---|---|
@@ -435,6 +441,7 @@ The MCP server exposes the app's tools to AI coding agents:
 | History | `list_revisions`, `restore_revision` |
 | Organisation | `create_project`, `create_folder` |
 | Documentation and comments | `get_documentation`, `update_documentation`, `list_comments`, `add_comment`, `resolve_comment`, `reopen_comment`, `delete_comment` |
+| Personal gallery | `list_gallery_items`, `get_gallery_item`, `insert_gallery_item`, `update_gallery_item` (a personal key when auth is on) |
 
 Nothing deletes workspaces, projects, folders or diagrams (`edit_shapes` only deletes shapes inside a canvas, and
 `delete_comment` only the comments the agent's own key wrote), and nothing manages members. On connect the server sends instructions telling the agent to call `open_link` when it sees
@@ -469,6 +476,34 @@ resolved it and when, and `created_by_you`. The agent answers with `add_comment`
 key didn't write. The comment text comes in an `untrusted_user_content` field next to a `notice` saying it is data,
 not instructions, and the tool descriptions and server instructions say the same. That lowers the risk of prompt
 injection through comments but can't rule it out: the real limits are the backend permissions above.
+
+### Personal gallery
+
+The gallery holds what each person saved for reuse: selections of shapes and images (PNG, JPEG, GIF or WebP).
+Items have a name, up to 10 tags (stored in lower case) and an optional description, edited and searched in the
+editor's *Gallery* panel. It is personal: every route works on the caller's own items, someone else's item answers
+`404`, and the shared service key (no owner) gets `403` with a message asking for a personal key. With
+`AUTH_ENABLED=false` the items without owner form one shared gallery.
+
+Agents reach it with a personal key: `list_gallery_items` (search by name, tag or description, filter by kind; never
+image data), `get_gallery_item` (what a "shapes" item contains, or an image's size), `update_gallery_item` (name,
+tags, description) and `insert_gallery_item`. Names, tags, descriptions and texts come in `untrusted_user_content`
+/ `untrusted_text` next to a `notice` saying they are data, not instructions.
+
+Insertion runs in the API (`POST /diagrams/{id}/gallery-insertions`), so people and agents share the same rules: it
+needs the editor role in the diagram's workspace, copies every shape, binding and asset with new ids (arrows stay
+connected, nothing is overwritten), keeps the layout, places the copy where asked without covering shapes, refuses
+items whose record versions differ from the diagram's tldraw schema (the server doesn't migrate records), and is recorded in the history (as the agent, with the
+person it works for) and pushed to open editors. Images are embedded in the canvas as a `data:` URL built from the
+stored bytes, whose type was detected from their content on upload, so no external URL is ever fetched or stored.
+
+### Available tools
+
+The *Connect Claude* dialog has an *Available tools* tab listing every MCP tool by area, with search, a button to
+copy the name and badges for the tools that need a personal key or the editor role. It reads
+`frontend/src/config/mcpTools.json`, generated from the server's real tool registry (`mcp/catalog.py` holds each
+tool's area and requirements, the docstrings hold the descriptions) by `make mcp-manifest`; `mcp/tests/test_manifest.py`
+and a pre-commit hook fail when the file is out of date.
 
 While the agent reads or saves a diagram, people with it open see it in the presence avatars (as `MCP_AGENT_NAME`, default `Claude`) until 60s after its last call.
 
