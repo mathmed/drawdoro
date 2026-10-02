@@ -28,6 +28,8 @@ from tests.tldraw_records import (
 )
 
 AUTO = GalleryPlacement()
+EITHER_POINT_OR_SHAPE = "Pass either x and y or near_shape_id, not both"
+BOTH_COORDINATES = "Pass both x and y, or neither"
 DATA_URL = "data:image/png;base64,AAAA"
 
 
@@ -110,7 +112,7 @@ def test_should_keep_groups_with_their_children(sut: CanvasInsertion) -> None:
         [
             group("shape:g", 500, 500),
             geo("shape:a", 0, 0, 50, 50, parent="shape:g", index="a1"),
-            geo("shape:b", 100, 0, 50, 50, parent="shape:g", index="a2"),
+            geo("shape:b", 100, 30, 50, 50, parent="shape:g", index="a2"),
         ]
     )
 
@@ -125,9 +127,9 @@ def test_should_keep_groups_with_their_children(sut: CanvasInsertion) -> None:
         PAGE_ID,
     )
     children = [record for record in plan.records if record["parentId"] == new_group]
-    assert sorted((child["x"], child["y"]) for child in children) == [(0, 0), (200, 0)]
+    assert sorted((child["x"], child["y"]) for child in children) == [(0, 0), (200, 60)]
     assert all("index" in child and child["index"] in ("a1", "a2") for child in children)
-    assert plan.bounds == Bounds(10, 20, 310, 120)
+    assert plan.bounds == Bounds(10, 20, 310, 180)
 
 
 def test_should_reconnect_arrows_to_the_copied_shapes(sut: CanvasInsertion) -> None:
@@ -287,6 +289,7 @@ def test_should_fill_in_missing_shape_fields(sut: CanvasInsertion) -> None:
         {},
     )
     assert (placed["x"], placed["y"]) == (5, 5)
+    assert placed["typeName"] == "shape"
 
 
 @pytest.mark.parametrize(
@@ -331,17 +334,18 @@ def test_should_refuse_to_place_next_to_something_that_is_not_a_shape(
 @pytest.mark.parametrize(
     ("placement", "message"),
     [
-        (GalleryPlacement(x=1, near_shape_id="shape:existing"), "not both"),
-        (GalleryPlacement(y=1, near_shape_id="shape:existing"), "not both"),
-        (GalleryPlacement(x=1), "both x and y"),
-        (GalleryPlacement(y=1), "both x and y"),
+        (GalleryPlacement(x=1, near_shape_id="shape:existing"), EITHER_POINT_OR_SHAPE),
+        (GalleryPlacement(y=1, near_shape_id="shape:existing"), EITHER_POINT_OR_SHAPE),
+        (GalleryPlacement(x=1), BOTH_COORDINATES),
+        (GalleryPlacement(y=1), BOTH_COORDINATES),
     ],
 )
 def test_should_refuse_ambiguous_placements(
     sut: CanvasInsertion, placement: GalleryPlacement, message: str
 ) -> None:
-    with pytest.raises(InvalidInputError, match=message):
+    with pytest.raises(InvalidInputError) as refused:
         sut.place_shapes(content([geo("shape:a")]), placement, 1)
+    assert refused.value.message == message
 
 
 @pytest.mark.parametrize(
@@ -404,6 +408,78 @@ def test_should_place_next_to_a_group_in_a_broken_loop() -> None:
     assert plan.bounds.min_x == 100
 
 
+def test_should_complete_bindings_and_assets_saved_without_their_type_name() -> None:
+    saved = content(
+        [geo("shape:a"), geo("shape:b", index="a2"), shape("shape:i", "image", assetId="asset:x")],
+        bindings=[binding("binding:x", "shape:a", "shape:b", "end")],
+        assets=[image_asset("asset:x", DATA_URL)],
+    )
+    for record in saved["bindings"] + saved["assets"]:
+        del record["typeName"]
+
+    plan = make_sut().place_shapes(saved, AUTO, 1)
+
+    kinds = {record["id"].split(":")[0]: record["typeName"] for record in plan.records}
+    assert kinds == {"asset": "asset", "shape": "shape", "binding": "binding"}
+
+
+# The plan is written into another diagram: changing it must never change the saved item.
+def test_should_share_nothing_with_the_saved_item() -> None:
+    saved = content(
+        [
+            geo("shape:a", 0, 0, 40, 20),
+            geo("shape:b", 100, 0, 40, 20, index="a2"),
+            shape("shape:i", "image", w=64, h=32, assetId="asset:x", index="a3"),
+        ],
+        bindings=[binding("binding:x", "shape:a", "shape:b", "end")],
+        assets=[image_asset("asset:x", DATA_URL)],
+    )
+    original = copy.deepcopy(saved)
+
+    plan = make_sut().place_shapes(saved, AUTO, 2)
+    assert saved == original
+    for record in plan.records:
+        record["props"]["changed"] = True
+        record["meta"]["changed"] = True
+
+    assert saved == original
+
+
+def test_should_stack_shapes_saved_without_an_index_below_the_others() -> None:
+    unindexed = geo("shape:low")
+    del unindexed["index"]
+    saved = content([geo("shape:high", w=10, h=10, index="A1"), unindexed])
+
+    plan = make_sut().place_shapes(saved, AUTO, 1)
+
+    placed = by_id(plan.records)
+    low, high = plan.root_shape_ids
+    assert placed[low]["props"] == unindexed["props"]
+    assert placed[low]["index"] < placed[high]["index"]
+    assert [record["id"] for record in plan.records] == [low, high]
+
+
+def test_should_not_share_assets_whose_source_is_not_text() -> None:
+    odd = image_asset("asset:x", DATA_URL)
+    odd["props"]["src"] = ["data:image/png;base64,AAAA"]
+    saved = content([shape("shape:a", "image", w=1, h=1, assetId="asset:x")], assets=[odd])
+
+    plan = make_sut(image_asset("asset:there", DATA_URL)).place_shapes(saved, AUTO, 1)
+
+    assert [record["typeName"] for record in plan.records] == ["asset", "shape"]
+
+
+def test_should_skip_saved_bindings_and_assets_that_are_not_records() -> None:
+    saved = content([geo("shape:a")]) | {
+        "bindings": ["junk", {"id": 7}, None],
+        "assets": "none",
+    }
+
+    plan = make_sut().place_shapes(saved, AUTO, 1)
+
+    assert [record["typeName"] for record in plan.records] == ["shape"]
+
+
 def test_should_refuse_content_from_another_editor_version(sut: CanvasInsertion) -> None:
     saved = content([geo("shape:a")]) | {
         "schema": {"schemaVersion": 2, "sequences": {"com.tldraw.shape": 3}}
@@ -423,14 +499,16 @@ def test_should_skip_generated_ids_already_in_the_canvas() -> None:
 
 def test_should_give_up_when_ids_keep_colliding() -> None:
     sut = CanvasInsertion(canvas(geo("shape:same")), lambda: "same")
-    with pytest.raises(ConflictError):
+    with pytest.raises(ConflictError) as refused:
         sut.place_shapes(content([geo("shape:a")]), AUTO, 1)
+    assert refused.value.message == "Could not generate unique ids for the inserted records"
 
 
 def test_should_refuse_more_new_shapes_than_indexes(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(canvas_insertion, "indexes_above", lambda top: iter([f"{top}01"]))
-    with pytest.raises(InvalidInputError, match="too many shapes"):
+    with pytest.raises(InvalidInputError) as refused:
         make_sut().place_shapes(content([geo("shape:a"), geo("shape:b")]), AUTO, 1)
+    assert refused.value.message == "This item has too many shapes to insert at once"
 
 
 def test_should_only_stack_above_shapes_on_the_page_itself() -> None:
