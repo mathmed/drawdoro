@@ -11,7 +11,7 @@ from app.domain.entities.objects.gallery_placement import GalleryPlacement
 from app.domain.enums.image_mime_type import ImageMimeType
 from app.domain.enums.placement_side import PlacementSide
 from app.domain.errors.domain_errors import ConflictError, InvalidInputError
-from app.domain.services import canvas_insertion
+from app.domain.services import canvas_geometry, canvas_insertion
 from app.domain.services.canvas_insertion import CanvasInsertion
 from tests.tldraw_records import (
     PAGE_ID,
@@ -218,7 +218,7 @@ def test_should_map_the_saved_shapes_to_their_parents_once(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[int] = []
-    original = canvas_insertion.children_by_parent
+    original = canvas_geometry.children_by_parent
 
     def counted(records: Any) -> dict[str, list[dict[str, Any]]]:
         calls.append(1)
