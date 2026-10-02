@@ -1,11 +1,12 @@
-import { render, screen, within } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { listComments, setCommentResolved } from '../../api/comments'
 import type { Comment, Diagram } from '../../api/types'
 import { useAppStore } from '../../store/useAppStore'
 import { makeComment } from '../../test/comments'
+import { pastLoaderDelay, pastLoaderExit } from '../../test/timers'
 import CommentsPanel from './CommentsPanel'
 
 vi.mock('../../api/comments')
@@ -124,5 +125,46 @@ describe('CommentsPanel', () => {
     render(<CommentsPanel />)
 
     expect(await screen.findByText('No open comments')).toBeInTheDocument()
+  })
+
+  describe('while the comments load', () => {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('should show placeholder comments instead of the empty state', async () => {
+      vi.useFakeTimers()
+      useAppStore.setState({ comments: [], isLoadingDiagramDetails: true })
+      vi.mocked(listComments).mockReturnValue(new Promise(() => undefined))
+      render(<CommentsPanel />)
+
+      expect(screen.queryByText('No comments yet')).not.toBeInTheDocument()
+      await pastLoaderDelay()
+      expect(screen.getByRole('status')).toHaveTextContent('Loading comments')
+
+      act(() => useAppStore.setState({ comments: [PERSONS], isLoadingDiagramDetails: false }))
+      await pastLoaderExit()
+      expect(screen.queryByRole('status')).not.toBeInTheDocument()
+      expect(screen.getByText('Missing the payments service')).toBeInTheDocument()
+    })
+  })
+
+  it('should show the send button as busy until the comment is saved', async () => {
+    let finish!: () => void
+    const addComment = vi.fn(() => new Promise<void>((done) => (finish = done)))
+    useAppStore.setState({ activeElementId: 'shape:1', addComment })
+    const user = userEvent.setup()
+    render(<CommentsPanel />)
+
+    await user.type(screen.getByRole('textbox'), 'Looks good')
+    await user.click(screen.getByRole('button', { name: /Send/ }))
+
+    const send = screen.getByRole('button', { name: /Send/ })
+    expect(send).toHaveAttribute('aria-busy', 'true')
+    expect(send).toBeDisabled()
+    await act(async () => finish())
+    expect(addComment).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: /Send/ })).toHaveAttribute('aria-busy', 'false')
+    expect(screen.getByRole('textbox')).toHaveValue('')
   })
 })

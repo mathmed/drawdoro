@@ -1,11 +1,12 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { getRevision, listRevisions, restoreRevision } from '../../api/revisions'
 import type { Diagram, DiagramRevision } from '../../api/types'
 import { useAppStore } from '../../store/useAppStore'
 import { confirmDialog } from '../../store/useDialogStore'
+import { pastLoaderDelay, pastLoaderExit } from '../../test/timers'
 import HistoryPanel from './HistoryPanel'
 
 vi.mock('tldraw', () => ({
@@ -123,5 +124,49 @@ describe('HistoryPanel', () => {
 
     expect(screen.getByText("Viewers can't restore versions.")).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Restore this version/ })).not.toBeInTheDocument()
+  })
+
+  describe('while the history loads', () => {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('should show placeholder entries, then the versions', async () => {
+      vi.useFakeTimers()
+      let resolve!: (revisions: DiagramRevision[]) => void
+      vi.mocked(listRevisions).mockReturnValue(new Promise((done) => (resolve = done)))
+      render(<HistoryPanel />)
+
+      await pastLoaderDelay()
+      expect(screen.getByRole('status')).toHaveTextContent('Loading history')
+
+      await act(async () => resolve([PERSON_EDIT]))
+      await pastLoaderExit()
+      expect(screen.queryByRole('status')).not.toBeInTheDocument()
+      expect(screen.getByText('Edited the diagram')).toBeInTheDocument()
+    })
+  })
+
+  it('should offer a retry when a version preview fails to load', async () => {
+    vi.mocked(getRevision)
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce({ ...PERSON_EDIT, name: 'Checkout', canvas_state: { shapes: 0 }, semantic_metadata: null })
+    render(<HistoryPanel />)
+
+    await userEvent.click(await screen.findByRole('button', { name: /Edited the diagram/ }))
+    expect(await screen.findByText('Could not load this version.')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+
+    expect(await screen.findByTestId('revision-preview')).toBeInTheDocument()
+    expect(getRevision).toHaveBeenCalledTimes(2)
+  })
+
+  it('should show a placeholder while a version preview loads', async () => {
+    vi.mocked(getRevision).mockReturnValue(new Promise(() => undefined))
+    render(<HistoryPanel />)
+
+    await userEvent.click(await screen.findByRole('button', { name: /Edited the diagram/ }))
+
+    expect(screen.getByRole('status')).toHaveTextContent('Loading preview')
   })
 })

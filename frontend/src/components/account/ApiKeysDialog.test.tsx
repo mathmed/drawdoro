@@ -1,10 +1,11 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createApiKey, listApiKeys, revokeApiKey } from '../../api/apiKeys'
 import type { ApiKey } from '../../api/types'
 import { confirmDialog } from '../../store/useDialogStore'
+import { pastLoaderDelay, pastLoaderExit } from '../../test/timers'
 import ApiKeysDialog from './ApiKeysDialog'
 
 const authConfig = vi.hoisted(() => ({ enabled: true }))
@@ -97,5 +98,51 @@ describe('ApiKeysDialog', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Done' }))
 
     expect(onClose).toHaveBeenCalledOnce()
+  })
+
+  describe('while the keys load', () => {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('should show placeholder rows, then the keys', async () => {
+      vi.useFakeTimers()
+      let resolve!: (keys: ApiKey[]) => void
+      vi.mocked(listApiKeys).mockReturnValue(new Promise((done) => (resolve = done)))
+      render(<ApiKeysDialog onClose={vi.fn()} />)
+
+      await pastLoaderDelay()
+      expect(screen.getByRole('status')).toHaveTextContent('Loading keys')
+
+      await act(async () => resolve([LAPTOP_KEY]))
+      await pastLoaderExit()
+      expect(screen.queryByRole('status')).not.toBeInTheDocument()
+      expect(screen.getByText('Claude on my laptop')).toBeInTheDocument()
+    })
+  })
+
+  it('should offer a retry instead of an empty list when the keys fail to load', async () => {
+    vi.mocked(listApiKeys).mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce([LAPTOP_KEY])
+    render(<ApiKeysDialog onClose={vi.fn()} />)
+
+    expect(await screen.findByText('Could not load your keys')).toBeInTheDocument()
+    expect(screen.queryByText('No personal keys yet')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+
+    expect(await screen.findByText('Claude on my laptop')).toBeInTheDocument()
+    expect(listApiKeys).toHaveBeenCalledTimes(2)
+  })
+
+  it('should mark the key being revoked as busy', async () => {
+    vi.mocked(confirmDialog).mockResolvedValue(true)
+    let finish!: () => void
+    vi.mocked(revokeApiKey).mockReturnValue(new Promise<void>((done) => (finish = done)))
+    render(<ApiKeysDialog onClose={vi.fn()} />)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Revoke Claude on my laptop' }))
+
+    expect(screen.getByRole('button', { name: 'Revoke Claude on my laptop' })).toHaveAttribute('aria-busy', 'true')
+    await act(async () => finish())
+    expect(screen.queryByText('Claude on my laptop')).not.toBeInTheDocument()
   })
 })
