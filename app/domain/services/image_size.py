@@ -50,10 +50,10 @@ def _next_jpeg_segment(data: bytes, offset: int, marker: int) -> int:
 
 
 def _webp_size(data: bytes) -> tuple[int, int] | None:
-    reader, header_length = _WEBP_READERS.get(data[12:16], (None, 0))
-    if reader is None or len(data) < header_length:
+    flavour = _WEBP_READERS.get(data[12:16])
+    if flavour is None or len(data) < flavour[1]:
         return None
-    return reader(data)
+    return flavour[0](data)
 
 
 def _webp_lossy_size(data: bytes) -> tuple[int, int]:

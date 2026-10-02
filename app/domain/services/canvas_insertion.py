@@ -2,6 +2,7 @@ import base64
 import copy
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
+from functools import reduce
 from typing import Any
 
 from app.domain.constants.canvas import CANVAS_FIRST_INDEX
@@ -66,8 +67,8 @@ class CanvasInsertion:
         roots = _roots(content, shapes)
         children = children_by_parent(shapes)
         _ensure_tree(shapes, roots, children)
-        origin = union_bounds(shape_bounds(root, children) for root in roots)
-        origin = origin or Bounds(0, 0, 0, 0)
+        # Every shape hangs from a root, so there is at least one.
+        origin = reduce(Bounds.union, (shape_bounds(root, children) for root in roots))
         width, height = origin.width * scale, origin.height * scale
         x, y = self._corner(placement, width, height)
         asset_ids, new_assets = self._copy_assets(assets)

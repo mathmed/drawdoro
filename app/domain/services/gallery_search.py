@@ -26,4 +26,4 @@ def search_gallery_items(
     items: list[GalleryItemSummary], search: GallerySearch, limit: int | None = None
 ) -> list[GalleryItemSummary]:
     found = [item for item in items if matches_gallery_search(item, search)]
-    return found if limit is None else found[:limit]
+    return found[:limit]

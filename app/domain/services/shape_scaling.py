@@ -23,8 +23,9 @@ def scale_shape(record: CanvasRecord, factor: float) -> None:
 def _scaled_props(shape_type: object) -> tuple[str, ...]:
     if shape_type in _SIZED_BY_SCALE:
         return ("scale",)
+    # Arrows have no size of their own: their points and bend are their geometry.
     if shape_type == "arrow":
-        return ("scale", "w", "h", "bend")
+        return ("scale", "bend")
     return ("scale", "w", "h")
 
 
