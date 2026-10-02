@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import inspect
 import json
 import logging
 import re
@@ -95,8 +96,10 @@ def tool_manifest(tool: Tool) -> ToolManifest:
     )
 
 
+# The SDK sends __doc__ as is, and only Python 3.13+ strips the source indentation from it when
+# compiling: normalise it first so the manifest is the same on every interpreter.
 def split_docstring(description: str) -> tuple[str, str]:
-    parts = ARGS_HEADER.split(description, maxsplit=1)
+    parts = ARGS_HEADER.split(inspect.cleandoc(description), maxsplit=1)
     return parts[0].strip(), parts[1] if len(parts) > 1 else ""
 
 

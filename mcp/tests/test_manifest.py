@@ -73,13 +73,16 @@ def test_should_stay_brand_neutral(tools: list[Tool]) -> None:
     json.loads(rendered)
 
 
-def test_should_split_the_description_into_paragraphs_and_parameters() -> None:
-    tool = Tool(
+DEMO_DOCSTRING = (
+    "Do one thing.\n\nIt does it\nwell.\n\nArgs:\n    first: The first\n"
+    "        value, long.\n    second: Optional.\n"
+)
+
+
+def demo_tool(description: str) -> Tool:
+    return Tool(
         name="demo",
-        description=(
-            "Do one thing.\n\nIt does it\nwell.\n\nArgs:\n    first: The first\n"
-            "        value, long.\n    second: Optional.\n"
-        ),
+        description=description,
         input_schema={
             "type": "object",
             "properties": {"first": {}, "second": {}},
@@ -89,7 +92,16 @@ def test_should_split_the_description_into_paragraphs_and_parameters() -> None:
         _meta={"area": "canvas", "requires": ["editor_role"]},
     )
 
-    manifest = tool_manifest(tool)
+
+# What Python 3.12 leaves in __doc__: every line after the first keeps the indentation of the
+# source, including the line of the closing quotes. Python 3.13+ strips it when compiling.
+def as_written_in_source(docstring: str, indent: str) -> str:
+    first, *rest = docstring.splitlines()
+    return "\n".join([first, *(f"{indent}{line}" if line else "" for line in rest), indent])
+
+
+def test_should_split_the_description_into_paragraphs_and_parameters() -> None:
+    manifest = tool_manifest(demo_tool(DEMO_DOCSTRING))
 
     assert manifest.summary == "Do one thing."
     assert manifest.description == ["Do one thing.", "It does it well."]
@@ -103,6 +115,20 @@ def test_should_split_the_description_into_paragraphs_and_parameters() -> None:
         False,
         True,
     )
+
+
+# The SDK sends __doc__ as is, so the manifest must not depend on the interpreter dedenting it:
+# a method's docstring on Python 3.12 must give the same manifest as on 3.13+.
+@pytest.mark.parametrize("indent", ["    ", "        "])
+def test_should_parse_docstrings_that_keep_their_source_indentation(indent: str) -> None:
+    indented = as_written_in_source(DEMO_DOCSTRING, indent)
+    assert f"\n{indent}Args:\n{indent}    first: The first\n" in indented
+
+    manifest = tool_manifest(demo_tool(indented))
+
+    assert manifest == tool_manifest(demo_tool(DEMO_DOCSTRING))
+    assert [parameter.name for parameter in manifest.parameters] == ["first", "second"]
+    assert split_docstring(indented) == split_docstring(DEMO_DOCSTRING)
 
 
 def test_should_handle_tools_without_metadata_or_arguments() -> None:
