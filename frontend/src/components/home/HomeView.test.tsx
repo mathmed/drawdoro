@@ -96,6 +96,7 @@ describe('HomeView loading', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Loading diagrams')
     expect(document.querySelectorAll('.diagram-card-skeleton')).toHaveLength(6)
     expect(screen.queryByText('No diagrams yet')).not.toBeInTheDocument()
+    expect(screen.queryByText(/0 diagrams/)).not.toBeInTheDocument()
 
     useAppStore.setState({ isLoadingProject: false, diagrams: [CHECKOUT] })
     await pastLoaderExit()

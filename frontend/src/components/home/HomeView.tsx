@@ -20,6 +20,7 @@ import { confirmDialog, promptDialog } from '../../store/useDialogStore'
 import { slugify, timeAgo } from '../../utils/format'
 import EmptyState from '../ui/EmptyState'
 import LoadingGate from '../ui/loading/LoadingGate'
+import { Skeleton } from '../ui/loading/Skeleton'
 import Logo from '../ui/Logo'
 import Menu from '../ui/Menu'
 import HomeSkeleton, { DiagramGridSkeleton } from './HomeSkeleton'
@@ -241,6 +242,7 @@ function ProjectOverview() {
     }
   }
 
+  const isLoadingTree = isLoadingProject && diagrams.length === 0
   const sorted = [...diagrams].sort((a, b) => (b.updated_at ?? '').localeCompare(a.updated_at ?? ''))
   const folderName = (id: string | null): string | null =>
     folders.find((folder) => folder.id === id)?.name ?? null
@@ -253,9 +255,14 @@ function ProjectOverview() {
             <div className="home-eyebrow">{activeWorkspace?.name}</div>
             <h1 className="home-title">{activeProject.name}</h1>
             <p className="home-description">
-              {activeProject.description !== null && activeProject.description !== ''
-                ? activeProject.description
-                : `${diagrams.length} diagram${diagrams.length === 1 ? '' : 's'} · ${folders.length} folder${folders.length === 1 ? '' : 's'}`}
+              {activeProject.description !== null && activeProject.description !== '' ? (
+                activeProject.description
+              ) : isLoadingTree ? (
+                // The counts are unknown until the tree arrives; "0 diagrams" would be wrong.
+                <Skeleton className="skeleton-line home-description-skeleton" width={150} height={12} />
+              ) : (
+                `${diagrams.length} diagram${diagrams.length === 1 ? '' : 's'} · ${folders.length} folder${folders.length === 1 ? '' : 's'}`
+              )}
             </p>
           </div>
           <div className="home-actions" hidden={!canEdit}>
@@ -268,7 +275,7 @@ function ProjectOverview() {
           </div>
         </div>
 
-        <LoadingGate loading={isLoadingProject && diagrams.length === 0} fallback={<DiagramGridSkeleton />}>
+        <LoadingGate loading={isLoadingTree} fallback={<DiagramGridSkeleton />}>
           {sorted.length === 0 ? (
             <div
               className="reveal"
