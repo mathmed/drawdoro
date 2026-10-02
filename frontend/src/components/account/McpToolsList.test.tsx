@@ -85,11 +85,16 @@ describe('McpToolsList', () => {
     expect(screen.getByRole('button', { name: 'Copy insert_gallery_item' })).toHaveAttribute('data-tooltip', 'Copied')
   })
 
-  it('should list the real tools by default', () => {
+  // The manifest is the server's own list (the MCP tests keep it in sync), so all of it must show.
+  it('should list every real tool by default', () => {
     render(<McpToolsList />)
 
     expect(screen.getByText(`${mcpToolManifest.tools.length} tools`)).toBeInTheDocument()
-    expect(screen.getByText('list_gallery_items')).toBeInTheDocument()
-    expect(screen.getByText('resolve_comment')).toBeInTheDocument()
+    for (const tool of mcpToolManifest.tools) {
+      expect(screen.getByText(tool.name, { selector: 'code' })).toBeInTheDocument()
+    }
+    for (const area of mcpToolManifest.areas) {
+      expect(screen.getByRole('region', { name: area.title })).toBeInTheDocument()
+    }
   })
 })
