@@ -567,10 +567,6 @@ button:disabled {
   margin-top: 10px;
 }
 
-.spinner {
-  animation: spin 800ms linear infinite;
-}
-
 @keyframes fade-in {
   from {
     opacity: 0;
@@ -588,12 +584,6 @@ button:disabled {
   from {
     opacity: 0;
     transform: translateY(8px);
-  }
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
   }
 }
 

@@ -6,7 +6,6 @@ import {
   FileImage,
   FileJson,
   Image,
-  Loader2,
   PanelLeftOpen,
   PanelRight,
   Play,
@@ -25,6 +24,7 @@ import { modKey } from '../../utils/format'
 import ConnectClaudeDialog from '../account/ConnectClaudeDialog'
 import ShareDialog from '../diagram/ShareDialog'
 import PresenceAvatars from '../presence/PresenceAvatars'
+import Spinner from '../ui/loading/Spinner'
 import Menu from '../ui/Menu'
 
 function folderPath(folders: Folder[], folderId: string | null): Folder[] {
@@ -47,7 +47,7 @@ function SaveIndicator() {
   if (saveStatus === 'saving') {
     return (
       <span className="save-status" data-status="saving">
-        <Loader2 size={13} className="spinner" /> Saving…
+        <Spinner size={13} /> Saving…
       </span>
     )
   }
@@ -118,10 +118,17 @@ export default function TopBar() {
   const enterPresentation = useAppStore((state) => state.enterPresentation)
   const [isShareOpen, setIsShareOpen] = useState(false)
   const [isConnectOpen, setIsConnectOpen] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
 
-  function handleExport(format: ExportFormat): void {
-    if (activeDiagram !== null) {
-      void exportDiagram(format, activeDiagram, editor)
+  async function handleExport(format: ExportFormat): Promise<void> {
+    if (activeDiagram === null) {
+      return
+    }
+    setIsExporting(true)
+    try {
+      await exportDiagram(format, activeDiagram, editor)
+    } finally {
+      setIsExporting(false)
     }
   }
 
@@ -190,14 +197,21 @@ export default function TopBar() {
             align="end"
             items={[
               { kind: 'label', label: 'Image' },
-              { label: 'PNG', icon: <Image size={15} />, hint: '2x', onSelect: () => handleExport('png') },
-              { label: 'SVG', icon: <FileImage size={15} />, hint: 'vector', onSelect: () => handleExport('svg') },
+              { label: 'PNG', icon: <Image size={15} />, hint: '2x', onSelect: () => void handleExport('png') },
+              { label: 'SVG', icon: <FileImage size={15} />, hint: 'vector', onSelect: () => void handleExport('svg') },
               { kind: 'label', label: 'Source' },
-              { label: 'Canvas JSON', icon: <FileJson size={15} />, hint: '.json', onSelect: () => handleExport('json') },
+              { label: 'Canvas JSON', icon: <FileJson size={15} />, hint: '.json', onSelect: () => void handleExport('json') },
             ]}
             trigger={({ open, toggle }) => (
-              <button type="button" className="btn btn-ghost btn-sm" aria-pressed={open} onClick={toggle}>
-                <Download size={15} /> Export
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                aria-pressed={open}
+                aria-busy={isExporting}
+                disabled={isExporting}
+                onClick={toggle}
+              >
+                {isExporting ? <Spinner size={15} /> : <Download size={15} />} Export
               </button>
             )}
           />

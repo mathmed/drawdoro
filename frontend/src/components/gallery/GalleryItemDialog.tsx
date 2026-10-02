@@ -8,6 +8,7 @@ import {
   parseTags,
   tagsProblem,
 } from '../../utils/galleryLabels'
+import Spinner from '../ui/loading/Spinner'
 import Modal from '../ui/Modal'
 
 function changesOf(item: GalleryItemSummary, name: string, tags: string[], description: string): GalleryItemChanges {
@@ -65,7 +66,9 @@ export default function GalleryItemDialog({ item, onClose }: { item: GalleryItem
             form="gallery-item-form"
             className="btn btn-primary"
             disabled={problem !== null || unchanged || saving}
+            aria-busy={saving}
           >
+            {saving ? <Spinner size={14} /> : null}
             Save
           </button>
         </>

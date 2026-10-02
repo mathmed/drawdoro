@@ -542,3 +542,21 @@
 .docs-skeleton-gap {
   height: 6px;
 }
+
+/* Personal API keys: the list keeps its room while it loads */
+.api-key-list-placeholder {
+  min-height: 52px;
+}
+
+.api-key-skeleton .skeleton-group-body {
+  padding: 0;
+}
+
+/* Share link while it is generated */
+.share-link-placeholder {
+  height: 32px;
+}
+
+.share-link-skeleton-field {
+  flex: 1;
+}

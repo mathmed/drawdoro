@@ -1,8 +1,9 @@
-import { BookOpenText, Loader2, MessageSquare, Workflow } from 'lucide-react'
+import { BookOpenText, MessageSquare, Workflow } from 'lucide-react'
 import { useState } from 'react'
 import { useLocation } from 'react-router-dom'
 
 import { startLogin } from '../auth/session'
+import Spinner from '../components/ui/loading/Spinner'
 import Logo from '../components/ui/Logo'
 import { branding } from '../config/branding'
 
@@ -47,8 +48,14 @@ export default function Landing() {
             {branding.name} brings architecture diagrams, documentation and team discussion together in one
             collaborative canvas.
           </p>
-          <button type="button" className="btn btn-lg google-button" onClick={handleSignIn} disabled={isRedirecting}>
-            {isRedirecting ? <Loader2 size={18} className="spinner" /> : <GoogleMark />}
+          <button
+            type="button"
+            className="btn btn-lg google-button"
+            onClick={handleSignIn}
+            disabled={isRedirecting}
+            aria-busy={isRedirecting}
+          >
+            {isRedirecting ? <Spinner size={18} /> : <GoogleMark />}
             Continue with Google
           </button>
           <p className="landing-note">Use your company Google account.</p>

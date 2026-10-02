@@ -1,9 +1,24 @@
-import { Check, Copy, Link2, Loader2 } from 'lucide-react'
+import { Check, Copy, Link2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { shareDiagram } from '../../api/diagrams'
 import { toast } from '../../store/useToastStore'
+import LoadingGate from '../ui/loading/LoadingGate'
+import { Skeleton, SkeletonGroup } from '../ui/loading/Skeleton'
 import Modal from '../ui/Modal'
+
+// Same boxes as the link row (icon, field, copy button), so the dialog keeps its size.
+function LinkSkeleton() {
+  return (
+    <SkeletonGroup label="Generating link">
+      <div className="share-link-row">
+        <Skeleton width={32} height={32} radius="var(--radius-md)" />
+        <Skeleton height={32} radius="var(--radius-md)" className="share-link-skeleton-field" />
+        <Skeleton width={32} height={32} radius="var(--radius-md)" />
+      </div>
+    </SkeletonGroup>
+  )
+}
 
 export default function ShareDialog({ diagramId, onClose }: { diagramId: string; onClose: () => void }) {
   const [link, setLink] = useState<string | null>(null)
@@ -56,21 +71,23 @@ export default function ShareDialog({ diagramId, onClose }: { diagramId: string;
         <label className="field-label" htmlFor="share-link">
           Shareable link
         </label>
-        {link === null ? (
-          <div className="full-center" style={{ height: 'auto', padding: '12px 0' }}>
-            <Loader2 size={16} className="spinner" /> Generating link…
-          </div>
-        ) : (
-          <div className="share-link-row">
-            <span className="share-link-icon">
-              <Link2 size={15} />
-            </span>
-            <input id="share-link" className="input" readOnly value={link} onFocus={(event) => event.target.select()} />
-            <button type="button" className="btn btn-primary btn-icon" aria-label="Copy link" onClick={() => void handleCopy()}>
-              {copied ? <Check size={15} /> : <Copy size={15} />}
-            </button>
-          </div>
-        )}
+        <LoadingGate
+          loading={link === null}
+          placeholder={<div className="share-link-row share-link-placeholder" />}
+          fallback={<LinkSkeleton />}
+        >
+          {() => (
+            <div className="share-link-row reveal">
+              <span className="share-link-icon">
+                <Link2 size={15} />
+              </span>
+              <input id="share-link" className="input" readOnly value={link ?? ''} onFocus={(event) => event.target.select()} />
+              <button type="button" className="btn btn-primary btn-icon" aria-label="Copy link" onClick={() => void handleCopy()}>
+                {copied ? <Check size={15} /> : <Copy size={15} />}
+              </button>
+            </div>
+          )}
+        </LoadingGate>
       </div>
     </Modal>
   )
