@@ -1,8 +1,10 @@
-import { Loader2 } from 'lucide-react'
 import { useEffect } from 'react'
 import { Route, Routes } from 'react-router-dom'
 
 import DialogHost from './components/ui/DialogHost'
+import BrandLoader from './components/ui/loading/BrandLoader'
+import LoadingOverlay from './components/ui/loading/LoadingOverlay'
+import { useDelayedVisibility } from './hooks/useDelayedVisibility'
 import Toaster from './components/ui/Toaster'
 import AuthCallback from './pages/AuthCallback'
 import DiagramPage from './pages/Diagram'
@@ -33,15 +35,25 @@ function SignedInApp() {
 // Any route shows the landing page until the user signs in, then renders the app.
 function AuthGate() {
   const status = useAuthStore((state) => state.status)
+  const isChecking = status === 'loading'
+  // The app mounts (and starts loading) as soon as the session is known; the loader fades out over it.
+  const showLoader = useDelayedVisibility(isChecking)
 
-  if (status === 'loading') {
-    return (
-      <div className="full-center">
-        <Loader2 size={16} className="spinner" />
-      </div>
-    )
+  function renderContent() {
+    if (isChecking) {
+      return <div className="loading-screen" aria-busy="true" />
+    }
+    return status === 'signed-in' ? <SignedInApp /> : <Landing />
   }
-  return status === 'signed-in' ? <SignedInApp /> : <Landing />
+
+  return (
+    <>
+      {renderContent()}
+      <LoadingOverlay visible={showLoader} screen>
+        <BrandLoader label="Checking your session" showName size={52} />
+      </LoadingOverlay>
+    </>
+  )
 }
 
 export default function App() {

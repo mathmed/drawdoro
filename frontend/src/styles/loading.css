@@ -178,14 +178,20 @@
 }
 
 /* Full-viewport loader (boot, sign-in, shared links) */
-.loading-screen {
+.loading-screen,
+.loading-overlay-screen {
   display: flex;
   align-items: center;
   justify-content: center;
   height: 100%;
   background:
-    radial-gradient(900px 420px at 50% 38%, var(--accent-soft), transparent 70%),
+    radial-gradient(900px 420px at 50% 42%, var(--accent-soft), transparent 70%),
     var(--bg);
+}
+
+.loading-overlay-screen {
+  position: fixed;
+  z-index: 900;
 }
 
 /* tldraw's loading slot, above its canvas while the fonts load */
@@ -449,4 +455,12 @@
     width: 100%;
     animation: loading-fade 1.6s ease-in-out infinite !important;
   }
+}
+
+/* Error states that follow a load: a retry next to the way out */
+.empty-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
 }

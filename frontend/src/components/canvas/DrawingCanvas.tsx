@@ -21,6 +21,7 @@ import { registerGeoDefaults } from '../../shapes/CustomGeoShapeUtil'
 import { registerSloppinessDefaults } from '../../shapes/sloppiness'
 import { GALLERY_DRAG_TYPE, insertGalleryItem } from '../../utils/gallery'
 import CommentBadge from '../comments/CommentBadge'
+import CanvasLoadingScreen from '../ui/loading/CanvasLoadingScreen'
 import AppContextMenuItems from './AppContextMenuItems'
 import ConnectHandles from './ConnectHandles'
 import StylePanel, { MenuPanelWithStyles } from './StylePanel'
@@ -47,6 +48,7 @@ const components: TLComponents = {
   MenuPanel: MenuPanelWithStyles,
   Toolbar,
   RichTextToolbar,
+  LoadingScreen: CanvasLoadingScreen,
 }
 
 export default function DrawingCanvas({ diagram }: DrawingCanvasProps) {

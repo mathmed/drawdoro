@@ -44,6 +44,19 @@ describe('LoadingGate', () => {
     expect(screen.getByText('Content')).toBeInTheDocument()
   })
 
+  it('should draw the placeholder during the appear delay', () => {
+    render(
+      <LoadingGate loading fallback={<p>Loading</p>} placeholder={<p>Reserved</p>}>
+        <p>Content</p>
+      </LoadingGate>,
+    )
+
+    expect(screen.getByText('Reserved')).toBeInTheDocument()
+    act(() => vi.advanceTimersByTime(LOADER_DELAY_MS))
+    expect(screen.queryByText('Reserved')).not.toBeInTheDocument()
+    expect(screen.getByText('Loading')).toBeInTheDocument()
+  })
+
   it('should accept plain children', () => {
     render(
       <LoadingGate loading={false} fallback={null}>
