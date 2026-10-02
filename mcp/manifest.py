@@ -120,14 +120,14 @@ def main() -> int:
     parser.add_argument("--check", action="store_true", help="fail if the file is out of date")
     args = parser.parse_args()
     rendered = render_manifest(registered_tools())
-    current = MANIFEST_PATH.read_text() if MANIFEST_PATH.exists() else ""
+    current = MANIFEST_PATH.read_text(encoding="utf-8") if MANIFEST_PATH.exists() else ""
     if args.check:
         if current != rendered:
             logger.error("%s is out of date: run `make mcp-manifest`", MANIFEST_PATH)
             return 1
         logger.info("%s is up to date", MANIFEST_PATH)
         return 0
-    MANIFEST_PATH.write_text(rendered)
+    MANIFEST_PATH.write_text(rendered, encoding="utf-8")
     logger.info("wrote %s", MANIFEST_PATH)
     return 0
 

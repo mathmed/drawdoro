@@ -1,4 +1,6 @@
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -25,7 +27,7 @@ def tools() -> list[Tool]:
 # The frontend's "Available tools" tab reads this file: it must list exactly what the server
 # registers, with the descriptions the model reads.
 def test_should_keep_the_frontend_manifest_in_sync_with_the_server(tools: list[Tool]) -> None:
-    assert MANIFEST_PATH.read_text() == render_manifest(tools), (
+    assert MANIFEST_PATH.read_text(encoding="utf-8") == render_manifest(tools), (
         "frontend/src/config/mcpTools.json is out of date: run `make mcp-manifest`"
     )
 
@@ -154,6 +156,41 @@ def test_should_write_the_manifest_and_check_it(
     assert manifest.main() == 1
     monkeypatch.setattr(sys, "argv", ["manifest.py"])
     assert manifest.main() == 0
-    assert json.loads(target.read_text())["tools"]
+    assert json.loads(target.read_text(encoding="utf-8"))["tools"]
     monkeypatch.setattr(sys, "argv", ["manifest.py", "--check"])
     assert manifest.main() == 0
+
+
+# The manifest keeps non-ASCII text as is (ensure_ascii=False), and Python opens files in the
+# locale's encoding unless told otherwise: under an ASCII-only locale it must still be UTF-8.
+def test_should_write_and_check_the_manifest_as_utf8_whatever_the_locale(tmp_path: Path) -> None:
+    target = tmp_path / "mcpTools.json"
+    rendered = '{"summary": "Café → naïve"}\n'
+    script = "\n".join(
+        [
+            "import sys",
+            "from pathlib import Path",
+            "import manifest",
+            f"manifest.MANIFEST_PATH = Path({str(target)!r})",
+            "manifest.registered_tools = list",
+            f"manifest.render_manifest = lambda tools: {ascii(rendered)}",
+            "sys.argv = ['manifest.py']",
+            "assert manifest.main() == 0",
+            "sys.argv = ['manifest.py', '--check']",
+            "sys.exit(manifest.main())",
+        ]
+    )
+    ascii_locale = {"LC_ALL": "C", "LANG": "C", "PYTHONUTF8": "0", "PYTHONCOERCECLOCALE": "0"}
+
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=Path(manifest.__file__).parent,
+        env={**os.environ, **ascii_locale},
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert target.read_bytes() == rendered.encode("utf-8")
