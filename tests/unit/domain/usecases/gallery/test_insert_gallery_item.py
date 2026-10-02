@@ -126,6 +126,44 @@ async def test_should_add_the_item_to_the_canvas_and_report_where(
     diagrams.update.assert_awaited_once()  # type: ignore[attr-defined]
 
 
+# Ownership is checked on the item that was loaded, so it must be the one asked for.
+async def test_should_load_the_requested_item_and_diagram(
+    sut: InsertGalleryItem,
+    diagram: Diagram,
+    items: GalleryItemRepository,
+    diagrams: DiagramRepository,
+) -> None:
+    request = params(diagram)
+
+    await sut.execute(request)
+
+    items.get_by_id.assert_awaited_once_with(request.item_id)  # type: ignore[attr-defined]
+    diagrams.get_by_id.assert_awaited_once_with(diagram.id)  # type: ignore[attr-defined]
+
+
+async def test_should_round_the_reported_position_and_size(
+    sut: InsertGalleryItem, diagram: Diagram, items: GalleryItemRepository
+) -> None:
+    saved = content([geo("shape:q", 0, 0, 10, 10)])
+    items.get_by_id = AsyncMock(return_value=shapes_item(saved))  # type: ignore[method-assign]
+
+    inserted = await sut.execute(params(diagram, x=1.23456, y=6.54321, scale=1.23456))
+
+    assert (inserted.x, inserted.y, inserted.width, inserted.height) == (1.23, 6.54, 12.35, 12.35)
+
+
+# Only an image with its type is inserted as an image; stray bytes on a shapes item are ignored.
+async def test_should_insert_an_item_without_image_type_as_shapes(
+    sut: InsertGalleryItem, diagram: Diagram, items: GalleryItemRepository
+) -> None:
+    stray = shapes_item().model_copy(update={"image_data": b"not an image"})
+    items.get_by_id = AsyncMock(return_value=stray)  # type: ignore[method-assign]
+
+    inserted = await sut.execute(params(diagram))
+
+    assert inserted.created_ids == ["shape:n1"]
+
+
 async def test_should_record_the_change_under_its_author_and_notify_every_editor(
     sut: InsertGalleryItem,
     diagram: Diagram,
@@ -230,8 +268,11 @@ async def test_should_refuse_images_whose_size_cannot_be_read(
 ) -> None:
     items.get_by_id = AsyncMock(return_value=image_item(b"\x89PNG\r\n\x1a\n"))  # type: ignore[method-assign]
 
-    with pytest.raises(InvalidInputError, match="size of this image"):
+    with pytest.raises(InvalidInputError) as refused:
         await sut.execute(params(diagram))
+    assert refused.value.message == (
+        "The size of this image can't be read, so it can't be inserted"
+    )
     diagrams.update.assert_not_awaited()  # type: ignore[attr-defined]
 
 
@@ -268,8 +309,11 @@ async def test_should_need_a_canvas_opened_in_the_editor(
 ) -> None:
     diagram.canvas_state = canvas_state
 
-    with pytest.raises(InvalidInputError, match="no canvas yet"):
+    with pytest.raises(InvalidInputError) as refused:
         await sut.execute(params(diagram))
+    assert refused.value.message == (
+        "The diagram has no canvas yet: open it once in the editor, then insert again"
+    )
     diagrams.update.assert_not_awaited()  # type: ignore[attr-defined]
 
 

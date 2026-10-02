@@ -43,6 +43,15 @@ async def test_should_rename_with_a_trimmed_name_and_keep_the_rest(
     assert not hasattr(saved(repo), "content")
 
 
+# Ownership is checked on the item that was loaded, so it must be the one asked for.
+async def test_should_load_the_requested_item(
+    sut: UpdateGalleryItem, repo: GalleryItemRepository, item: GalleryItem
+) -> None:
+    await sut.execute(UpdateGalleryItemParams(item_id=item.id, owner_id=OWNER_ID, name="New"))
+
+    repo.get_by_id.assert_awaited_once_with(item.id)  # type: ignore[attr-defined]
+
+
 async def test_should_replace_tags_with_normalized_ones(
     sut: UpdateGalleryItem, repo: GalleryItemRepository, item: GalleryItem
 ) -> None:
@@ -71,8 +80,9 @@ async def test_should_set_the_description(sut: UpdateGalleryItem, item: GalleryI
 async def test_should_need_something_to_change(
     sut: UpdateGalleryItem, repo: GalleryItemRepository
 ) -> None:
-    with pytest.raises(InvalidInputError, match="name, tags or description"):
+    with pytest.raises(InvalidInputError) as refused:
         await sut.execute(UpdateGalleryItemParams(item_id=uuid.uuid4(), owner_id=OWNER_ID))
+    assert refused.value.message == "Pass the name, tags or description to change"
     repo.get_by_id.assert_not_awaited()  # type: ignore[attr-defined]
 
 
