@@ -21,6 +21,9 @@ import { colorFor } from '../../utils/avatar'
 import { commentAuthor, commentResolver, type CommentActorView } from '../../utils/comments'
 import { initial, modKey, timeAgo } from '../../utils/format'
 import EmptyState from '../ui/EmptyState'
+import LoadingGate from '../ui/loading/LoadingGate'
+import { ListSkeleton } from '../ui/loading/Skeleton'
+import Spinner from '../ui/loading/Spinner'
 
 function CommentAvatar({ author }: { author: CommentActorView }) {
   if (author.isAgent) {
@@ -55,12 +58,14 @@ export default function CommentsPanel() {
   const setCommentResolved = useAppStore((state) => state.setCommentResolved)
   // Viewers only read; without login (myRole null) everyone can edit.
   const canResolve = useAppStore((state) => state.myRole !== 'viewer')
+  const isLoadingComments = useAppStore((state) => state.isLoadingDiagramDetails && state.comments.length === 0)
 
   const { comments } = useComments(activeDiagram?.id ?? null, activeElementId)
   const [draft, setDraft] = useState('')
   const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null)
   const [showResolved, setShowResolved] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [isSending, setIsSending] = useState(false)
 
   useEffect(() => {
     if (editor === null) {
@@ -101,11 +106,16 @@ export default function CommentsPanel() {
 
   async function handleSend(): Promise<void> {
     const content = draft.trim()
-    if (content === '' || targetElementId === null) {
+    if (content === '' || targetElementId === null || isSending) {
       return
     }
-    await addComment(targetElementId, content)
-    setDraft('')
+    setIsSending(true)
+    try {
+      await addComment(targetElementId, content)
+      setDraft('')
+    } finally {
+      setIsSending(false)
+    }
   }
 
   // Failures are already shown by the API client's error toast.
@@ -159,72 +169,81 @@ export default function CommentsPanel() {
         </div>
       ) : null}
 
-      <div className="scroll" style={{ flex: 1 }}>
-        {visible.length === 0 ? (
-          <EmptyState
-            icon={<MessageSquare size={20} />}
-            title={emptyTitle()}
-            description="Select a shape on the canvas — or right-click it and choose Comment — to start a thread."
-          />
-        ) : (
-          <div className="panel-content" style={{ gap: 18 }}>
-            {visible.map((comment) => {
-              const author = commentAuthor(comment)
-              const resolver = commentResolver(comment)
-              return (
-                <div
-                  key={comment.id}
-                  className={comment.resolved ? 'comment comment-resolved' : 'comment'}
-                  data-testid="comment"
-                >
-                  <CommentAvatar author={author} />
-                  <div className="comment-body">
-                    <div className="comment-meta">
-                      <span className="comment-author">{author.name}</span>
-                      <AgentBadge actor={author} />
-                      <span>·</span>
-                      <span title={new Date(comment.created_at).toLocaleString()}>{timeAgo(comment.created_at)}</span>
-                    </div>
-                    {/* Plain text on purpose: comments are never rendered as HTML or Markdown. */}
-                    <div className="comment-text">{comment.content}</div>
-                    {resolver !== null && comment.resolved_at !== null ? (
-                      <div className="comment-resolution">
-                        <Check size={12} /> Resolved by {resolver.name}
-                        <AgentBadge actor={resolver} />
-                        <span title={new Date(comment.resolved_at).toLocaleString()}>
-                          · {timeAgo(comment.resolved_at)}
-                        </span>
+      <div className="scroll" style={{ flex: 1 }} aria-busy={isLoadingComments}>
+        <LoadingGate loading={isLoadingComments} fallback={<ListSkeleton label="Loading comments" rows={3} />}>
+          {visible.length === 0 ? (
+            <EmptyState
+              icon={<MessageSquare size={20} />}
+              title={emptyTitle()}
+              description="Select a shape on the canvas — or right-click it and choose Comment — to start a thread."
+            />
+          ) : (
+            <div className="panel-content reveal" style={{ gap: 18 }}>
+              {visible.map((comment) => {
+                const author = commentAuthor(comment)
+                const resolver = commentResolver(comment)
+                return (
+                  <div
+                    key={comment.id}
+                    className={comment.resolved ? 'comment comment-resolved' : 'comment'}
+                    data-testid="comment"
+                  >
+                    <CommentAvatar author={author} />
+                    <div className="comment-body">
+                      <div className="comment-meta">
+                        <span className="comment-author">{author.name}</span>
+                        <AgentBadge actor={author} />
+                        <span>·</span>
+                        <span title={new Date(comment.created_at).toLocaleString()}>{timeAgo(comment.created_at)}</span>
                       </div>
-                    ) : null}
-                    <div className="comment-actions">
-                      {activeElementId === null && comment.element_id !== null ? (
-                        <button
-                          type="button"
-                          className="comment-link"
-                          onClick={() => focusShape(comment.element_id ?? '')}
-                        >
-                          on {shapeLabel(comment.element_id).toLowerCase()} →
-                        </button>
+                      {/* Plain text on purpose: comments are never rendered as HTML or Markdown. */}
+                      <div className="comment-text">{comment.content}</div>
+                      {resolver !== null && comment.resolved_at !== null ? (
+                        <div className="comment-resolution">
+                          <Check size={12} /> Resolved by {resolver.name}
+                          <AgentBadge actor={resolver} />
+                          <span title={new Date(comment.resolved_at).toLocaleString()}>
+                            · {timeAgo(comment.resolved_at)}
+                          </span>
+                        </div>
                       ) : null}
-                      {comment.element_id === null ? <span className="comment-scope">on the diagram</span> : null}
-                      {canResolve ? (
-                        <button
-                          type="button"
-                          className="comment-link comment-resolve"
-                          disabled={busyId === comment.id}
-                          onClick={() => void toggleResolved(comment)}
-                        >
-                          {comment.resolved ? <RotateCcw size={12} /> : <Check size={12} />}
-                          {comment.resolved ? 'Reopen' : 'Resolve'}
-                        </button>
-                      ) : null}
+                      <div className="comment-actions">
+                        {activeElementId === null && comment.element_id !== null ? (
+                          <button
+                            type="button"
+                            className="comment-link"
+                            onClick={() => focusShape(comment.element_id ?? '')}
+                          >
+                            on {shapeLabel(comment.element_id).toLowerCase()} →
+                          </button>
+                        ) : null}
+                        {comment.element_id === null ? <span className="comment-scope">on the diagram</span> : null}
+                        {canResolve ? (
+                          <button
+                            type="button"
+                            className="comment-link comment-resolve"
+                            disabled={busyId === comment.id}
+                            aria-busy={busyId === comment.id}
+                            onClick={() => void toggleResolved(comment)}
+                          >
+                            {busyId === comment.id ? (
+                              <Spinner size={12} />
+                            ) : comment.resolved ? (
+                              <RotateCcw size={12} />
+                            ) : (
+                              <Check size={12} />
+                            )}
+                            {comment.resolved ? 'Reopen' : 'Resolve'}
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
+                )
+              })}
+            </div>
+          )}
+        </LoadingGate>
       </div>
 
       <div className="composer">
@@ -257,9 +276,10 @@ export default function CommentsPanel() {
               type="button"
               className="btn btn-primary btn-sm"
               onClick={() => void handleSend()}
-              disabled={targetElementId === null || draft.trim() === ''}
+              disabled={targetElementId === null || draft.trim() === '' || isSending}
+              aria-busy={isSending}
             >
-              <SendHorizontal size={13} /> Send
+              {isSending ? <Spinner size={13} /> : <SendHorizontal size={13} />} Send
             </button>
           </div>
         </div>

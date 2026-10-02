@@ -5,6 +5,7 @@ import 'tldraw/tldraw.css'
 import type { SharedDiagram } from '../../api/diagrams'
 import { useRealtime, type Presence } from '../../hooks/useRealtime'
 import { useThemeStore } from '../../store/useThemeStore'
+import CanvasLoadingScreen from '../ui/loading/CanvasLoadingScreen'
 import { shapeUtils } from './shapeUtils'
 
 interface SharedCanvasProps {
@@ -21,6 +22,7 @@ const components: TLComponents = {
   ActionsMenu: null,
   MainMenu: null,
   PageMenu: null,
+  LoadingScreen: CanvasLoadingScreen,
 }
 
 export default function SharedCanvas({ diagram, shareToken, guestName }: SharedCanvasProps) {

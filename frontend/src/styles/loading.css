@@ -1,0 +1,567 @@
+/* Loading states: brand loader, skeletons, inline spinner, top progress bar, overlays */
+
+:root {
+  --skeleton-base: var(--bg-active);
+  --skeleton-sheen: rgba(255, 255, 255, 0.65);
+  --loader-halo: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+:root[data-theme='dark'] {
+  --skeleton-sheen: rgba(255, 255, 255, 0.07);
+  --loader-halo: color-mix(in srgb, var(--accent) 38%, transparent);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Content that replaces a loader eases in instead of popping. */
+.reveal {
+  animation: loading-reveal 240ms var(--ease) both;
+}
+
+/* Brand loader: the product logo with a soft halo, an orbiting arc and a light sheen */
+.brand-loader {
+  --brand-loader-size: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  max-width: 360px;
+  padding: 24px;
+  text-align: center;
+  color: var(--text-muted);
+  animation: brand-loader-enter 360ms var(--ease) both;
+}
+
+.brand-loader-mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: calc(var(--brand-loader-size) * 1.9);
+  height: calc(var(--brand-loader-size) * 1.9);
+}
+
+.brand-loader-halo {
+  position: absolute;
+  inset: 8%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--loader-halo), transparent);
+  animation: brand-loader-halo 2.4s ease-in-out infinite;
+}
+
+.brand-loader-orbit {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  animation: loading-spin 1.6s linear infinite;
+}
+
+.brand-loader-orbit circle {
+  fill: none;
+  stroke-width: 2;
+}
+
+.brand-loader-orbit-track {
+  stroke: var(--border);
+}
+
+.brand-loader-orbit-arc {
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-dasharray: 18 82;
+  animation: brand-loader-arc 1.6s ease-in-out infinite;
+}
+
+.brand-loader-logo {
+  position: relative;
+  display: grid;
+  overflow: hidden;
+  border-radius: 22%;
+  box-shadow: var(--shadow-md);
+  animation: brand-loader-breathe 2.4s ease-in-out infinite;
+}
+
+.brand-loader-logo .logo svg {
+  box-shadow: none;
+}
+
+.brand-loader-logo::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.5) 50%, transparent 70%);
+  transform: translateX(-130%);
+  animation: brand-loader-sheen 2.4s ease-in-out infinite;
+}
+
+.brand-loader-name {
+  margin-top: -2px;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.brand-loader-text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.brand-loader-label {
+  display: inline-flex;
+  align-items: baseline;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.brand-loader-dots {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: 4px;
+}
+
+.brand-loader-dots span {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: brand-loader-dot 1.2s ease-in-out infinite;
+}
+
+.brand-loader-dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.brand-loader-dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+.brand-loader-hint {
+  font-size: 12.5px;
+  color: var(--text-subtle);
+  animation: fade-in 300ms var(--ease) both;
+}
+
+.brand-loader-retry {
+  animation: fade-in 300ms var(--ease) both;
+}
+
+/* Overlay that covers an area while content loads underneath, then fades out */
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  transition: opacity 220ms var(--ease);
+}
+
+.loading-overlay[data-state='exit'] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Full-viewport loader (boot, sign-in, shared links) */
+.loading-screen,
+.loading-overlay-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  background:
+    radial-gradient(900px 420px at 50% 42%, var(--accent-soft), transparent 70%),
+    var(--bg);
+}
+
+.loading-overlay-screen {
+  position: fixed;
+  z-index: 900;
+}
+
+/* tldraw's loading slot, above its canvas while the fonts load */
+.canvas-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+
+.canvas-loading[data-handoff='true'] .brand-loader {
+  animation: none;
+}
+
+/* Skeletons */
+.skeleton {
+  display: block;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background-color: var(--skeleton-base);
+  background-image: linear-gradient(90deg, transparent 0, var(--skeleton-sheen) 50%, transparent 100%);
+  background-repeat: no-repeat;
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
+.skeleton-line {
+  height: 10px;
+}
+
+.skeleton-icon {
+  width: 15px;
+  height: 15px;
+}
+
+.skeleton-group {
+  animation: fade-in 240ms var(--ease) both;
+}
+
+.list-skeleton .skeleton-group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+}
+
+.list-skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+}
+
+.list-skeleton-avatar {
+  width: 28px;
+  height: 28px;
+}
+
+.list-skeleton-lines {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+/* Inline spinner */
+.spinner-ring {
+  flex-shrink: 0;
+  animation: loading-spin 700ms linear infinite;
+}
+
+.spinner-ring-track {
+  stroke: currentColor;
+  opacity: 0.22;
+}
+
+.spinner-ring-arc {
+  stroke: currentColor;
+}
+
+/* Thin indeterminate progress bar along the top of an area */
+.top-progress {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 30;
+  height: 2px;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--accent-soft);
+  animation: fade-in 160ms var(--ease) both;
+  transition: opacity 240ms var(--ease);
+}
+
+.top-progress[data-state='exit'] {
+  opacity: 0;
+}
+
+.top-progress-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 40%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent) 35%, var(--accent) 65%, transparent);
+  animation: top-progress-slide 1.15s var(--ease) infinite;
+}
+
+@keyframes loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes loading-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@keyframes brand-loader-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+@keyframes brand-loader-halo {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes brand-loader-arc {
+  0%,
+  100% {
+    stroke-dasharray: 12 88;
+  }
+  50% {
+    stroke-dasharray: 38 62;
+  }
+}
+
+@keyframes brand-loader-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.045);
+  }
+}
+
+@keyframes brand-loader-sheen {
+  0%,
+  45% {
+    transform: translateX(-130%);
+  }
+  85%,
+  100% {
+    transform: translateX(130%);
+  }
+}
+
+@keyframes brand-loader-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes skeleton-shimmer {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -50% 0;
+  }
+}
+
+@keyframes top-progress-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+@keyframes loading-fade {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* Reduced motion: no movement, only a slow fade. The global rule in ui.css shortens every animation,
+   so these longer fades need !important to win over it. */
+.brand-loader[data-motion='reduced'] .brand-loader-orbit,
+.brand-loader[data-motion='reduced'] .brand-loader-orbit-arc,
+.brand-loader[data-motion='reduced'] .brand-loader-halo,
+.brand-loader[data-motion='reduced'] .brand-loader-dots span {
+  animation: none !important;
+}
+
+.brand-loader[data-motion='reduced'] .brand-loader-logo::after {
+  display: none;
+}
+
+.brand-loader[data-motion='reduced'] .brand-loader-logo {
+  animation: loading-fade 2.4s ease-in-out infinite !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-loader,
+  .brand-loader-orbit,
+  .brand-loader-orbit-arc,
+  .brand-loader-halo,
+  .brand-loader-dots span,
+  .reveal {
+    animation: none !important;
+  }
+
+  .brand-loader-logo::after {
+    display: none;
+  }
+
+  .brand-loader-logo,
+  .spinner-ring,
+  .skeleton {
+    animation: loading-fade 2s ease-in-out infinite !important;
+  }
+
+  .skeleton {
+    background-image: none;
+  }
+
+  .top-progress-bar {
+    width: 100%;
+    animation: loading-fade 1.6s ease-in-out infinite !important;
+  }
+}
+
+/* Error states that follow a load: a retry next to the way out */
+.empty-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* Overview skeleton: same boxes as the project header and diagram cards */
+.home-header-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.diagram-card-skeleton {
+  pointer-events: none;
+}
+
+.home-description-skeleton {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* Sidebar skeletons */
+.project-list-skeleton .tree-row,
+.tree-skeleton {
+  pointer-events: none;
+}
+
+.workspace-switcher-name .skeleton {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* Gallery tiles standing in for items that load or images being added */
+.gallery-tile-skeleton {
+  pointer-events: none;
+}
+
+.gallery-tile-skeleton .gallery-tile-preview {
+  padding: 0;
+  cursor: default;
+}
+
+.gallery-tile-skeleton .gallery-tile-footer {
+  height: 37px;
+}
+
+/* History preview while a version loads, or when it could not */
+.revision-preview-failed {
+  flex-direction: column;
+  gap: 6px;
+}
+
+.revision-preview-failed .btn {
+  font-size: 12px;
+}
+
+/* Documentation editor skeleton */
+.docs-skeleton {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.docs-skeleton .skeleton-group-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.docs-skeleton-toolbar {
+  display: flex;
+  gap: 8px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.docs-skeleton-text {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 14px;
+}
+
+.docs-skeleton-gap {
+  height: 6px;
+}
+
+/* Personal API keys: the list keeps its room while it loads */
+.api-key-list-placeholder {
+  min-height: 52px;
+}
+
+.api-key-skeleton .skeleton-group-body {
+  padding: 0;
+}
+
+/* Share link while it is generated */
+.share-link-placeholder {
+  height: 32px;
+}
+
+.share-link-skeleton-field {
+  flex: 1;
+}

@@ -3,6 +3,7 @@ import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { useAppStore } from '../../store/useAppStore'
+import Spinner from '../ui/loading/Spinner'
 import Modal from '../ui/Modal'
 
 export default function NewDiagramDialog({ initialFolderId }: { initialFolderId?: string }) {
@@ -41,8 +42,8 @@ export default function NewDiagramDialog({ initialFolderId }: { initialFolderId?
           <button type="button" className="btn btn-secondary" onClick={closeNewDiagram}>
             Cancel
           </button>
-          <button type="submit" form="new-diagram-form" className="btn btn-primary" disabled={isCreating}>
-            <FilePlus2 size={15} /> Create diagram
+          <button type="submit" form="new-diagram-form" className="btn btn-primary" disabled={isCreating} aria-busy={isCreating}>
+            {isCreating ? <Spinner size={15} /> : <FilePlus2 size={15} />} Create diagram
           </button>
         </>
       }

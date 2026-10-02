@@ -5,9 +5,11 @@ import { useNavigate } from 'react-router-dom'
 import type { Project } from '../../api/types'
 import { useAppStore } from '../../store/useAppStore'
 import { modKey } from '../../utils/format'
+import LoadingGate from '../ui/loading/LoadingGate'
 import type { TreeViewProps } from './FolderNode'
 import ProjectNode from './ProjectNode'
 import SidebarFooter from './SidebarFooter'
+import { ProjectListSkeleton } from './TreeSkeleton'
 import { buildTreeIndex, folderAncestors } from './treeIndex'
 import { useTreeActions } from './useTreeActions'
 import WorkspaceSwitcher from './WorkspaceSwitcher'
@@ -24,6 +26,11 @@ export default function Sidebar() {
   const activeDiagramId = useAppStore((state) => state.activeDiagram?.id ?? null)
   const activeFolderId = useAppStore((state) => state.activeDiagram?.folder_id ?? null)
   const isLoadingProject = useAppStore((state) => state.isLoadingProject)
+  const isLoadingProjectList = useAppStore(
+    (state) =>
+      state.projects.length === 0 &&
+      (state.isLoadingProjects || (state.activeWorkspace === null && (state.isLoadingWorkspaces || state.workspaces.length > 0))),
+  )
   const myRole = useAppStore((state) => state.myRole)
 
   const setActiveProject = useAppStore((state) => state.setActiveProject)
@@ -126,28 +133,30 @@ export default function Sidebar() {
             <Plus size={14} />
           </button>
         </div>
-        {projects.map((project) => {
-          const isActive = activeProject?.id === project.id
-          return (
-            <ProjectNode
-              key={project.id}
-              project={project}
-              isActive={isActive}
-              isExpanded={isActive && collapsedProject !== project.id}
-              isLoading={isLoadingProject}
-              onSelect={(selected) => void handleSelectProject(selected)}
-              view={view}
-            />
-          )
-        })}
-        {activeWorkspace !== null && projects.length === 0 ? (
-          <div className="tree-empty">
-            No projects ·{' '}
-            <button type="button" onClick={() => void actions.createProject()}>
-              Create one
-            </button>
-          </div>
-        ) : null}
+        <LoadingGate loading={isLoadingProjectList} fallback={<ProjectListSkeleton />}>
+          {projects.map((project) => {
+            const isActive = activeProject?.id === project.id
+            return (
+              <ProjectNode
+                key={project.id}
+                project={project}
+                isActive={isActive}
+                isExpanded={isActive && collapsedProject !== project.id}
+                isLoading={isLoadingProject}
+                onSelect={(selected) => void handleSelectProject(selected)}
+                view={view}
+              />
+            )
+          })}
+          {activeWorkspace !== null && projects.length === 0 ? (
+            <div className="tree-empty">
+              No projects ·{' '}
+              <button type="button" onClick={() => void actions.createProject()}>
+                Create one
+              </button>
+            </div>
+          ) : null}
+        </LoadingGate>
       </div>
 
       <SidebarFooter />

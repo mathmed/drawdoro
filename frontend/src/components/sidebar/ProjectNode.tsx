@@ -1,6 +1,7 @@
 import { ChevronRight, Layers, Pencil, Trash2 } from 'lucide-react'
 
 import type { Project } from '../../api/types'
+import LoadingGate from '../ui/loading/LoadingGate'
 import { addMenu, TreeChildren, type TreeViewProps } from './FolderNode'
 import RowMenu, { INDENT } from './RowMenu'
 import TreeSkeleton from './TreeSkeleton'
@@ -44,16 +45,17 @@ export default function ProjectNode({ project, isActive, isExpanded, isLoading, 
       </div>
       {isExpanded ? (
         <div>
-          <TreeChildren parentId={null} depth={1} {...view} />
-          {isEmpty && isLoading ? <TreeSkeleton /> : null}
-          {isEmpty && !isLoading ? (
-            <div className="tree-empty" style={{ paddingLeft: 8 + INDENT + 18 }}>
-              No diagrams yet ·{' '}
-              <button type="button" onClick={() => view.actions.newDiagram()}>
-                Create one
-              </button>
-            </div>
-          ) : null}
+          <LoadingGate loading={isEmpty && isLoading} fallback={<TreeSkeleton />}>
+            <TreeChildren parentId={null} depth={1} {...view} />
+            {isEmpty ? (
+              <div className="tree-empty" style={{ paddingLeft: 8 + INDENT + 18 }}>
+                No diagrams yet ·{' '}
+                <button type="button" onClick={() => view.actions.newDiagram()}>
+                  Create one
+                </button>
+              </div>
+            ) : null}
+          </LoadingGate>
         </div>
       ) : null}
     </div>

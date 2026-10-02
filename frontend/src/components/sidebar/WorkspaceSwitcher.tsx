@@ -6,6 +6,7 @@ import { authConfig } from '../../auth/config'
 import { useAppStore } from '../../store/useAppStore'
 import { promptDialog } from '../../store/useDialogStore'
 import { initial, slugify } from '../../utils/format'
+import { Skeleton } from '../ui/loading/Skeleton'
 import Menu, { type MenuEntry } from '../ui/Menu'
 import MembersDialog from '../workspace/MembersDialog'
 
@@ -15,6 +16,7 @@ export default function WorkspaceSwitcher() {
   const activeWorkspace = useAppStore((state) => state.activeWorkspace)
   const setActiveWorkspace = useAppStore((state) => state.setActiveWorkspace)
   const createWorkspace = useAppStore((state) => state.createWorkspace)
+  const isLoading = useAppStore((state) => state.activeWorkspace === null && state.isLoadingWorkspaces)
   const [isMembersOpen, setIsMembersOpen] = useState(false)
 
   async function handleCreateWorkspace(): Promise<void> {
@@ -56,9 +58,16 @@ export default function WorkspaceSwitcher() {
         className="menu-anchor workspace-anchor"
         items={items}
         trigger={({ toggle }) => (
-          <button type="button" className="workspace-switcher" onClick={toggle}>
-            <span className="avatar">{initial(activeWorkspace?.name)}</span>
-            <span className="workspace-switcher-name">{activeWorkspace?.name ?? 'No workspace'}</span>
+          <button type="button" className="workspace-switcher" onClick={toggle} aria-busy={isLoading}>
+            {isLoading ? (
+              <Skeleton className="avatar" />
+            ) : (
+              <span className="avatar">{initial(activeWorkspace?.name)}</span>
+            )}
+            <span className="workspace-switcher-name">
+              {isLoading ? <Skeleton className="skeleton-line" width={96} /> : (activeWorkspace?.name ?? 'No workspace')}
+              {isLoading ? <span className="sr-only">Loading workspace</span> : null}
+            </span>
             <ChevronsUpDown size={14} />
           </button>
         )}

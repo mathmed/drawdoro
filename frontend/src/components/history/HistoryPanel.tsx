@@ -1,4 +1,4 @@
-import { Bot, History, Loader2, RotateCcw, Sparkles, User } from 'lucide-react'
+import { Bot, History, RotateCcw, RotateCw, Sparkles, User } from 'lucide-react'
 import { useState } from 'react'
 import { TldrawImage, type TLStoreSnapshot } from 'tldraw'
 
@@ -13,6 +13,9 @@ import { timeAgo } from '../../utils/format'
 import { revisionAuthor, revisionDescription } from '../../utils/revisions'
 import { shapeUtils } from '../canvas/shapeUtils'
 import EmptyState from '../ui/EmptyState'
+import LoadingGate from '../ui/loading/LoadingGate'
+import { ListSkeleton, Skeleton } from '../ui/loading/Skeleton'
+import Spinner from '../ui/loading/Spinner'
 import UserAvatar from '../ui/UserAvatar'
 import '../../styles/history.css'
 
@@ -52,11 +55,28 @@ function RevisionAvatar({ revision }: { revision: DiagramRevision }) {
   )
 }
 
-function RevisionPreview({ detail }: { detail: DiagramRevisionDetail | null }) {
+interface RevisionPreviewProps {
+  detail: DiagramRevisionDetail | null
+  failed: boolean
+  onRetry: () => void
+}
+
+function RevisionPreview({ detail, failed, onRetry }: RevisionPreviewProps) {
+  if (failed) {
+    return (
+      <div className="revision-preview revision-preview-empty revision-preview-failed">
+        <span>Could not load this version.</span>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onRetry}>
+          <RotateCw size={13} /> Try again
+        </button>
+      </div>
+    )
+  }
   if (detail === null) {
     return (
-      <div className="revision-preview revision-preview-empty">
-        <Loader2 size={16} className="spinner" />
+      <div className="revision-preview revision-preview-loading" role="status">
+        <span className="sr-only">Loading preview</span>
+        <Skeleton width="100%" height="100%" radius="var(--radius-md)" />
       </div>
     )
   }
@@ -87,6 +107,19 @@ export default function HistoryPanel() {
   // Keyed by id and updated_at: the newest revision keeps changing while someone edits.
   const [details, setDetails] = useState<Record<string, DiagramRevisionDetail>>({})
   const [restoringId, setRestoringId] = useState<string | null>(null)
+  const [failedKey, setFailedKey] = useState<string | null>(null)
+
+  async function loadDetail(revision: DiagramRevision): Promise<void> {
+    const key = detailKey(revision)
+    setFailedKey((current) => (current === key ? null : current))
+    try {
+      const loaded = await getRevision(revision.diagram_id, revision.id)
+      setDetails((current) => ({ ...current, [key]: loaded }))
+    } catch {
+      // The API client already shows the error toast; the preview offers a retry.
+      setFailedKey(key)
+    }
+  }
 
   async function toggle(revision: DiagramRevision): Promise<void> {
     if (selectedId === revision.id) {
@@ -97,8 +130,7 @@ export default function HistoryPanel() {
     if (details[detailKey(revision)] !== undefined) {
       return
     }
-    const loaded = await getRevision(revision.diagram_id, revision.id)
-    setDetails((current) => ({ ...current, [detailKey(revision)]: loaded }))
+    await loadDetail(revision)
   }
 
   async function handleRestore(revision: DiagramRevision): Promise<void> {
@@ -120,79 +152,81 @@ export default function HistoryPanel() {
     }
   }
 
-  if (isLoading) {
+  function renderList() {
+    if (revisions.length === 0) {
+      return (
+        <EmptyState
+          icon={<History size={20} />}
+          title="No history yet"
+          description="Every change to this diagram, by people or by AI agents, shows up here, and any version can be brought back."
+        />
+      )
+    }
+
     return (
-      <div className="full-center" style={{ height: 'auto', padding: 24 }}>
-        <Loader2 size={16} className="spinner" /> Loading history…
+      <div className="scroll" style={{ flex: 1 }}>
+        <ol className="revision-list reveal">
+          {revisions.map((revision, index) => {
+            const isSelected = selectedId === revision.id
+            const isCurrent = index === 0
+            return (
+              <li key={revision.id} className="revision" data-selected={isSelected}>
+                <button
+                  type="button"
+                  className="revision-row"
+                  aria-expanded={isSelected}
+                  onClick={() => void toggle(revision)}
+                >
+                  <RevisionAvatar revision={revision} />
+                  <span className="revision-body">
+                    <span className="revision-meta">
+                      <span className="revision-author">{revisionAuthor(revision)}</span>
+                      {revision.origin === 'agent' ? (
+                        <span className="revision-badge">
+                          <Bot size={11} /> {revision.agent_label ?? 'MCP'}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="revision-summary">{revisionDescription(revision)}</span>
+                    <span className="revision-time" title={new Date(revision.updated_at).toLocaleString()}>
+                      {isCurrent ? 'Current · ' : ''}
+                      {timeAgo(revision.updated_at)}
+                    </span>
+                  </span>
+                </button>
+                {isSelected ? (
+                  <div className="revision-details">
+                    <RevisionPreview
+                      detail={details[detailKey(revision)] ?? null}
+                      failed={failedKey === detailKey(revision)}
+                      onRetry={() => void loadDetail(revision)}
+                    />
+                    {canRestore && !isCurrent ? (
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        disabled={restoringId !== null}
+                        aria-busy={restoringId === revision.id}
+                        onClick={() => void handleRestore(revision)}
+                      >
+                        {restoringId === revision.id ? <Spinner size={13} /> : <RotateCcw size={13} />}{' '}
+                        Restore this version
+                      </button>
+                    ) : null}
+                    {!canRestore ? <span className="revision-note">Viewers can't restore versions.</span> : null}
+                  </div>
+                ) : null}
+              </li>
+            )
+          })}
+        </ol>
       </div>
-    )
-  }
-  if (revisions.length === 0) {
-    return (
-      <EmptyState
-        icon={<History size={20} />}
-        title="No history yet"
-        description="Every change to this diagram, by people or by AI agents, shows up here, and any version can be brought back."
-      />
     )
   }
 
   return (
-    <div className="scroll" style={{ flex: 1 }}>
-      <ol className="revision-list">
-        {revisions.map((revision, index) => {
-          const isSelected = selectedId === revision.id
-          const isCurrent = index === 0
-          return (
-            <li key={revision.id} className="revision" data-selected={isSelected}>
-              <button
-                type="button"
-                className="revision-row"
-                aria-expanded={isSelected}
-                onClick={() => void toggle(revision)}
-              >
-                <RevisionAvatar revision={revision} />
-                <span className="revision-body">
-                  <span className="revision-meta">
-                    <span className="revision-author">{revisionAuthor(revision)}</span>
-                    {revision.origin === 'agent' ? (
-                      <span className="revision-badge">
-                        <Bot size={11} /> {revision.agent_label ?? 'MCP'}
-                      </span>
-                    ) : null}
-                  </span>
-                  <span className="revision-summary">{revisionDescription(revision)}</span>
-                  <span className="revision-time" title={new Date(revision.updated_at).toLocaleString()}>
-                    {isCurrent ? 'Current · ' : ''}
-                    {timeAgo(revision.updated_at)}
-                  </span>
-                </span>
-              </button>
-              {isSelected ? (
-                <div className="revision-details">
-                  <RevisionPreview detail={details[detailKey(revision)] ?? null} />
-                  {canRestore && !isCurrent ? (
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      disabled={restoringId !== null}
-                      onClick={() => void handleRestore(revision)}
-                    >
-                      {restoringId === revision.id ? (
-                        <Loader2 size={13} className="spinner" />
-                      ) : (
-                        <RotateCcw size={13} />
-                      )}{' '}
-                      Restore this version
-                    </button>
-                  ) : null}
-                  {!canRestore ? <span className="revision-note">Viewers can't restore versions.</span> : null}
-                </div>
-              ) : null}
-            </li>
-          )
-        })}
-      </ol>
-    </div>
+    <LoadingGate loading={isLoading} fallback={<ListSkeleton label="Loading history" rows={5} lines={3} />}>
+      {renderList}
+    </LoadingGate>
   )
 }

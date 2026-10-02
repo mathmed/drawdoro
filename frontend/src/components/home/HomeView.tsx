@@ -3,7 +3,6 @@ import {
   FilePlus2,
   Folder as FolderIcon,
   FolderPlus,
-  Loader2,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -20,8 +19,11 @@ import { useAppStore } from '../../store/useAppStore'
 import { confirmDialog, promptDialog } from '../../store/useDialogStore'
 import { slugify, timeAgo } from '../../utils/format'
 import EmptyState from '../ui/EmptyState'
+import LoadingGate from '../ui/loading/LoadingGate'
+import { Skeleton } from '../ui/loading/Skeleton'
 import Logo from '../ui/Logo'
 import Menu from '../ui/Menu'
+import HomeSkeleton, { DiagramGridSkeleton } from './HomeSkeleton'
 
 const FEATURES = [
   { icon: Workflow, title: 'Draw', description: 'Sketch architecture on an infinite canvas.' },
@@ -46,7 +48,7 @@ function WelcomeHero() {
 
   return (
     <div className="home scroll">
-      <div className="hero">
+      <div className="hero reveal">
         <Logo size={56} />
         <h1 className="hero-title">Welcome to {branding.name}</h1>
         <p className="hero-description">
@@ -87,7 +89,7 @@ function NoProjects() {
 
   return (
     <div className="home scroll">
-      <div className="hero">
+      <div className="hero reveal">
         <Logo size={56} />
         <h1 className="hero-title">Start your first project</h1>
         <p className="hero-description">
@@ -184,11 +186,43 @@ function DiagramCard({ diagram, folderName }: { diagram: DiagramSummary; folderN
   )
 }
 
+type HomeStage = 'loading' | 'welcome' | 'no-projects' | 'project'
+
+function useHomeStage(): HomeStage {
+  return useAppStore((state) => {
+    if (state.workspaces.length === 0) {
+      return state.isLoadingWorkspaces ? 'loading' : 'welcome'
+    }
+    if (state.activeWorkspace === null) {
+      return 'loading'
+    }
+    if (state.projects.length === 0) {
+      return state.isLoadingProjects ? 'loading' : 'no-projects'
+    }
+    return state.activeProject === null ? 'loading' : 'project'
+  })
+}
+
 export default function HomeView() {
-  const isLoadingWorkspaces = useAppStore((state) => state.isLoadingWorkspaces)
-  const workspaces = useAppStore((state) => state.workspaces)
+  const stage = useHomeStage()
+
+  return (
+    <LoadingGate loading={stage === 'loading'} fallback={<HomeSkeleton />}>
+      {() => {
+        if (stage === 'welcome') {
+          return <WelcomeHero />
+        }
+        if (stage === 'no-projects') {
+          return <NoProjects />
+        }
+        return <ProjectOverview />
+      }}
+    </LoadingGate>
+  )
+}
+
+function ProjectOverview() {
   const activeWorkspace = useAppStore((state) => state.activeWorkspace)
-  const projects = useAppStore((state) => state.projects)
   const activeProject = useAppStore((state) => state.activeProject)
   const folders = useAppStore((state) => state.folders)
   const diagrams = useAppStore((state) => state.diagrams)
@@ -197,25 +231,8 @@ export default function HomeView() {
   const createFolder = useAppStore((state) => state.createFolder)
   const canEdit = useAppStore((state) => state.myRole !== 'viewer')
 
-  if (isLoadingWorkspaces && workspaces.length === 0) {
-    return (
-      <div className="full-center">
-        <Loader2 size={16} className="spinner" /> Loading…
-      </div>
-    )
-  }
-  if (workspaces.length === 0) {
-    return <WelcomeHero />
-  }
-  if (activeWorkspace !== null && projects.length === 0) {
-    return <NoProjects />
-  }
   if (activeProject === null) {
-    return (
-      <div className="full-center">
-        <Loader2 size={16} className="spinner" />
-      </div>
-    )
+    return null
   }
 
   async function handleNewFolder(): Promise<void> {
@@ -225,21 +242,27 @@ export default function HomeView() {
     }
   }
 
+  const isLoadingTree = isLoadingProject && diagrams.length === 0
   const sorted = [...diagrams].sort((a, b) => (b.updated_at ?? '').localeCompare(a.updated_at ?? ''))
   const folderName = (id: string | null): string | null =>
     folders.find((folder) => folder.id === id)?.name ?? null
 
   return (
     <div className="home scroll">
-      <div className="home-inner">
+      <div className="home-inner reveal">
         <div className="home-header">
           <div>
             <div className="home-eyebrow">{activeWorkspace?.name}</div>
             <h1 className="home-title">{activeProject.name}</h1>
             <p className="home-description">
-              {activeProject.description !== null && activeProject.description !== ''
-                ? activeProject.description
-                : `${diagrams.length} diagram${diagrams.length === 1 ? '' : 's'} · ${folders.length} folder${folders.length === 1 ? '' : 's'}`}
+              {activeProject.description !== null && activeProject.description !== '' ? (
+                activeProject.description
+              ) : isLoadingTree ? (
+                // The counts are unknown until the tree arrives; "0 diagrams" would be wrong.
+                <Skeleton className="skeleton-line home-description-skeleton" width={150} height={12} />
+              ) : (
+                `${diagrams.length} diagram${diagrams.length === 1 ? '' : 's'} · ${folders.length} folder${folders.length === 1 ? '' : 's'}`
+              )}
             </p>
           </div>
           <div className="home-actions" hidden={!canEdit}>
@@ -252,40 +275,41 @@ export default function HomeView() {
           </div>
         </div>
 
-        {isLoadingProject && diagrams.length === 0 ? (
-          <div className="full-center" style={{ height: 200 }}>
-            <Loader2 size={16} className="spinner" />
-          </div>
-        ) : sorted.length === 0 ? (
-          <div style={{ border: '1px dashed var(--border-strong)', borderRadius: 'var(--radius-xl)', padding: 24 }}>
-            <EmptyState
-              icon={<Sparkles size={20} />}
-              title="No diagrams yet"
-              description="Create your first diagram to start drawing the architecture of this project."
-              action={
-                canEdit ? (
-                  <button type="button" className="btn btn-primary" onClick={() => openNewDiagram()}>
-                    <Plus size={15} /> Create diagram
-                  </button>
-                ) : undefined
-              }
-            />
-          </div>
-        ) : (
-          <>
-            <div className="home-section-title">Recent diagrams</div>
-            <div className="card-grid">
-              {canEdit ? (
-                <button type="button" className="new-card" onClick={() => openNewDiagram()}>
-                  <Plus size={20} /> New diagram
-                </button>
-              ) : null}
-              {sorted.map((diagram) => (
-                <DiagramCard key={diagram.id} diagram={diagram} folderName={folderName(diagram.folder_id)} />
-              ))}
+        <LoadingGate loading={isLoadingTree} fallback={<DiagramGridSkeleton />}>
+          {sorted.length === 0 ? (
+            <div
+              className="reveal"
+              style={{ border: '1px dashed var(--border-strong)', borderRadius: 'var(--radius-xl)', padding: 24 }}
+            >
+              <EmptyState
+                icon={<Sparkles size={20} />}
+                title="No diagrams yet"
+                description="Create your first diagram to start drawing the architecture of this project."
+                action={
+                  canEdit ? (
+                    <button type="button" className="btn btn-primary" onClick={() => openNewDiagram()}>
+                      <Plus size={15} /> Create diagram
+                    </button>
+                  ) : undefined
+                }
+              />
             </div>
-          </>
-        )}
+          ) : (
+            <div className="reveal">
+              <div className="home-section-title">Recent diagrams</div>
+              <div className="card-grid">
+                {canEdit ? (
+                  <button type="button" className="new-card" onClick={() => openNewDiagram()}>
+                    <Plus size={20} /> New diagram
+                  </button>
+                ) : null}
+                {sorted.map((diagram) => (
+                  <DiagramCard key={diagram.id} diagram={diagram} folderName={folderName(diagram.folder_id)} />
+                ))}
+              </div>
+            </div>
+          )}
+        </LoadingGate>
       </div>
     </div>
   )

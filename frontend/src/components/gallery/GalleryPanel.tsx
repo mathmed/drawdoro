@@ -1,4 +1,4 @@
-import { BookmarkPlus, CircleAlert, ImagePlus, Images, Loader2, Pencil, RotateCw, Search, Shapes, Trash2, X } from 'lucide-react'
+import { BookmarkPlus, CircleAlert, ImagePlus, Images, Pencil, RotateCw, Search, Shapes, Trash2, X } from 'lucide-react'
 import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react'
 
 import type { GalleryItemSummary } from '../../api/types'
@@ -15,6 +15,9 @@ import {
 } from '../../utils/gallery'
 import { matchesGallerySearch } from '../../utils/galleryLabels'
 import EmptyState from '../ui/EmptyState'
+import LoadingGate from '../ui/loading/LoadingGate'
+import { Skeleton, SkeletonGroup } from '../ui/loading/Skeleton'
+import Spinner from '../ui/loading/Spinner'
 import GalleryItemDialog from './GalleryItemDialog'
 
 function hasFiles(event: DragEvent): boolean {
@@ -23,6 +26,32 @@ function hasFiles(event: DragEvent): boolean {
 
 // Tiles show a few tags; the rest are still searchable.
 const TILE_TAGS = 3
+const SKELETON_TILE_NAMES = ['70%', '52%', '62%', '44%', '58%', '66%']
+
+function TileSkeleton({ nameWidth }: { nameWidth: string }) {
+  return (
+    <div className="gallery-tile gallery-tile-skeleton">
+      <div className="gallery-tile-preview">
+        <Skeleton width="100%" height="100%" />
+      </div>
+      <div className="gallery-tile-footer">
+        <Skeleton className="skeleton-line" width={nameWidth} />
+      </div>
+    </div>
+  )
+}
+
+function GallerySkeleton() {
+  return (
+    <SkeletonGroup label="Loading gallery">
+      <div className="gallery-grid">
+        {SKELETON_TILE_NAMES.map((width) => (
+          <TileSkeleton key={width} nameWidth={width} />
+        ))}
+      </div>
+    </SkeletonGroup>
+  )
+}
 
 interface GalleryTileProps {
   item: GalleryItemSummary
@@ -51,6 +80,7 @@ function GalleryTile({ item, busy, onInsert, onTagClick }: GalleryTileProps) {
     <div className="gallery-tile" data-busy={busy}>
       <button
         type="button"
+        aria-busy={busy}
         className="gallery-tile-preview"
         title={`Insert “${item.name}” — or drag it onto the canvas${item.description !== null ? `\n\n${item.description}` : ''}`}
         draggable
@@ -67,7 +97,7 @@ function GalleryTile({ item, busy, onInsert, onTagClick }: GalleryTileProps) {
         )}
         {busy ? (
           <span className="gallery-tile-spinner">
-            <Loader2 size={16} className="spinner" />
+            <Spinner size={18} />
           </span>
         ) : null}
       </button>
@@ -180,14 +210,10 @@ export default function GalleryPanel() {
     void upload(Array.from(event.dataTransfer.files))
   }
 
+  // 'idle' too: the first render happens before the load starts, and must not flash the empty state.
+  const isFirstLoad = (status === 'idle' || status === 'loading') && items.length === 0
+
   function renderBody() {
-    if (status === 'loading' && items.length === 0) {
-      return (
-        <div className="full-center gallery-status">
-          <Loader2 size={16} className="spinner" /> Loading gallery…
-        </div>
-      )
-    }
     if (status === 'error' && items.length === 0) {
       return (
         <EmptyState
@@ -201,7 +227,7 @@ export default function GalleryPanel() {
         />
       )
     }
-    if (items.length === 0) {
+    if (items.length === 0 && uploading === 0) {
       return (
         <EmptyState
           icon={<Images size={20} />}
@@ -210,12 +236,20 @@ export default function GalleryPanel() {
         />
       )
     }
-    if (visible.length === 0) {
+    if (visible.length === 0 && uploading === 0) {
       const searched = [query.trim(), activeTag !== null ? `tag “${activeTag}”` : ''].filter((part) => part !== '')
       return <EmptyState icon={<Search size={20} />} title={`No items match ${searched.join(' with ')}`} />
     }
     return (
-      <div className="gallery-grid">
+      <div className="gallery-grid reveal">
+        {uploading > 0 ? (
+          <span className="sr-only" role="status">
+            {uploading === 1 ? 'Adding 1 image to the gallery' : `Adding ${uploading} images to the gallery`}
+          </span>
+        ) : null}
+        {Array.from({ length: uploading }, (_, index) => (
+          <TileSkeleton key={`upload-${index}`} nameWidth={SKELETON_TILE_NAMES[index % SKELETON_TILE_NAMES.length]} />
+        ))}
         {visible.map((item) => (
           <GalleryTile
             key={item.id}
@@ -273,9 +307,10 @@ export default function GalleryPanel() {
           aria-label="Upload image"
           title="Upload image"
           disabled={uploading > 0}
+          aria-busy={uploading > 0}
           onClick={() => fileInputRef.current?.click()}
         >
-          {uploading > 0 ? <Loader2 size={15} className="spinner" /> : <ImagePlus size={15} />}
+          {uploading > 0 ? <Spinner size={15} /> : <ImagePlus size={15} />}
         </button>
         <input ref={fileInputRef} type="file" accept={GALLERY_IMAGE_TYPES.join(',')} multiple hidden onChange={handleFileInput} />
       </div>
@@ -287,8 +322,10 @@ export default function GalleryPanel() {
           </button>
         </div>
       ) : null}
-      <div className="scroll" style={{ flex: 1 }}>
-        {renderBody()}
+      <div className="scroll" style={{ flex: 1 }} aria-busy={isFirstLoad}>
+        <LoadingGate loading={isFirstLoad} fallback={<GallerySkeleton />}>
+          {renderBody}
+        </LoadingGate>
       </div>
       <div className="gallery-hint">Click to insert at the centre of the view, or drag onto the canvas.</div>
     </div>

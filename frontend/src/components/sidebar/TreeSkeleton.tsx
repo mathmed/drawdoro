@@ -1,17 +1,34 @@
+import { Skeleton, SkeletonGroup } from '../ui/loading/Skeleton'
 import { INDENT } from './RowMenu'
 
-const WIDTHS = [72, 56, 64]
+const TREE_WIDTHS = [72, 56, 64]
+const PROJECT_WIDTHS = [64, 48, 56]
 
-// Shown the moment a project with no cached tree is expanded, until its tree arrives.
+// Shown when a project with no cached tree is expanded, until its tree arrives.
 export default function TreeSkeleton() {
   return (
-    <div aria-busy="true" aria-label="Loading diagrams">
-      {WIDTHS.map((width) => (
+    <SkeletonGroup label="Loading diagrams">
+      {TREE_WIDTHS.map((width) => (
         <div key={width} className="tree-row tree-skeleton" style={{ paddingLeft: 8 + INDENT + 18 }}>
-          <span className="skeleton skeleton-icon" />
-          <span className="skeleton skeleton-line" style={{ width: `${width}%` }} />
+          <Skeleton className="skeleton-icon" />
+          <Skeleton className="skeleton-line" width={`${width}%`} />
         </div>
       ))}
-    </div>
+    </SkeletonGroup>
+  )
+}
+
+// Project rows (chevron, icon, name) while a workspace's projects load.
+export function ProjectListSkeleton() {
+  return (
+    <SkeletonGroup label="Loading projects" className="project-list-skeleton">
+      {PROJECT_WIDTHS.map((width) => (
+        <div key={width} className="tree-row" style={{ paddingLeft: 8 }}>
+          <Skeleton width={14} height={14} radius={4} />
+          <Skeleton className="skeleton-icon" />
+          <Skeleton className="skeleton-line" width={`${width}%`} />
+        </div>
+      ))}
+    </SkeletonGroup>
   )
 }

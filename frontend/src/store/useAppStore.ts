@@ -84,8 +84,8 @@ function recall(key: string): string | null {
 }
 
 let pendingSaves = 0
-// The diagram the latest loadDiagram call asked for; slower earlier calls drop their result.
-let requestedDiagramId: string | null = null
+// The latest loadDiagram call; earlier calls (another diagram, or a retry of the same one) drop their result.
+let diagramRequest: symbol | null = null
 
 interface AppState {
   workspaces: Workspace[]
@@ -98,8 +98,13 @@ interface AppState {
   projectTrees: Record<string, ProjectTree>
   activeDiagram: Diagram | null
   isLoadingWorkspaces: boolean
+  // The project list of a workspace that was just selected.
+  isLoadingProjects: boolean
   isLoadingProject: boolean
   isLoadingDiagram: boolean
+  // The documentation and comments of a diagram opened from the tree, which arrive after the canvas.
+  isLoadingDiagramDetails: boolean
+  isLoadingMembers: boolean
   saveStatus: SaveStatus
   documentation: DocumentationPage | null
   editor: Editor | null
@@ -282,6 +287,7 @@ export const useAppStore = create<AppState>((set, get) => {
       diagrams: tree.diagrams,
       documentation,
       comments,
+      isLoadingDiagramDetails: false,
       ...diagramContext(diagram),
     })
     void get().loadMembers(workspace.id)
@@ -307,8 +313,11 @@ export const useAppStore = create<AppState>((set, get) => {
     projectTrees: {},
     activeDiagram: null,
     isLoadingWorkspaces: true,
+    isLoadingProjects: false,
     isLoadingProject: false,
     isLoadingDiagram: false,
+    isLoadingDiagramDetails: false,
+    isLoadingMembers: false,
     saveStatus: 'idle',
     documentation: null,
     editor: null,
@@ -353,9 +362,17 @@ export const useAppStore = create<AppState>((set, get) => {
         diagrams: [],
         members: [],
         myRole: null,
+        isLoadingProjects: true,
       })
       void get().loadMembers(workspace.id)
-      const projects = await listProjects(workspace.id)
+      let projects: Project[]
+      try {
+        projects = await listProjects(workspace.id)
+      } finally {
+        if (get().activeWorkspace?.id === workspace.id) {
+          set({ isLoadingProjects: false })
+        }
+      }
       if (get().activeWorkspace?.id !== workspace.id) {
         return
       }
@@ -384,15 +401,21 @@ export const useAppStore = create<AppState>((set, get) => {
     },
 
     setActiveDiagram: async (diagram) => {
-      set({ ...diagramContext(diagram), documentation: null, comments: [] })
-      const [documentation, comments] = await Promise.all([getDocumentation(diagram.id), listComments(diagram.id)])
-      if (get().activeDiagram?.id === diagram.id) {
-        set({ documentation, comments })
+      set({ ...diagramContext(diagram), documentation: null, comments: [], isLoadingDiagramDetails: true })
+      try {
+        const [documentation, comments] = await Promise.all([getDocumentation(diagram.id), listComments(diagram.id)])
+        if (get().activeDiagram?.id === diagram.id) {
+          set({ documentation, comments })
+        }
+      } finally {
+        if (get().activeDiagram?.id === diagram.id) {
+          set({ isLoadingDiagramDetails: false })
+        }
       }
     },
 
     closeDiagram: () => {
-      requestedDiagramId = null
+      diagramRequest = null
       if (get().isPresentationMode) {
         get().exitPresentation()
       }
@@ -406,6 +429,7 @@ export const useAppStore = create<AppState>((set, get) => {
         presence: EMPTY_PRESENCE,
         saveStatus: 'idle',
         isLoadingDiagram: false,
+        isLoadingDiagramDetails: false,
       })
     },
 
@@ -414,8 +438,9 @@ export const useAppStore = create<AppState>((set, get) => {
       if (current !== null && current.id === diagramId) {
         return
       }
-      requestedDiagramId = diagramId
-      const isCurrentRequest = () => requestedDiagramId === diagramId
+      const request = Symbol(diagramId)
+      diagramRequest = request
+      const isCurrentRequest = () => diagramRequest === request
 
       // Listings carry no canvas, so the diagram itself is always fetched, straight by id.
       set({ isLoadingDiagram: true })
@@ -669,10 +694,18 @@ export const useAppStore = create<AppState>((set, get) => {
 
     loadMembers: async (workspaceId) => {
       if (!authConfig.enabled) {
-        set({ members: [], myRole: null })
+        set({ members: [], myRole: null, isLoadingMembers: false })
         return
       }
-      const members = await listMembers(workspaceId)
+      set({ isLoadingMembers: true })
+      let members: WorkspaceMember[]
+      try {
+        members = await listMembers(workspaceId)
+      } finally {
+        if (get().activeWorkspace?.id === workspaceId) {
+          set({ isLoadingMembers: false })
+        }
+      }
       if (get().activeWorkspace?.id !== workspaceId) {
         return
       }

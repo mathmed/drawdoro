@@ -1,4 +1,4 @@
-import { KeyRound, Loader2, Plus, Trash2 } from 'lucide-react'
+import { CircleAlert, KeyRound, Plus, RotateCw, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { createApiKey, listApiKeys, revokeApiKey } from '../../api/apiKeys'
@@ -8,6 +8,9 @@ import { confirmDialog } from '../../store/useDialogStore'
 import { timeAgo } from '../../utils/format'
 import CopyField from '../ui/CopyField'
 import EmptyState from '../ui/EmptyState'
+import LoadingGate from '../ui/loading/LoadingGate'
+import { ListSkeleton } from '../ui/loading/Skeleton'
+import Spinner from '../ui/loading/Spinner'
 import Modal from '../ui/Modal'
 import '../../styles/history.css'
 
@@ -26,6 +29,10 @@ export function ApiKeyManager({ onCreated }: ApiKeyManagerProps) {
   const [label, setLabel] = useState(DEFAULT_LABEL)
   const [created, setCreated] = useState<CreatedApiKey | null>(null)
   const [isCreating, setIsCreating] = useState(false)
+  const [revokingId, setRevokingId] = useState<string | null>(null)
+  const [loadFailed, setLoadFailed] = useState(false)
+  // Bumped by "Try again" after a failed load.
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     if (!authConfig.enabled) {
@@ -40,13 +47,18 @@ export function ApiKeyManager({ onCreated }: ApiKeyManagerProps) {
       })
       .catch(() => {
         if (active) {
-          setKeys([])
+          setLoadFailed(true)
         }
       })
     return () => {
       active = false
     }
-  }, [])
+  }, [attempt])
+
+  function retryLoad(): void {
+    setLoadFailed(false)
+    setAttempt((count) => count + 1)
+  }
 
   async function handleCreate(): Promise<void> {
     const trimmed = label.trim()
@@ -75,11 +87,48 @@ export function ApiKeyManager({ onCreated }: ApiKeyManagerProps) {
     if (!confirmed) {
       return
     }
-    await revokeApiKey(key.id)
+    setRevokingId(key.id)
+    try {
+      await revokeApiKey(key.id)
+    } finally {
+      setRevokingId(null)
+    }
     setKeys((current) => (current ?? []).filter((item) => item.id !== key.id))
     if (created?.id === key.id) {
       setCreated(null)
     }
+  }
+
+  function renderKeys(loaded: ApiKey[]) {
+    return loaded.length === 0 ? (
+      <EmptyState icon={<KeyRound size={20} />} title="No personal keys yet" />
+    ) : (
+      <ul className="api-key-list reveal">
+        {loaded.map((key) => (
+          <li key={key.id} className="api-key">
+            <KeyRound size={15} className="api-key-icon" />
+            <span className="api-key-body">
+              <span className="api-key-label">{key.label}</span>
+              <span className="api-key-meta">
+                <code>{key.prefix}…</code> · created {timeAgo(key.created_at)} ·{' '}
+                {key.last_used_at === null ? 'never used' : `last used ${timeAgo(key.last_used_at)}`}
+              </span>
+            </span>
+            <button
+              type="button"
+              className="btn btn-ghost btn-icon btn-sm"
+              aria-label={`Revoke ${key.label}`}
+              data-tooltip="Revoke"
+              disabled={revokingId !== null}
+              aria-busy={revokingId === key.id}
+              onClick={() => void handleRevoke(key)}
+            >
+              {revokingId === key.id ? <Spinner size={14} /> : <Trash2 size={14} />}
+            </button>
+          </li>
+        ))}
+      </ul>
+    )
   }
 
   if (!authConfig.enabled) {
@@ -107,8 +156,13 @@ export function ApiKeyManager({ onCreated }: ApiKeyManagerProps) {
           value={label}
           onChange={(event) => setLabel(event.target.value)}
         />
-        <button type="submit" className="btn btn-primary btn-sm" disabled={isCreating || label.trim() === ''}>
-          {isCreating ? <Loader2 size={14} className="spinner" /> : <Plus size={14} />} Generate key
+        <button
+          type="submit"
+          className="btn btn-primary btn-sm"
+          disabled={isCreating || label.trim() === ''}
+          aria-busy={isCreating}
+        >
+          {isCreating ? <Spinner size={14} /> : <Plus size={14} />} Generate key
         </button>
       </form>
 
@@ -119,36 +173,24 @@ export function ApiKeyManager({ onCreated }: ApiKeyManagerProps) {
         </div>
       ) : null}
 
-      {keys === null ? (
-        <div className="full-center" style={{ height: 'auto', padding: 12 }}>
-          <Loader2 size={16} className="spinner" />
-        </div>
-      ) : keys.length === 0 ? (
-        <EmptyState icon={<KeyRound size={20} />} title="No personal keys yet" />
+      {loadFailed ? (
+        <EmptyState
+          icon={<CircleAlert size={20} />}
+          title="Could not load your keys"
+          action={
+            <button type="button" className="btn btn-secondary btn-sm" onClick={retryLoad}>
+              <RotateCw size={13} /> Try again
+            </button>
+          }
+        />
       ) : (
-        <ul className="api-key-list">
-          {keys.map((key) => (
-            <li key={key.id} className="api-key">
-              <KeyRound size={15} className="api-key-icon" />
-              <span className="api-key-body">
-                <span className="api-key-label">{key.label}</span>
-                <span className="api-key-meta">
-                  <code>{key.prefix}…</code> · created {timeAgo(key.created_at)} ·{' '}
-                  {key.last_used_at === null ? 'never used' : `last used ${timeAgo(key.last_used_at)}`}
-                </span>
-              </span>
-              <button
-                type="button"
-                className="btn btn-ghost btn-icon btn-sm"
-                aria-label={`Revoke ${key.label}`}
-                data-tooltip="Revoke"
-                onClick={() => void handleRevoke(key)}
-              >
-                <Trash2 size={14} />
-              </button>
-            </li>
-          ))}
-        </ul>
+        <LoadingGate
+          loading={keys === null}
+          placeholder={<div className="api-key-list-placeholder" />}
+          fallback={<ListSkeleton label="Loading keys" rows={2} avatar="square" className="api-key-skeleton" />}
+        >
+          {() => renderKeys(keys ?? [])}
+        </LoadingGate>
       )}
     </div>
   )
