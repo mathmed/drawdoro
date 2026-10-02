@@ -43,16 +43,35 @@ The frontend needs Node.js 22 or newer. From `frontend/`:
 | `npm run build` | Type check and production build |
 
 Tests live next to the code as `*.test.ts(x)`; shared helpers are in `src/test/`. They cover the pure and critical
-modules (branding, auth session, Zustand stores, formatting and validation utilities) and simple components; the tldraw
-canvas is not unit tested. Tests always run with `VITE_APP_NAME=Test App` (set in `vitest.config.ts`), so they never
+modules (branding, auth session, Zustand stores, formatting and validation utilities), simple components and the loading
+states of the main screens; the tldraw canvas is not unit tested. Tests always run with `VITE_APP_NAME=Test App` (set in `vitest.config.ts`), so they never
 depend on the product name or on a local `.env`.
 
-Coverage thresholds (`vitest.config.ts`) fail the run when coverage drops: a low global floor (10%; about 15% is covered today, since the
-canvas and most views are untested) and stricter per-file floors for the covered modules (90% for the auth session,
+Coverage thresholds (`vitest.config.ts`) fail the run when coverage drops: a low global floor (10%; about 40% is covered today, since the
+canvas and several views are untested) and stricter per-file floors for the covered modules (90% for the auth session,
 branding and utilities; 60% for the stores). Raise them as tests are added.
 
 CI runs the `frontend` job on every pull request and on pushes to `main`: `npm ci`, lint, type check, tests with
 coverage and `vite build`.
+
+### Loading states
+
+Every wait uses the primitives in `frontend/src/components/ui/loading/` (CSS in `src/styles/loading.css`, no animation
+library):
+
+| Primitive | Use it for |
+|---|---|
+| `BrandLoader` | Full-area waits (session check, sign-in, opening a diagram or a shared link): the product logo with a soft halo, an orbiting arc and a sheen, a label, and after 8 s a "taking longer than usual" hint with an optional retry |
+| `LoadingOverlay` | Covers an area with a loader while the content mounts underneath, then fades out (`screen` for the whole viewport) |
+| `LoadingGate` | Swaps content for a fallback (usually a skeleton), with an optional `placeholder` that reserves the room during the delay |
+| `Skeleton`, `SkeletonGroup`, `ListSkeleton` | Placeholders with a shimmer that mirror the real layout (sidebar rows, diagram cards, gallery tiles, lists), so nothing moves when the data arrives |
+| `Spinner` | Pending buttons and small areas; set `aria-busy` on the busy element |
+| `TopProgressBar` | Work that keeps the current content on screen (switching diagrams, refreshing a project) |
+| `CanvasLoadingScreen` | tldraw's `LoadingScreen` slot; takes over seamlessly from a loader already on screen |
+
+`useDelayedVisibility` (in `src/hooks/`) drives them: a loader appears only after 180 ms, so fast loads never flash
+one, and once shown it stays at least 450 ms, so it never flickers. Loaders announce themselves with `role="status"`,
+the decorative blocks are `aria-hidden`, and with `prefers-reduced-motion` every movement becomes a slow fade.
 
 Or run everything with Docker:
 ```sh
@@ -138,7 +157,7 @@ used by `render_diagram`, package names) are brand-neutral; everything people or
 |---|---|---|
 | API | `APP_NAME` (`app/common/settings.py`) | OpenAPI title, error messages such as "hasn't signed in to <name> yet" |
 | MCP server | `APP_NAME` (`mcp/settings.py`) | Server name (slug of the name), description, instructions sent to agents, API error messages |
-| Frontend | `VITE_APP_NAME` (`frontend/src/config/branding.ts`) | Page title, logo wordmark, landing, home, 404 and members texts |
+| Frontend | `VITE_APP_NAME` (`frontend/src/config/branding.ts`) | Page title, logo wordmark, loading screens, landing, home, 404 and members texts |
 | Frontend | `VITE_APP_SLUG` (`frontend/src/config/branding.ts`) | Prefix of the localStorage/sessionStorage keys |
 | Docker compose | `APP_NAME`, `APP_SLUG` (root `.env`) | Passes the name to the three services; names the containers and local database |
 
@@ -147,6 +166,13 @@ Docker build). For example, a fork called CondoDraw sets `APP_NAME=CondoDraw` fo
 `VITE_APP_NAME=CondoDraw` for the frontend build; the storage slug then becomes `condodraw`. Deployment files (manifests,
 workflows, web server config) and the logo artwork (`frontend/public/favicon.svg`, `components/ui/Logo.tsx`) stay
 per fork.
+
+The loading screens are branded the same way: `BrandLoader` (boot, sign-in, opening a diagram or a shared link) draws
+the `Logo` component and, where it shows a name, `branding.name`, so a build with `VITE_APP_NAME=CondoDraw` shows the
+CondoDraw name with no code change. To change the logo a fork replaces the artwork in `components/ui/Logo.tsx` (and
+`public/favicon.svg`); the loaders, the landing page and the headers all pick it up, since none of them draws the mark
+themselves. The loader colours (halo, orbiting arc, progress bar) come from the `--accent` token in
+`frontend/src/styles/tokens.css`.
 
 ## Authentication
 
@@ -200,12 +226,13 @@ frontend/                 React + Vite + TypeScript
     components/presentation/ Fullscreen presentation mode navigating frames
     components/semantic/  Shape properties panel and architecture validation modal
     components/ui/        Design-system primitives: modal, menu, dialogs, toasts, empty states
+    components/ui/loading/ Loading states: brand loader, overlay, skeletons, spinner, top progress bar
     pages/                Landing (sign-in), AuthCallback, Home, Diagram, SharedDiagram, Render (MCP export), NotFound
     auth/                 Cognito managed login: PKCE flow, token storage and refresh
     api/                  Axios client and per-resource API functions
     store/                Zustand stores (app, theme, dialogs, toasts)
     styles/               Design tokens (light/dark) and component styles
-    hooks/                Reusable hooks (shortcuts, realtime, comments, presentation)
+    hooks/                Reusable hooks (shortcuts, realtime, comments, presentation, delayed loader visibility)
     utils/                Pure helpers (validation, export, shape selection/connection)
     shapes/               tldraw shape extensions (rounded edges, custom stroke colours)
     config/               White-label branding (product name, storage key prefix)
