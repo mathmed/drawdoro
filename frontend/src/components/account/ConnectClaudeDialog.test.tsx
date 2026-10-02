@@ -41,4 +41,29 @@ describe('ConnectClaudeDialog', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Claude Desktop' }))
     expect(screen.getByLabelText('Claude Desktop configuration')).toHaveTextContent('"API_KEY": "ddk_full_secret"')
   })
+
+  it('should list the available tools in their own tab and keep the setup', async () => {
+    vi.mocked(createApiKey).mockResolvedValue({
+      id: 'k1',
+      label: 'Claude',
+      prefix: 'ddk_ab12',
+      created_at: '2026-01-01T10:00:00Z',
+      last_used_at: null,
+      secret: 'ddk_full_secret',
+    })
+    render(<ConnectClaudeDialog onClose={vi.fn()} />)
+    await screen.findByText('No personal keys yet')
+    await userEvent.click(screen.getByRole('button', { name: /Generate key/ }))
+    await screen.findByText(/ddk_full_secret/, { selector: 'pre' })
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Available tools' }))
+
+    expect(screen.getByRole('tab', { name: 'Available tools' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('region', { name: 'Personal gallery' })).toBeInTheDocument()
+    expect(screen.getByText('insert_gallery_item')).toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'MCP server URL' })).toBeNull()
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Set up' }))
+    expect(screen.getByLabelText('Claude Code command')).toHaveTextContent('X-API-Key: ddk_full_secret')
+  })
 })

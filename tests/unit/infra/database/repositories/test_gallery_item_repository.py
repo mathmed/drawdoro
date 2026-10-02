@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain.entities.models.gallery_item import GalleryItem
+from app.domain.entities.models.gallery_item import GalleryItem, GalleryItemSummary
 from app.domain.enums.gallery_item_kind import GalleryItemKind
 from app.domain.enums.image_mime_type import ImageMimeType
 from app.infra.database.models.gallery_item import GalleryItemORM
@@ -26,6 +26,11 @@ def _orm(**overrides: object) -> GalleryItemORM:
         "image_data": PNG,
         "image_mime_type": "image/png",
         "thumbnail": PNG,
+        "tags": ["brand"],
+        "description": "Logo",
+        "width": 64.0,
+        "height": 32.0,
+        "size_bytes": 8,
         "created_at": now,
         "updated_at": now,
     }
@@ -63,6 +68,11 @@ async def test_should_persist_new_item(sut: GalleryItemRepositoryImpl, session: 
         kind=GalleryItemKind.IMAGE,
         image_data=PNG,
         image_mime_type=ImageMimeType.PNG,
+        tags=["brand"],
+        description="Logo",
+        width=64,
+        height=32,
+        size_bytes=8,
     )
 
     async def fill_server_defaults(orm: GalleryItemORM) -> None:
@@ -75,6 +85,8 @@ async def test_should_persist_new_item(sut: GalleryItemRepositoryImpl, session: 
     stored: GalleryItemORM = session.add.call_args.args[0]
     assert stored.kind == "image"
     assert stored.image_mime_type == "image/png"
+    assert (stored.tags, stored.description) == (["brand"], "Logo")
+    assert (stored.width, stored.height, stored.size_bytes) == (64, 32, 8)
     assert created.id == item.id
     assert created.image_data == PNG
     session.commit.assert_awaited_once()
@@ -115,15 +127,52 @@ async def test_should_list_summaries_of_owner(
     assert "owner_id IS NULL" in query if owner_id is None else "owner_id =" in query
 
 
-async def test_should_rename_item(sut: GalleryItemRepositoryImpl, session: MagicMock) -> None:
+async def test_should_list_without_thumbnails_when_asked(
+    sut: GalleryItemRepositoryImpl, session: MagicMock
+) -> None:
+    session.execute.return_value = _result([_orm()])
+
+    items = await sut.list_by_owner(OWNER_ID, include_thumbnails=False)
+
+    assert items[0].thumbnail is None
+    assert items[0].tags == ["brand"]
+    assert (items[0].width, items[0].height, items[0].size_bytes) == (64, 32, 8)
+
+
+async def test_should_list_with_thumbnails_by_default(
+    sut: GalleryItemRepositoryImpl, session: MagicMock
+) -> None:
+    session.execute.return_value = _result([_orm()])
+
+    items = await sut.list_by_owner(OWNER_ID)
+
+    assert items[0].thumbnail == PNG
+
+
+async def test_should_update_name_tags_and_description(
+    sut: GalleryItemRepositoryImpl, session: MagicMock
+) -> None:
     orm = _orm()
     session.execute.return_value = _result(orm)
+    summary = GalleryItemSummary(
+        id=orm.id, name="New name", kind=GalleryItemKind.IMAGE, tags=["a", "b"], description=None
+    )
 
-    summary = await sut.rename(orm.id, "New name")
+    updated = await sut.update_details(summary)
 
-    assert orm.name == "New name"
-    assert summary.name == "New name"
+    assert (orm.name, orm.tags, orm.description) == ("New name", ["a", "b"], None)
+    assert (updated.name, updated.tags, updated.description) == ("New name", ["a", "b"], None)
     session.commit.assert_awaited_once()
+
+
+async def test_should_map_rows_without_tags(
+    sut: GalleryItemRepositoryImpl, session: MagicMock
+) -> None:
+    session.execute.return_value = _result(_orm(tags=None))
+
+    item = await sut.get_by_id(uuid.uuid4())
+
+    assert item is not None and item.tags == []
 
 
 async def test_should_delete_item(sut: GalleryItemRepositoryImpl, session: MagicMock) -> None:

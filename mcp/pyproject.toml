@@ -64,7 +64,7 @@ name = "Tools: tool groups -> diagrams -> canvas -> api"
 type = "layers"
 containers = ["tools"]
 layers = [
-    "comments | documentation | folders | projects | render | revisions | workspaces",
+    "comments | documentation | folders | gallery | projects | render | revisions | workspaces",
     "diagrams",
     "canvas",
     "api",
@@ -81,6 +81,7 @@ source_modules = [
     "tools.diagrams",
     "tools.documentation",
     "tools.folders",
+    "tools.gallery",
     "tools.projects",
     "tools.render",
     "tools.revisions",

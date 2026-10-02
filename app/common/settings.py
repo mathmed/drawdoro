@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     # Personal gallery limits. Images are stored in Postgres, so keep them small.
     gallery_max_image_bytes: int = 2 * 1024 * 1024
     gallery_max_shapes_bytes: int = 5 * 1024 * 1024
+    # Inserting a gallery item into a diagram fails when its canvas would grow beyond this.
+    gallery_max_canvas_bytes: int = Field(default=20 * 1024 * 1024, gt=0)
     # Diagram history: a person's saves within this many minutes share one revision.
     revision_interval_minutes: int = Field(default=10, ge=0)
     # Revisions older than this many days are deleted (0 keeps them regardless of age).

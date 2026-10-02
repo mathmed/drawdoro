@@ -125,9 +125,16 @@ export interface GalleryItemSummary {
   id: string
   name: string
   kind: GalleryItemKind
+  // Lower-case words that make the item findable; empty for items saved before tags existed.
+  tags: string[]
+  description: string | null
   image_mime_type: string | null
   // Base64 PNG preview rendered by the client when the item was saved.
   thumbnail_base64: string | null
+  // Pixels for images, canvas units for shapes; null for items saved before they were measured.
+  width: number | null
+  height: number | null
+  size_bytes: number | null
   created_at: string
   updated_at: string
 }
@@ -144,6 +151,15 @@ export interface CreateGalleryItemInput {
   content?: Record<string, unknown>
   image_base64?: string
   thumbnail_base64?: string | null
+  tags?: string[]
+  description?: string | null
+}
+
+// Only the fields given change; an empty description or tag list clears it.
+export interface GalleryItemChanges {
+  name?: string
+  tags?: string[]
+  description?: string
 }
 
 export type RevisionKind = 'edit' | 'restore' | 'baseline'

@@ -2,8 +2,9 @@ from typing import Any
 
 import pytest
 from mcp.server.mcpserver.exceptions import ToolError
-from tests.tldraw_records import rich_text
 from tools.canvas import Canvas, ShapeOutline, indexes_above, shape_text
+
+from tests.tldraw_records import rich_text
 
 
 @pytest.fixture

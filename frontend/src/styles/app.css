@@ -2167,3 +2167,71 @@ button.validation-item:hover {
 .comment-avatar.presence-agent {
   color: #fff;
 }
+
+/* Gallery tags */
+.gallery-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.gallery-tile-tags {
+  padding: 0 6px 6px;
+}
+
+.gallery-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 100%;
+  height: 18px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--neutral-soft);
+  color: var(--text-muted);
+  font-size: 10.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+button.gallery-tag {
+  cursor: pointer;
+}
+
+button.gallery-tag:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.gallery-tag-more {
+  font-size: 10.5px;
+  color: var(--text-subtle);
+  line-height: 18px;
+}
+
+.gallery-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.gallery-item-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.gallery-item-form .gallery-tags {
+  margin-top: 6px;
+}
+
+.field-error {
+  font-size: 12.5px;
+  color: var(--danger);
+}

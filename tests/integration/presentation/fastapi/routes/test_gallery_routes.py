@@ -19,16 +19,16 @@ from app.domain.usecases.gallery.create_gallery_item import CreateGalleryItem
 from app.domain.usecases.gallery.delete_gallery_item import DeleteGalleryItem
 from app.domain.usecases.gallery.get_gallery_item import GetGalleryItem
 from app.domain.usecases.gallery.list_gallery_items import ListGalleryItems
-from app.domain.usecases.gallery.rename_gallery_item import RenameGalleryItem
+from app.domain.usecases.gallery.update_gallery_item import UpdateGalleryItem
 from app.main.main import app
 from app.presentation.factories.gallery_factories import (
     create_gallery_item_factory,
     delete_gallery_item_factory,
     get_gallery_item_factory,
     list_gallery_items_factory,
-    rename_gallery_item_factory,
+    update_gallery_item_factory,
 )
-from app.presentation.fastapi.dependencies.current_user import get_current_user
+from app.presentation.fastapi.dependencies.current_user import Caller, get_caller
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 8
 USER = User(email="ada@example.com", name="Ada")
@@ -51,7 +51,7 @@ def test_should_list_items_of_the_signed_in_user(client: TestClient) -> None:
     use_case = AsyncMock(spec=ListGalleryItems)
     use_case.execute.return_value = [summary]
     _override(list_gallery_items_factory, use_case)
-    app.dependency_overrides[get_current_user] = lambda: USER
+    app.dependency_overrides[get_caller] = lambda: Caller(user=USER)
 
     response = client.get("/gallery")
 
@@ -60,7 +60,47 @@ def test_should_list_items_of_the_signed_in_user(client: TestClient) -> None:
     assert body[0]["name"] == "Logo"
     assert base64.b64decode(body[0]["thumbnail_base64"]) == PNG
     assert "image_base64" not in body[0]
-    assert use_case.execute.await_args.args[0].owner_id == USER.id
+    assert (body[0]["tags"], body[0]["description"], body[0]["width"]) == ([], None, None)
+    params = use_case.execute.await_args.args[0]
+    assert (params.owner_id, params.query, params.kind, params.tag, params.limit) == (
+        USER.id,
+        None,
+        None,
+        None,
+        None,
+    )
+    assert params.include_thumbnails is True
+
+
+def test_should_pass_the_search_to_the_listing(client: TestClient) -> None:
+    use_case = AsyncMock(spec=ListGalleryItems)
+    use_case.execute.return_value = []
+    _override(list_gallery_items_factory, use_case)
+
+    response = client.get(
+        "/gallery",
+        params={
+            "query": "logo",
+            "kind": "image",
+            "tag": "k8s",
+            "limit": 5,
+            "include_thumbnails": False,
+        },
+    )
+
+    assert response.status_code == 200
+    params = use_case.execute.await_args.args[0]
+    assert (params.query, params.kind, params.tag, params.limit) == ("logo", "image", "k8s", 5)
+    assert params.include_thumbnails is False
+
+
+@pytest.mark.parametrize(
+    "query", [{"limit": 0}, {"limit": 201}, {"kind": "video"}, {"query": "x" * 201}]
+)
+def test_should_reject_invalid_listing_parameters(
+    client: TestClient, query: dict[str, str | int]
+) -> None:
+    assert client.get("/gallery", params=query).status_code == 422
 
 
 def test_should_create_image_item_from_base64(client: TestClient) -> None:
@@ -90,6 +130,30 @@ def test_should_create_image_item_from_base64(client: TestClient) -> None:
     assert params.image_data == PNG
     assert params.thumbnail == PNG
     assert params.owner_id is None
+    assert (params.tags, params.description) == ([], None)
+
+
+def test_should_create_an_item_with_tags_and_description(client: TestClient) -> None:
+    item = GalleryItem(name="Logo", kind=GalleryItemKind.IMAGE, image_data=PNG, tags=["brand"])
+    use_case = AsyncMock(spec=CreateGalleryItem)
+    use_case.execute.return_value = item
+    _override(create_gallery_item_factory, use_case)
+
+    response = client.post(
+        "/gallery",
+        json={
+            "name": "Logo",
+            "kind": "image",
+            "image_base64": base64.b64encode(PNG).decode(),
+            "tags": ["Brand"],
+            "description": "Main logo",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["tags"] == ["brand"]
+    params = use_case.execute.await_args.args[0]
+    assert (params.tags, params.description) == (["Brand"], "Main logo")
 
 
 def test_should_create_shapes_item(client: TestClient) -> None:
@@ -150,14 +214,49 @@ def test_should_return_404_for_items_of_other_users(client: TestClient) -> None:
 
 def test_should_rename_item(client: TestClient) -> None:
     summary = GalleryItemSummary(name="Renamed", kind=GalleryItemKind.SHAPES)
-    use_case = AsyncMock(spec=RenameGalleryItem)
+    use_case = AsyncMock(spec=UpdateGalleryItem)
     use_case.execute.return_value = summary
-    _override(rename_gallery_item_factory, use_case)
+    _override(update_gallery_item_factory, use_case)
 
     response = client.patch(f"/gallery/{summary.id}", json={"name": "Renamed"})
 
     assert response.status_code == 200
     assert response.json()["name"] == "Renamed"
+    params = use_case.execute.await_args.args[0]
+    assert (params.name, params.tags, params.description) == ("Renamed", None, None)
+
+
+def test_should_update_tags_and_description(client: TestClient) -> None:
+    summary = GalleryItemSummary(
+        name="Logo", kind=GalleryItemKind.IMAGE, tags=["k8s"], description="Wheel"
+    )
+    use_case = AsyncMock(spec=UpdateGalleryItem)
+    use_case.execute.return_value = summary
+    _override(update_gallery_item_factory, use_case)
+
+    response = client.patch(
+        f"/gallery/{summary.id}", json={"tags": ["K8s"], "description": "Wheel"}
+    )
+
+    assert response.status_code == 200
+    assert (response.json()["tags"], response.json()["description"]) == (["k8s"], "Wheel")
+    params = use_case.execute.await_args.args[0]
+    assert (params.name, params.tags, params.description) == (None, ["K8s"], "Wheel")
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"tags": ["x"] * 21},
+        {"tags": ["x" * 65]},
+        {"description": "x" * 501},
+        {"name": ""},
+        {"tags": "k8s"},
+    ],
+)
+def test_should_reject_oversized_updates(client: TestClient, body: dict[str, object]) -> None:
+    response = client.patch(f"/gallery/{uuid.uuid4()}", json=body)
+    assert response.status_code == 422
 
 
 def test_should_delete_item(client: TestClient) -> None:

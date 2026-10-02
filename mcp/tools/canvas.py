@@ -168,7 +168,7 @@ class Canvas:
     ) -> ShapeOutline:
         props: JsonObject = record.get("props", {})
         meta: JsonObject = record.get("meta", {})
-        width, height = _size(props)
+        width, height = shape_size(props)
         parent = str(record.get("parentId", ""))
         font_size = meta.get("fontSize")
         return ShapeOutline(
@@ -237,7 +237,7 @@ def _inline(node: JsonObject) -> str:
     return text if isinstance(text, str) else ""
 
 
-def _size(props: JsonObject) -> tuple[int | None, int | None]:
+def shape_size(props: JsonObject) -> tuple[int | None, int | None]:
     points = props.get("points")
     if isinstance(points, dict) and points:
         xs = [point.get("x", 0) for point in points.values()]

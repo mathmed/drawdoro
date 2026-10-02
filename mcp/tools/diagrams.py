@@ -220,6 +220,9 @@ class DiagramTools:
         People with the diagram open see the change right away. Check the result with
         render_diagram.
 
+        Before drawing a logo, an icon or a component the user may have saved, look for it with
+        list_gallery_items and place it with insert_gallery_item instead.
+
         Args:
             diagram_id: Diagram to edit.
             upsert: tldraw records to create or change, each with its "id". An id already in the

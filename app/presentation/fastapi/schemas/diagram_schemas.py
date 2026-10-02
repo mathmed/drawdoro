@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-REVISION_SUMMARY_MAX_LENGTH = 500
+from app.domain.constants.revisions import REVISION_SUMMARY_MAX_LENGTH
 
 
 class CreateDiagramRequest(BaseModel):
