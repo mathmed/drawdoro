@@ -15,6 +15,15 @@ export function useDelayedVisibility(
   { delayMs = LOADER_DELAY_MS, minVisibleMs = LOADER_MIN_VISIBLE_MS }: DelayedVisibilityOptions = {},
 ): boolean {
   const [visible, setVisible] = useState(() => active && delayMs <= 0)
+  // Whether the loader was rendered while the work was still running. The delay timer can fire after
+  // the work ended but before React rendered that; such a late show must not pop a loader over content.
+  const [shownWhileActive, setShownWhileActive] = useState(visible)
+  if (active && visible && !shownWhileActive) {
+    setShownWhileActive(true)
+  }
+  if (!visible && shownWhileActive) {
+    setShownWhileActive(false)
+  }
   const shownAt = useRef<number | null>(null)
 
   useEffect(() => {
@@ -42,5 +51,5 @@ export function useDelayedVisibility(
     return undefined
   }, [active, visible, delayMs, minVisibleMs])
 
-  return visible
+  return visible && (active || shownWhileActive)
 }

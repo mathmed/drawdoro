@@ -1987,13 +1987,6 @@ button.validation-item:hover {
   padding-left: 28px;
 }
 
-.gallery-status {
-  gap: 8px;
-  padding: 32px 0;
-  font-size: 13px;
-  color: var(--text-muted);
-}
-
 .gallery-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));

@@ -464,3 +464,81 @@
   justify-content: center;
   gap: 8px;
 }
+
+/* Overview skeleton: same boxes as the project header and diagram cards */
+.home-header-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.diagram-card-skeleton {
+  pointer-events: none;
+}
+
+/* Sidebar skeletons */
+.project-list-skeleton .tree-row,
+.tree-skeleton {
+  pointer-events: none;
+}
+
+.workspace-switcher-name .skeleton {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* Gallery tiles standing in for items that load or images being added */
+.gallery-tile-skeleton {
+  pointer-events: none;
+}
+
+.gallery-tile-skeleton .gallery-tile-preview {
+  padding: 0;
+  cursor: default;
+}
+
+.gallery-tile-skeleton .gallery-tile-footer {
+  height: 37px;
+}
+
+/* History preview while a version loads, or when it could not */
+.revision-preview-failed {
+  flex-direction: column;
+  gap: 6px;
+}
+
+.revision-preview-failed .btn {
+  font-size: 12px;
+}
+
+/* Documentation editor skeleton */
+.docs-skeleton {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.docs-skeleton .skeleton-group-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.docs-skeleton-toolbar {
+  display: flex;
+  gap: 8px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.docs-skeleton-text {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 14px;
+}
+
+.docs-skeleton-gap {
+  height: 6px;
+}

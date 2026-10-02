@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useDebounce } from '../../hooks/useDebounce'
 import { useAppStore } from '../../store/useAppStore'
 import { useThemeStore } from '../../store/useThemeStore'
+import LoadingGate from '../ui/loading/LoadingGate'
+import { Skeleton, SkeletonGroup } from '../ui/loading/Skeleton'
 
 const PLACEHOLDER = `# Overview
 
@@ -32,11 +34,37 @@ const TOOLBAR = [
   commands.table,
 ]
 
+const SKELETON_LINES = ['42%', '92%', '86%', '64%', '0', '36%', '88%', '72%']
+
+// Mirrors the editor (toolbar and text) so nothing moves when the page arrives.
+function DocsSkeleton() {
+  return (
+    <SkeletonGroup label="Loading documentation" className="docs-skeleton">
+      <div className="docs-skeleton-toolbar">
+        {Array.from({ length: 7 }, (_, index) => (
+          <Skeleton key={index} width={18} height={18} radius={4} />
+        ))}
+      </div>
+      <div className="docs-skeleton-text">
+        {SKELETON_LINES.map((width, index) =>
+          width === '0' ? (
+            <span key={index} className="docs-skeleton-gap" />
+          ) : (
+            <Skeleton key={index} className="skeleton-line" width={width} height={index === 0 || index === 5 ? 14 : 10} />
+          ),
+        )}
+      </div>
+    </SkeletonGroup>
+  )
+}
+
 export default function DocsPanel() {
   const documentation = useAppStore((state) => state.documentation)
   const activeDiagram = useAppStore((state) => state.activeDiagram)
   const saveDocumentation = useAppStore((state) => state.saveDocumentation)
   const theme = useThemeStore((state) => state.resolved)
+  // Until the page arrives the editor is not shown, so nothing typed can be overwritten by it.
+  const isLoading = useAppStore((state) => state.isLoadingDiagramDetails && state.documentation === null)
 
   const [content, setContent] = useState(documentation?.content ?? '')
   const [mode, setMode] = useState<'write' | 'preview'>('write')
@@ -70,28 +98,30 @@ export default function DocsPanel() {
           </button>
         </div>
       </div>
-      {mode === 'write' ? (
-        <div className="docs-editor" data-color-mode={theme}>
-          <MDEditor
-            value={content}
-            onChange={(value) => setContent(value ?? '')}
-            height="100%"
-            preview="edit"
-            visibleDragbar={false}
-            commands={TOOLBAR}
-            extraCommands={[]}
-            textareaProps={{ placeholder: PLACEHOLDER }}
-          />
-        </div>
-      ) : (
-        <div className="docs-preview scroll" data-color-mode={theme}>
-          {content.trim() === '' ? (
-            <p style={{ color: 'var(--text-subtle)', fontSize: 13 }}>Nothing written yet.</p>
-          ) : (
-            <MDEditor.Markdown source={content} />
-          )}
-        </div>
-      )}
+      <LoadingGate loading={isLoading} fallback={<DocsSkeleton />}>
+        {mode === 'write' ? (
+          <div className="docs-editor" data-color-mode={theme}>
+            <MDEditor
+              value={content}
+              onChange={(value) => setContent(value ?? '')}
+              height="100%"
+              preview="edit"
+              visibleDragbar={false}
+              commands={TOOLBAR}
+              extraCommands={[]}
+              textareaProps={{ placeholder: PLACEHOLDER }}
+            />
+          </div>
+        ) : (
+          <div className="docs-preview scroll" data-color-mode={theme}>
+            {content.trim() === '' ? (
+              <p style={{ color: 'var(--text-subtle)', fontSize: 13 }}>Nothing written yet.</p>
+            ) : (
+              <MDEditor.Markdown source={content} />
+            )}
+          </div>
+        )}
+      </LoadingGate>
     </>
   )
 }

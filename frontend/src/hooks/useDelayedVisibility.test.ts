@@ -1,4 +1,5 @@
 import { act, renderHook } from '@testing-library/react'
+import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { LOADER_DELAY_MS, LOADER_MIN_VISIBLE_MS, useDelayedVisibility } from './useDelayedVisibility'
@@ -69,6 +70,26 @@ describe('useDelayedVisibility', () => {
     act(() => vi.advanceTimersByTime(LOADER_MIN_VISIBLE_MS * 2))
 
     expect(sut.result.current).toBe(true)
+  })
+
+  it('should not pop up when its timer fires after the work ended but before React rendered it', () => {
+    let finish!: () => void
+    function useSut() {
+      const [isActive, setIsActive] = useState(true)
+      finish = () => setIsActive(false)
+      return useDelayedVisibility(isActive)
+    }
+    const sut = renderHook(() => useSut())
+
+    act(() => {
+      // Both updates land in the same batch, the timer's show queued after the work ended.
+      finish()
+      vi.advanceTimersByTime(LOADER_DELAY_MS)
+    })
+
+    expect(sut.result.current).toBe(false)
+    act(() => vi.advanceTimersByTime(LOADER_MIN_VISIBLE_MS))
+    expect(sut.result.current).toBe(false)
   })
 
   it('should show straight away without a delay', () => {
