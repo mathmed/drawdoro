@@ -485,16 +485,20 @@ editor's *Gallery* panel. It is personal: every route works on the caller's own 
 `404`, and the shared service key (no owner) gets `403` with a message asking for a personal key. With
 `AUTH_ENABLED=false` the items without owner form one shared gallery.
 
-Agents reach it with a personal key: `list_gallery_items` (search by name, tag or description, filter by kind; never
-image data), `get_gallery_item` (what a "shapes" item contains, or an image's size), `update_gallery_item` (name,
-tags, description) and `insert_gallery_item`. Names, tags, descriptions and texts come in `untrusted_user_content`
-/ `untrusted_text` next to a `notice` saying they are data, not instructions.
+Agents reach it with a personal key: `list_gallery_items` (search by name, tag or description, filter by kind, up to
+100 items per call; never image data), `get_gallery_item` (what a "shapes" item contains, or an image's size),
+`update_gallery_item` (name, tags, description) and `insert_gallery_item`. The tool descriptions and the server
+instructions tell the agent to look in the gallery before drawing a logo, an icon or a component from scratch.
+Names, tags, descriptions and texts come in `untrusted_user_content` / `untrusted_text` next to a `notice` saying
+they are data, not instructions.
 
 Insertion runs in the API (`POST /diagrams/{id}/gallery-insertions`), so people and agents share the same rules: it
 needs the editor role in the diagram's workspace, copies every shape, binding and asset with new ids (arrows stay
 connected, nothing is overwritten), keeps the layout, places the copy where asked without covering shapes, refuses
 items whose record versions differ from the diagram's tldraw schema (the server doesn't migrate records), and is recorded in the history (as the agent, with the
-person it works for) and pushed to open editors. Images are embedded in the canvas as a `data:` URL built from the
+person it works for) and pushed to open editors. Positions must be finite and within a billion units of the origin,
+the scale between 0.1 and 10, and the diagram must stay within 4000 shapes and `GALLERY_MAX_CANVAS_BYTES`; items whose
+shapes repeat an id or don't all hang from a top-level shape are refused rather than copied as a broken tree. Images are embedded in the canvas as a `data:` URL built from the
 stored bytes, whose type was detected from their content on upload, so no external URL is ever fetched or stored.
 
 ### Available tools
