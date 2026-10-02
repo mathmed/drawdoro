@@ -180,7 +180,8 @@ def test_should_copy_assets_with_new_ids_and_reuse_identical_ones() -> None:
         record["props"]["assetId"] for record in plan.records if record["typeName"] == "shape"
     }
     assert [asset["props"]["src"] for asset in assets] == ["data:image/png;base64,BBBB"]
-    assert assets[0]["id"].startswith("asset:n")
+    # Three shapes took n1 to n3; the old id "asset:new" must not survive the copy.
+    assert assets[0]["id"] == "asset:n4"
     assert shapes == {"asset:there", assets[0]["id"], None}
 
 
