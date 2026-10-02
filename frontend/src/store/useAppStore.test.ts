@@ -126,6 +126,42 @@ describe('workspace and project selection', () => {
     expect(state.activeProject?.id).toBe('p2')
   })
 
+  it('should flag the project list as loading while a workspace opens', async () => {
+    const slow = deferred<Project[]>()
+    vi.mocked(listProjects).mockReturnValue(slow.promise)
+
+    const pending = useAppStore.getState().setActiveWorkspace(workspace('w1'))
+
+    expect(useAppStore.getState()).toMatchObject({ projects: [], isLoadingProjects: true })
+    slow.resolve([])
+    await pending
+    expect(useAppStore.getState().isLoadingProjects).toBe(false)
+  })
+
+  it('should stop loading the project list when it fails', async () => {
+    vi.mocked(listProjects).mockRejectedValue(new Error('offline'))
+
+    await expect(useAppStore.getState().setActiveWorkspace(workspace('w1'))).rejects.toThrow('offline')
+
+    expect(useAppStore.getState().isLoadingProjects).toBe(false)
+  })
+
+  it('should keep the newer workspace loading when an older list arrives', async () => {
+    const slow = deferred<Project[]>()
+    const newer = deferred<Project[]>()
+    vi.mocked(listProjects).mockImplementation((id) => (id === 'w1' ? slow.promise : newer.promise))
+
+    const first = useAppStore.getState().setActiveWorkspace(workspace('w1'))
+    const second = useAppStore.getState().setActiveWorkspace(workspace('w2'))
+    slow.resolve([project('p1', 'w1')])
+    await first
+
+    expect(useAppStore.getState().isLoadingProjects).toBe(true)
+    newer.resolve([])
+    await second
+    expect(useAppStore.getState().isLoadingProjects).toBe(false)
+  })
+
   it('should clear the previous project tree right away when switching project', async () => {
     useAppStore.setState({ activeProject: project('p1'), folders: [{ id: 'f1', project_id: 'p1', parent_folder_id: null, name: 'Old' }] })
     const slow = deferred<ProjectTree>()
@@ -331,6 +367,90 @@ describe('opening diagrams', () => {
     expect(useAppStore.getState().documentation).toBeNull()
   })
 
+  it('should flag the documentation and comments as loading until they arrive', async () => {
+    const slow = deferred<never>()
+    vi.mocked(getDocumentation).mockReturnValueOnce(slow.promise)
+
+    const pending = useAppStore.getState().setActiveDiagram(diagram())
+
+    expect(useAppStore.getState().isLoadingDiagramDetails).toBe(true)
+    slow.resolve(null as never)
+    await pending
+    expect(useAppStore.getState().isLoadingDiagramDetails).toBe(false)
+  })
+
+  it('should stop loading the details when they fail', async () => {
+    vi.mocked(listComments).mockRejectedValueOnce(new Error('offline'))
+
+    await expect(useAppStore.getState().setActiveDiagram(diagram())).rejects.toThrow('offline')
+
+    expect(useAppStore.getState().isLoadingDiagramDetails).toBe(false)
+  })
+
+  it('should leave the details of a newer diagram loading when an older one settles', async () => {
+    const slow = deferred<never>()
+    const newer = deferred<never>()
+    vi.mocked(getDocumentation).mockReturnValueOnce(slow.promise).mockReturnValueOnce(newer.promise)
+
+    const first = useAppStore.getState().setActiveDiagram(diagram())
+    const second = useAppStore.getState().setActiveDiagram(diagram({ id: 'd2' }))
+    slow.resolve(null as never)
+    await first
+
+    expect(useAppStore.getState().isLoadingDiagramDetails).toBe(true)
+    newer.resolve(null as never)
+    await second
+    expect(useAppStore.getState().isLoadingDiagramDetails).toBe(false)
+  })
+
+  it('should stop loading the details when the diagram is closed', () => {
+    useAppStore.setState({ activeDiagram: diagram(), isLoadingDiagramDetails: true })
+
+    useAppStore.getState().closeDiagram()
+
+    expect(useAppStore.getState().isLoadingDiagramDetails).toBe(false)
+  })
+
+  it('should apply only the latest attempt when the same diagram is requested again', async () => {
+    useAppStore.setState({ activeProject: project('p1') })
+    const firstAttempt = deferred<Diagram>()
+    const retry = deferred<Diagram>()
+    vi.mocked(getDiagramById).mockReturnValueOnce(firstAttempt.promise).mockReturnValueOnce(retry.promise)
+
+    const first = useAppStore.getState().loadDiagram('d1')
+    const second = useAppStore.getState().loadDiagram('d1')
+    firstAttempt.resolve(diagram({ name: 'Stale' }))
+    await first
+
+    expect(useAppStore.getState()).toMatchObject({ activeDiagram: null, isLoadingDiagram: true })
+    retry.resolve(diagram({ name: 'Fresh' }))
+    await second
+    expect(useAppStore.getState().activeDiagram?.name).toBe('Fresh')
+    expect(useAppStore.getState().isLoadingDiagram).toBe(false)
+    expect(getDocumentation).toHaveBeenCalledTimes(1)
+  })
+
+  it('should stop loading when the diagram cannot be fetched', async () => {
+    vi.mocked(getDiagramById).mockRejectedValueOnce(new Error('offline'))
+
+    await useAppStore.getState().loadDiagram('d1')
+
+    expect(useAppStore.getState()).toMatchObject({ activeDiagram: null, isLoadingDiagram: false })
+  })
+
+  it('should drop a load that finishes after the diagram was closed', async () => {
+    useAppStore.setState({ activeProject: project('p1') })
+    const slow = deferred<Diagram>()
+    vi.mocked(getDiagramById).mockReturnValueOnce(slow.promise)
+
+    const pending = useAppStore.getState().loadDiagram('d1')
+    useAppStore.getState().closeDiagram()
+    slow.resolve(diagram())
+    await pending
+
+    expect(useAppStore.getState()).toMatchObject({ activeDiagram: null, isLoadingDiagram: false })
+  })
+
   it('should find a diagram by id across workspaces on direct navigation', async () => {
     vi.mocked(listWorkspaces).mockResolvedValue([workspace('w1'), workspace('w2')])
     vi.mocked(listProjects).mockImplementation(async (id) => (id === 'w1' ? [project('p1', 'w1')] : [project('p2', 'w2')]))
@@ -389,6 +509,30 @@ describe('members', () => {
 
     expect(useAppStore.getState().myRole).toBe('editor')
     expect(useAppStore.getState().members).toHaveLength(2)
+  })
+
+  it('should flag members as loading until the list arrives', async () => {
+    authConfig.enabled = true
+    useAppStore.setState({ activeWorkspace: workspace('w1') })
+    const slow = deferred<WorkspaceMember[]>()
+    vi.mocked(listMembers).mockReturnValue(slow.promise)
+
+    const pending = useAppStore.getState().loadMembers('w1')
+
+    expect(useAppStore.getState().isLoadingMembers).toBe(true)
+    slow.resolve([member()])
+    await pending
+    expect(useAppStore.getState().isLoadingMembers).toBe(false)
+  })
+
+  it('should stop loading members when the list fails', async () => {
+    authConfig.enabled = true
+    useAppStore.setState({ activeWorkspace: workspace('w1') })
+    vi.mocked(listMembers).mockRejectedValue(new Error('offline'))
+
+    await expect(useAppStore.getState().loadMembers('w1')).rejects.toThrow('offline')
+
+    expect(useAppStore.getState().isLoadingMembers).toBe(false)
   })
 
   it('should drop members that arrive after switching workspace', async () => {
