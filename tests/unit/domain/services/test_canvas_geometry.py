@@ -89,6 +89,22 @@ def test_should_survive_a_parent_cycle() -> None:
     assert page_bounds(store, "shape:a") == Bounds(6, 6, 16, 16)
 
 
+# The loop is between two ancestors, not back to the shape itself.
+def test_should_survive_a_parent_cycle_above_the_shape() -> None:
+    store = {
+        "shape:a": geo("shape:a", 1, 1, 10, 10, parent="shape:b"),
+        "shape:b": geo("shape:b", 10, 10, 10, 10, parent="shape:c"),
+        "shape:c": geo("shape:c", 100, 100, 10, 10, parent="shape:b"),
+    }
+    assert page_bounds(store, "shape:a") == Bounds(111, 111, 121, 121)
+
+
+def test_should_size_unreadable_text_and_drawings() -> None:
+    assert local_bounds(shape("shape:t", "text")) == Bounds(0, 0, 100, 40)
+    draw = shape("shape:d", "draw", segments=[{"type": "free"}, {"points": [{"x": 4, "y": 2}]}])
+    assert local_bounds(draw) == Bounds(4, 2, 4, 2)
+
+
 def test_should_cut_a_loop_of_groups_inside_each_other() -> None:
     records = [
         group("shape:a", 10, 10) | {"parentId": "shape:b"},

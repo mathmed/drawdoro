@@ -28,6 +28,13 @@ def test_should_need_every_word_to_match(text: str) -> None:
     assert not matches_gallery_search(LOGO, GallerySearch(text=text))
 
 
+# Name, description and tags are searched as separate words, never glued together.
+def test_should_not_match_text_that_only_spans_the_fields() -> None:
+    bare = GalleryItemSummary(name="Box", kind=GalleryItemKind.SHAPES, tags=["x"])
+    assert not matches_gallery_search(bare, GallerySearch(text="xx"))
+    assert not matches_gallery_search(bare, GallerySearch(text="boxx"))
+
+
 def test_should_filter_by_kind() -> None:
     assert matches_gallery_search(LOGO, GallerySearch(kind=GalleryItemKind.IMAGE))
     assert not matches_gallery_search(LOGO, GallerySearch(kind=GalleryItemKind.SHAPES))

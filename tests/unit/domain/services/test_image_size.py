@@ -85,9 +85,10 @@ def test_should_read_a_jpeg_frame_that_ends_the_data() -> None:
     assert read_image_size(b"\xff\xd8" + frame, ImageMimeType.JPEG) == (1024, 768)
 
 
-def test_should_skip_any_number_of_jpeg_padding_bytes() -> None:
+@pytest.mark.parametrize("padding", [1, 2, 3])
+def test_should_skip_any_number_of_jpeg_padding_bytes(padding: int) -> None:
     frame = b"\xff\xc0" + struct.pack(">HBHH", 17, 8, 768, 1024) + b"\x00" * 10
-    data = b"\xff\xd8" + b"\xff" * 3 + frame[1:]
+    data = b"\xff\xd8" + b"\xff" * padding + frame[1:]
     assert read_image_size(data, ImageMimeType.JPEG) == (1024, 768)
 
 

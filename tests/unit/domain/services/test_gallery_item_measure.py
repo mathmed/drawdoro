@@ -36,6 +36,12 @@ def test_should_measure_groups_that_loop_into_each_other() -> None:
     assert (measure.width, measure.height) == (100, 100)
 
 
+def test_should_find_roots_by_parent_when_the_saved_list_is_empty() -> None:
+    saved = content([geo("shape:a", 0, 0, 30, 10)], roots=[])
+    assert [shape["id"] for shape in content_root_shapes(saved)] == ["shape:a"]
+    assert (measure_shapes(saved).width, measure_shapes(saved).height) == (30, 10)
+
+
 def test_should_round_the_measured_size() -> None:
     measure = measure_shapes(content([geo("shape:a", 0, 0, 10.123, 5.456)]))
     assert (measure.width, measure.height) == (10.12, 5.46)
@@ -60,6 +66,17 @@ def test_should_measure_images_from_their_header() -> None:
     assert (measure.width, measure.height, measure.size_bytes) == (64, 32, len(data))
     unreadable = measure_image(b"\x89PNG\r\n\x1a\n", ImageMimeType.PNG)
     assert (unreadable.width, unreadable.height, unreadable.size_bytes) == (None, None, 8)
+
+
+# Only an image with its type is measured as one; stray bytes on a shapes item are ignored.
+def test_should_measure_an_item_without_image_type_by_its_shapes() -> None:
+    item = GalleryItem(
+        name="s",
+        kind=GalleryItemKind.SHAPES,
+        content=content([geo("shape:a", 0, 0, 30, 10)]),
+        image_data=b"not an image",
+    )
+    assert (measure_gallery_item(item).width, measure_gallery_item(item).height) == (30, 10)
 
 
 def test_should_measure_an_item_by_its_kind() -> None:

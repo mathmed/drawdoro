@@ -60,7 +60,8 @@ def test_should_refuse_bindings_and_assets_with_other_versions() -> None:
 
 
 def test_should_refuse_content_without_a_schema() -> None:
-    with pytest.raises(InvalidInputError, match="no editor schema"):
+    message = "This gallery item has no editor schema, so it can't be inserted"
+    with pytest.raises(InvalidInputError, match=f"^{message}$"):
         ensure_same_versions(None, SCHEMA, [geo("shape:a")])
 
 
@@ -86,6 +87,16 @@ def test_should_pick_the_first_page_by_index() -> None:
     assert first_page_id(store) == "page:a"
 
 
+# A page saved without an index sorts before every indexed one, as an empty index would.
+def test_should_pick_a_page_without_index_first() -> None:
+    store = {
+        "page:indexed": {"id": "page:indexed", "typeName": "page", "index": "A1"},
+        "page:bare": {"id": "page:bare", "typeName": "page"},
+    }
+    assert first_page_id(store) == "page:bare"
+
+
 def test_should_refuse_a_canvas_without_pages() -> None:
-    with pytest.raises(InvalidInputError, match="no page"):
+    message = "The diagram's canvas has no page to insert into"
+    with pytest.raises(InvalidInputError, match=f"^{message}$"):
         first_page_id({"shape:x": geo("shape:x")})
