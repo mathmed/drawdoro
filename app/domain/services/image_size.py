@@ -1,3 +1,4 @@
+import struct
 from collections.abc import Callable
 
 from app.domain.enums.image_mime_type import ImageMimeType
@@ -56,14 +57,14 @@ def _webp_size(data: bytes) -> tuple[int, int] | None:
     return flavour[0](data)
 
 
+# The top two bits of each 16-bit lossy dimension are a scale hint, not part of the size.
 def _webp_lossy_size(data: bytes) -> tuple[int, int]:
-    width = int.from_bytes(data[26:28], "little") & 0x3FFF
-    height = int.from_bytes(data[28:30], "little") & 0x3FFF
-    return width, height
+    width, height = struct.unpack_from("<HH", data, 26)
+    return width & 0x3FFF, height & 0x3FFF
 
 
 def _webp_lossless_size(data: bytes) -> tuple[int, int]:
-    bits = int.from_bytes(data[21:25], "little")
+    (bits,) = struct.unpack_from("<I", data, 21)
     return (bits & 0x3FFF) + 1, ((bits >> 14) & 0x3FFF) + 1
 
 

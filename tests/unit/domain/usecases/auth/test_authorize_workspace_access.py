@@ -67,6 +67,7 @@ async def test_should_skip_requests_without_resource(sut: AuthorizeWorkspaceAcce
         {"project_id": PROJECT.id, "diagram_id": DIAGRAM.id},
         {"diagram_id": DIAGRAM.id},
         {"project_id": PROJECT.id, "folder_id": FOLDER.id},
+        {"folder_id": FOLDER.id},
     ],
 )
 async def test_should_allow_members_on_resources_of_their_workspace(
@@ -78,19 +79,20 @@ async def test_should_allow_members_on_resources_of_their_workspace(
 
 
 @pytest.mark.parametrize(
-    "ids",
+    ("ids", "message"),
     [
-        {"workspace_id": uuid.uuid4(), "project_id": PROJECT.id},
-        {"project_id": uuid.uuid4(), "diagram_id": DIAGRAM.id},
-        {"project_id": uuid.uuid4(), "folder_id": FOLDER.id},
-        {"diagram_id": uuid.uuid4()},
-        {"project_id": uuid.uuid4()},
+        ({"workspace_id": uuid.uuid4(), "project_id": PROJECT.id}, "Project not found"),
+        ({"project_id": uuid.uuid4(), "diagram_id": DIAGRAM.id}, "Diagram not found"),
+        ({"project_id": uuid.uuid4(), "folder_id": FOLDER.id}, "Folder not found"),
+        ({"diagram_id": uuid.uuid4()}, "Diagram not found"),
+        ({"folder_id": uuid.uuid4()}, "Folder not found"),
+        ({"project_id": uuid.uuid4()}, "Project not found"),
     ],
 )
 async def test_should_hide_resources_outside_the_given_parents(
-    sut: AuthorizeWorkspaceAccess, ids: dict[str, uuid.UUID]
+    sut: AuthorizeWorkspaceAccess, ids: dict[str, uuid.UUID], message: str
 ) -> None:
-    with pytest.raises(NotFoundError):
+    with pytest.raises(NotFoundError, match=f"^{message}$"):
         await sut.execute(params(ids))
 
 
@@ -98,12 +100,12 @@ async def test_should_hide_workspaces_of_non_members(
     sut: AuthorizeWorkspaceAccess, members: NonCallableMagicMock
 ) -> None:
     members.get.return_value = None
-    with pytest.raises(NotFoundError):
+    with pytest.raises(NotFoundError, match="^Workspace not found$"):
         await sut.execute(params({"workspace_id": WORKSPACE_ID}))
 
 
 async def test_should_forbid_actions_above_the_member_role(sut: AuthorizeWorkspaceAccess) -> None:
-    with pytest.raises(ForbiddenError):
+    with pytest.raises(ForbiddenError, match="^This action requires the owner role$"):
         await sut.execute(params({"workspace_id": WORKSPACE_ID}, WorkspaceRole.OWNER))
 
 

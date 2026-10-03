@@ -1,9 +1,10 @@
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, tzinfo
 from unittest.mock import NonCallableMagicMock
 
 import pytest
 
+from app.domain.constants.revisions import SESSION_LOOKBACK
 from app.domain.contracts.diagram_revision_repository import DiagramRevisionRepository
 from app.domain.entities.models.diagram_revision import DiagramRevision
 from app.domain.entities.models.diagram_snapshot import DiagramSnapshot
@@ -11,6 +12,7 @@ from app.domain.entities.models.revision_author import RevisionAuthor
 from app.domain.entities.objects.revision_policy import RevisionPolicy
 from app.domain.enums.revision_kind import RevisionKind
 from app.domain.enums.revision_origin import RevisionOrigin
+from app.domain.services import revision_recorder
 from app.domain.services.revision_recorder import RevisionRecorder
 from tests.doubles import double
 
@@ -236,3 +238,56 @@ async def test_should_treat_empty_metadata_like_none(
     )
     assert await sut.record(DIAGRAM_ID, snapshot(1), editor_save, ANA) == latest
     repo.create.assert_not_awaited()
+
+
+NOW = datetime(2026, 10, 3, 12, 0, tzinfo=UTC)
+
+
+class FrozenDatetime(datetime):
+    @classmethod
+    def now(cls, tz: tzinfo | None = None) -> FrozenDatetime:
+        return cls.fromtimestamp(NOW.timestamp(), tz)
+
+
+async def test_should_look_up_the_history_of_the_recorded_diagram(
+    sut: RevisionRecorder, repo: NonCallableMagicMock
+) -> None:
+    with_latest(repo, revision(1))
+    await sut.record(DIAGRAM_ID, snapshot(1), snapshot(2), ANA)
+    repo.get_latest.assert_awaited_once_with(DIAGRAM_ID)
+    repo.list_by_diagram.assert_awaited_once_with(DIAGRAM_ID, SESSION_LOOKBACK)
+
+
+async def test_should_still_coalesce_a_save_made_exactly_at_the_end_of_the_interval(
+    sut: RevisionRecorder, repo: NonCallableMagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(revision_recorder, "datetime", FrozenDatetime)
+    latest = revision(1).model_copy(update={"created_at": NOW - timedelta(minutes=10)})
+    with_latest(repo, latest)
+    result = await sut.record(DIAGRAM_ID, snapshot(1), snapshot(2), ANA)
+    assert result.id == latest.id
+    repo.create.assert_not_awaited()
+
+
+async def test_should_prune_revisions_older_than_a_single_retention_day(
+    repo: NonCallableMagicMock,
+) -> None:
+    sut = RevisionRecorder(repo, RevisionPolicy(retention_days=1, max_per_diagram=0))
+    with_latest(repo, None)
+    await sut.record(DIAGRAM_ID, DiagramSnapshot(name="New"), snapshot(1), ANA)
+    call = repo.prune.await_args
+    assert call is not None
+    diagram_id, keep_latest, older_than = call.args
+    assert (diagram_id, keep_latest) == (DIAGRAM_ID, None)
+    expected = datetime.now(UTC) - timedelta(days=1)
+    assert abs((older_than - expected).total_seconds()) < 5
+
+
+async def test_should_sign_a_new_revision_with_the_authors_name_and_picture(
+    sut: RevisionRecorder, repo: NonCallableMagicMock
+) -> None:
+    author = RevisionAuthor(user_id=uuid.uuid4(), name="Ana", picture_url="https://x/ana.png")
+    with_latest(repo, None)
+    await sut.record(DIAGRAM_ID, DiagramSnapshot(name="New"), snapshot(1), author)
+    [new] = created(repo)
+    assert (new.author_name, new.author_picture_url) == ("Ana", "https://x/ana.png")

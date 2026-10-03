@@ -56,5 +56,5 @@ async def test_should_raise_not_found_for_missing_revision(
 ) -> None:
     repo.get.return_value = None
     params = GetDiagramRevisionParams(diagram_id=DIAGRAM_ID, revision_id=uuid.uuid4())
-    with pytest.raises(NotFoundError):
+    with pytest.raises(NotFoundError, match=f"^Revision {params.revision_id} not found$"):
         await GetDiagramRevision(repo).execute(params)

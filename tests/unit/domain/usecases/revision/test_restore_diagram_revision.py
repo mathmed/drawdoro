@@ -92,15 +92,18 @@ async def test_should_bring_back_the_canvas_and_record_a_restore(
         restored_from_id=revision.id,
     )
     notifier.notify_updated.assert_awaited_once_with(restored, None)
+    diagrams.get_by_id.assert_awaited_once_with(diagram.id)
+    revisions.get.assert_awaited_once_with(diagram.id, revision.id)
 
 
 async def test_should_raise_not_found_for_missing_diagram(
     sut: RestoreDiagramRevision, diagrams: NonCallableMagicMock, notifier: NonCallableMagicMock
 ) -> None:
     diagrams.get_by_id.return_value = None
-    with pytest.raises(NotFoundError):
+    diagram_id = uuid.uuid4()
+    with pytest.raises(NotFoundError, match=f"^Diagram {diagram_id} not found$"):
         await sut.execute(
-            RestoreDiagramRevisionParams(diagram_id=uuid.uuid4(), revision_id=uuid.uuid4())
+            RestoreDiagramRevisionParams(diagram_id=diagram_id, revision_id=uuid.uuid4())
         )
     notifier.notify_updated.assert_not_awaited()
 
@@ -113,8 +116,9 @@ async def test_should_raise_not_found_for_missing_revision(
     diagram = current_diagram()
     diagrams.get_by_id.return_value = diagram
     revisions.get.return_value = None
-    with pytest.raises(NotFoundError):
+    revision_id = uuid.uuid4()
+    with pytest.raises(NotFoundError, match=f"^Revision {revision_id} not found$"):
         await sut.execute(
-            RestoreDiagramRevisionParams(diagram_id=diagram.id, revision_id=uuid.uuid4())
+            RestoreDiagramRevisionParams(diagram_id=diagram.id, revision_id=revision_id)
         )
     diagrams.update.assert_not_awaited()

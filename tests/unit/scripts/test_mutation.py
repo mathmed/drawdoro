@@ -328,7 +328,7 @@ class TestProcesses:
             return subprocess.CompletedProcess(command, 0, stdout="a.py\n")
 
         monkeypatch.setattr(mutation, "executable", lambda name: f"/usr/bin/{name}")
-        monkeypatch.setattr(mutation.subprocess, "run", run)
+        monkeypatch.setattr(subprocess, "run", run)
         assert mutation.git("diff", "--name-only") == "a.py\n"
         assert calls == [["/usr/bin/git", "diff", "--name-only"]]
 
@@ -342,7 +342,7 @@ class TestProcesses:
             return FakeProcess(["1/2\n", "done\n"], 0)
 
         monkeypatch.setattr(mutation, "executable", lambda name: f"/venv/bin/{name}")
-        monkeypatch.setattr(mutation.subprocess, "Popen", popen)
+        monkeypatch.setattr(subprocess, "Popen", popen)
         assert mutation.run_mutmut(["a.*", "b.*"]) == (0, "1/2\ndone\n")
         assert commands == [["/venv/bin/mutmut", "run", "a.*", "b.*"]]
         assert capsys.readouterr().out == "1/2\ndone\n"

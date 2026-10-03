@@ -35,12 +35,14 @@ def sut(verifier: NonCallableMagicMock, repo: NonCallableMagicMock) -> Authentic
 
 
 async def test_should_create_user_on_first_sign_in(
-    sut: AuthenticateUser, repo: NonCallableMagicMock
+    sut: AuthenticateUser, repo: NonCallableMagicMock, verifier: NonCallableMagicMock
 ) -> None:
     repo.get_by_email.return_value = None
     user = await sut.execute(AuthenticateUserParams(token="token"))
     assert (user.email, user.name) == ("ana@example.com", "Ana Souza")
     repo.create.assert_awaited_once()
+    verifier.verify.assert_awaited_once_with("token")
+    repo.get_by_email.assert_awaited_once_with("ana@example.com")
 
 
 async def test_should_return_existing_user_unchanged(
@@ -65,7 +67,7 @@ async def test_should_refresh_name_when_it_changed(
 async def test_should_reject_missing_token(
     sut: AuthenticateUser, verifier: NonCallableMagicMock
 ) -> None:
-    with pytest.raises(UnauthorizedError):
+    with pytest.raises(UnauthorizedError, match="^Missing access token$"):
         await sut.execute(AuthenticateUserParams(token=""))
     verifier.verify.assert_not_awaited()
 

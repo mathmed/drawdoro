@@ -45,6 +45,6 @@ async def test_should_report_someone_elses_key_as_missing(
     sut: RevokeApiKey, repo: NonCallableMagicMock
 ) -> None:
     repo.get_active.return_value = None
-    with pytest.raises(NotFoundError):
+    with pytest.raises(NotFoundError, match="^API key not found$"):
         await sut.execute(RevokeApiKeyParams(user_id=uuid.uuid4(), key_id=KEY.id))
     repo.revoke.assert_not_awaited()

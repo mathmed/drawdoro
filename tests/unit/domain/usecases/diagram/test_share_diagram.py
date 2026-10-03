@@ -32,7 +32,12 @@ async def test_should_generate_share_token_when_missing(
     result = await sut.execute(ShareDiagramParams(diagram_id=diagram_id))
 
     assert result.share_token == "generated"
+    repo.get_by_id.assert_awaited_once_with(diagram_id)
     repo.set_share_token.assert_awaited_once_with(diagram_id, ANY)
+    token = repo.set_share_token.call_args.args[1]
+    # token_urlsafe(9) encodes 9 random bytes as 12 URL-safe characters.
+    assert isinstance(token, str)
+    assert len(token) == 12
 
 
 async def test_should_reuse_existing_share_token(

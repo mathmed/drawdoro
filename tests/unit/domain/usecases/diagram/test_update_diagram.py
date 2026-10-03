@@ -45,16 +45,20 @@ async def test_should_replace_fields_and_return_persisted_diagram(
     sut: UpdateDiagram, repo: NonCallableMagicMock
 ) -> None:
     diagram = existing_diagram()
+    folder_id = uuid.uuid4()
     repo.get_by_id.return_value = diagram
     repo.update.side_effect = lambda updated: updated
     result = await sut.execute(
         UpdateDiagramParams(
             diagram_id=diagram.id,
             name="New",
+            folder_id=folder_id,
             canvas_state={"shapes": ["new"]},
             semantic_metadata={"shape:1": {"type": "service"}},
         )
     )
+    repo.get_by_id.assert_awaited_once_with(diagram.id)
+    assert result.folder_id == folder_id
     assert result.name == "New"
     assert result.canvas_state == {"shapes": ["new"]}
     assert result.semantic_metadata == {"shape:1": {"type": "service"}}

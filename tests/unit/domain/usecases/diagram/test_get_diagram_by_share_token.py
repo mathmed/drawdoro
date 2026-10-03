@@ -39,5 +39,5 @@ async def test_should_raise_not_found_for_unknown_token(
     sut: GetDiagramByShareToken, repo: NonCallableMagicMock
 ) -> None:
     repo.get_by_share_token.return_value = None
-    with pytest.raises(NotFoundError):
+    with pytest.raises(NotFoundError, match="^Shared diagram not found$"):
         await sut.execute(GetDiagramByShareTokenParams(share_token="missing"))
