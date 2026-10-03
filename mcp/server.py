@@ -67,12 +67,19 @@ def create_transport_security(settings: Settings) -> TransportSecuritySettings:
     # The server holds the service API key: only localhost and the hosts explicitly routed to it
     # may reach it, which also blocks DNS rebinding from browsers.
     local_hosts = [f"{host}:*" for host in LOCAL_HOSTS]
-    public_hosts = [pattern for host in settings.allowed_hosts for pattern in (host, f"{host}:*")]
+    public_hosts = public_host_patterns(settings.allowed_hosts)
     return TransportSecuritySettings(
         allowed_hosts=local_hosts + public_hosts,
-        allowed_origins=[f"http://{host}" for host in local_hosts]
-        + [f"https://{host}" for host in public_hosts],
+        allowed_origins=origins("http", local_hosts) + origins("https", public_hosts),
     )
+
+
+def public_host_patterns(hosts: tuple[str, ...]) -> list[str]:
+    return [pattern for host in hosts for pattern in (host, f"{host}:*")]
+
+
+def origins(scheme: str, hosts: list[str]) -> list[str]:
+    return [f"{scheme}://{host}" for host in hosts]
 
 
 async def health(_: Request) -> JSONResponse:
