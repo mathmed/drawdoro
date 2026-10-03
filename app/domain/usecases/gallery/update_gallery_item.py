@@ -26,17 +26,22 @@ class UpdateGalleryItem(Usecase[UpdateGalleryItemParams, GalleryItemSummary]):
         self._repo = repo
 
     async def execute(self, params: UpdateGalleryItemParams) -> GalleryItemSummary:
-        if params.name is None and params.tags is None and params.description is None:
-            raise InvalidInputError("Pass the name, tags or description to change")
-        changes: dict[str, object] = {}
-        if params.name is not None:
-            changes["name"] = normalize_gallery_item_name(params.name)
-        if params.tags is not None:
-            changes["tags"] = normalize_gallery_item_tags(params.tags)
-        if params.description is not None:
-            changes["description"] = normalize_gallery_item_description(params.description)
+        changes = _changes(params)
         item = await get_owned_gallery_item(self._repo, params.item_id, params.owner_id)
-        summary = GalleryItemSummary.model_validate(
-            item.model_dump(exclude={"content", "image_data"})
-        )
+        # Leaving the payload out only saves copying it: a summary has no field to keep it in.
+        fields = item.model_dump(exclude={"content", "image_data"})  # pragma: no mutate
+        summary = GalleryItemSummary.model_validate(fields)
         return await self._repo.update_details(summary.model_copy(update=changes))
+
+
+def _changes(params: UpdateGalleryItemParams) -> dict[str, object]:
+    changes: dict[str, object] = {}
+    if params.name is not None:
+        changes["name"] = normalize_gallery_item_name(params.name)
+    if params.tags is not None:
+        changes["tags"] = normalize_gallery_item_tags(params.tags)
+    if params.description is not None:
+        changes["description"] = normalize_gallery_item_description(params.description)
+    if not changes:
+        raise InvalidInputError("Pass the name, tags or description to change")
+    return changes
