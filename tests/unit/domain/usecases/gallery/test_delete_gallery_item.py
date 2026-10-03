@@ -25,6 +25,7 @@ async def test_should_delete_owned_item(sut: DeleteGalleryItem, repo: NonCallabl
 
     await sut.execute(DeleteGalleryItemParams(item_id=item.id, owner_id=OWNER_ID))
 
+    repo.get_by_id.assert_awaited_once_with(item.id)
     repo.delete.assert_awaited_once_with(item.id)
 
 
