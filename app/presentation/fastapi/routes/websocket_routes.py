@@ -5,6 +5,8 @@ import uuid
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect, status
 
 from app.common.settings import Settings, get_settings
+from app.domain.contracts.diagram_rooms import DiagramRooms
+from app.domain.entities.objects.participant import Participant
 from app.domain.enums.workspace_role import WorkspaceRole
 from app.domain.errors.domain_errors import DomainError
 from app.domain.usecases.auth.authenticate_user import AuthenticateUser, AuthenticateUserParams
@@ -16,12 +18,12 @@ from app.domain.usecases.diagram.get_diagram_by_share_token import (
     GetDiagramByShareToken,
     GetDiagramByShareTokenParams,
 )
-from app.infra.realtime.connection_manager import Participant, manager
 from app.presentation.factories.auth_factories import (
     authenticate_user_factory,
     authorize_workspace_access_factory,
 )
 from app.presentation.factories.diagram_factories import get_diagram_by_share_token_factory
+from app.presentation.factories.presence_factories import diagram_rooms_factory
 
 GUEST_NAME_MAX_LENGTH = 40
 
@@ -88,6 +90,7 @@ async def diagram_websocket(
     authenticate: AuthenticateUser = Depends(authenticate_user_factory),
     authorize: AuthorizeWorkspaceAccess = Depends(authorize_workspace_access_factory),
     shared_lookup: GetDiagramByShareToken = Depends(get_diagram_by_share_token_factory),
+    rooms: DiagramRooms = Depends(diagram_rooms_factory),
 ) -> None:
     participant = await resolve_participant(
         token, share, guest_name, diagram_id, settings, authenticate, authorize, shared_lookup
@@ -95,25 +98,25 @@ async def diagram_websocket(
     if participant is None:
         await ws.close(code=status.WS_1008_POLICY_VIOLATION)
         return
-    await manager.connect(ws, diagram_id, participant)
+    await rooms.connect(ws, diagram_id, participant)
     logger.info(
-        "participant joined diagram %s (%d online)", diagram_id, manager.peer_count(diagram_id)
+        "participant joined diagram %s (%d online)", diagram_id, rooms.peer_count(diagram_id)
     )
     try:
-        await manager.broadcast_presence(diagram_id)
-        await relay_updates(ws, diagram_id)
+        await rooms.broadcast_presence(diagram_id)
+        await relay_updates(ws, diagram_id, rooms)
     except WebSocketDisconnect:
         pass
     finally:
         # Any exit (clean close, dropped network, bad message) must free the seat.
-        manager.disconnect(ws, diagram_id)
+        rooms.disconnect(ws, diagram_id)
         logger.info(
-            "participant left diagram %s (%d online)", diagram_id, manager.peer_count(diagram_id)
+            "participant left diagram %s (%d online)", diagram_id, rooms.peer_count(diagram_id)
         )
-        await manager.broadcast_presence(diagram_id)
+        await rooms.broadcast_presence(diagram_id)
 
 
-async def relay_updates(ws: WebSocket, diagram_id: str) -> None:
+async def relay_updates(ws: WebSocket, diagram_id: str, rooms: DiagramRooms) -> None:
     while True:
         data = await ws.receive_text()
         try:
@@ -122,4 +125,4 @@ async def relay_updates(ws: WebSocket, diagram_id: str) -> None:
             # A malformed message is dropped instead of taking the whole session down.
             continue
         if kind in {"update", "cursor"}:
-            await manager.broadcast(data, diagram_id, exclude=ws)
+            await rooms.broadcast(data, diagram_id, exclude=ws)

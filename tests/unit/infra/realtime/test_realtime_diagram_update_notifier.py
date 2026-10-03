@@ -8,7 +8,8 @@ import pytest
 from fastapi import WebSocket
 
 from app.domain.entities.models.diagram import Diagram
-from app.infra.realtime.connection_manager import ConnectionManager, Participant
+from app.domain.entities.objects.participant import Participant
+from app.infra.realtime.connection_manager import ConnectionManager
 from app.infra.realtime.realtime_diagram_update_notifier import RealtimeDiagramUpdateNotifier
 
 DIAGRAM = Diagram(

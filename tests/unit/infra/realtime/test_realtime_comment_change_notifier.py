@@ -6,7 +6,8 @@ from unittest.mock import AsyncMock
 import pytest
 from fastapi import WebSocket
 
-from app.infra.realtime.connection_manager import ConnectionManager, Participant
+from app.domain.entities.objects.participant import Participant
+from app.infra.realtime.connection_manager import ConnectionManager
 from app.infra.realtime.realtime_comment_change_notifier import RealtimeCommentChangeNotifier
 
 DIAGRAM_ID = uuid.uuid4()

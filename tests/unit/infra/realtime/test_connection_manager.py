@@ -8,7 +8,8 @@ import pytest
 from fastapi import WebSocket
 
 from app.domain.entities.models.agent_identity import AgentIdentity
-from app.infra.realtime.connection_manager import ConnectionManager, Participant
+from app.domain.entities.objects.participant import Participant
+from app.infra.realtime.connection_manager import ConnectionManager
 
 ANA = Participant(name="Ana", user_id="user-ana")
 BRUNO = Participant(name="Bruno", user_id="user-bruno")

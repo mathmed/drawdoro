@@ -89,9 +89,9 @@ pytest_add_cli_args = [
 ]
 
 # Architecture contracts, checked by `make lint-imports` (pre-commit and CI too). They mirror the
-# Clean Architecture described in CLAUDE.md. `ignore_imports` entries are the baseline of imports
-# that already broke a contract when it was introduced: each one says why it is tolerated. Do not
-# add entries or relax a contract without the owner's approval; fix the import instead.
+# Clean Architecture described in CLAUDE.md and hold with no baseline: there are no
+# `ignore_imports`. Do not add any or relax a contract without the owner's approval; fix the
+# import instead.
 [tool.importlinter]
 root_packages = ["app"]
 include_external_packages = true
@@ -153,11 +153,6 @@ name = "Infra does not import the web framework"
 type = "forbidden"
 source_modules = ["app.infra"]
 forbidden_modules = ["fastapi", "starlette"]
-ignore_imports = [
-    # Baseline: the WebSocket room registry keeps FastAPI WebSocket objects to relay messages.
-    # Moving it behind a domain contract is a refactor this contract does not force.
-    "app.infra.realtime.connection_manager -> fastapi",
-]
 
 [[tool.importlinter.contracts]]
 id = "presentation-wiring"
@@ -172,11 +167,6 @@ source_modules = [
 ]
 forbidden_modules = ["app.infra", "sqlalchemy", "asyncpg"]
 allow_indirect_imports = true
-ignore_imports = [
-    # Baseline: the WebSocket route joins and leaves rooms on the shared ConnectionManager
-    # singleton directly instead of through a factory-built use case.
-    "app.presentation.fastapi.routes.websocket_routes -> app.infra.realtime.connection_manager",
-]
 
 [[tool.importlinter.contracts]]
 id = "presentation-layers"
