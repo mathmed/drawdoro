@@ -68,7 +68,7 @@ min_confidence = 80
 paths = ["app"]
 
 [tool.xenon]
-max-absolute = "B"
+max-absolute = "A"
 max-modules = "A"
 max-average = "A"
 

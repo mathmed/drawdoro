@@ -180,20 +180,19 @@ jobs:
 
       - name: Security scan
         if: ${{ !cancelled() }}
-        run: uv run --locked python scripts/quality_report.py run bandit -- bandit -r app -ll
+        run: uv run --locked python scripts/quality_report.py run bandit -- bandit -r app
 
-      # Advisory: dead code is reported, never fails the job.
       - name: Dead code check (vulture)
         if: ${{ !cancelled() }}
         run: >-
-          uv run --locked python scripts/quality_report.py run vulture --advisory --
+          uv run --locked python scripts/quality_report.py run vulture --
           vulture app --min-confidence 80
 
       - name: Complexity check (xenon)
         if: ${{ !cancelled() }}
         run: >-
           uv run --locked python scripts/quality_report.py run xenon --
-          xenon app --max-absolute B --max-modules A --max-average A
+          xenon app --max-absolute A --max-modules A --max-average A
 
       - name: Dependency vulnerability scan
         if: ${{ !cancelled() }}
