@@ -29,8 +29,16 @@ def content_root_shapes(content: dict[str, Any]) -> list[CanvasRecord]:
     shapes = saved_shapes(content)
     listed = content.get("rootShapeIds")
     if isinstance(listed, list) and listed:
-        roots = {root for root in listed if isinstance(root, str)}
-        return [shape for shape in shapes if shape.get("id") in roots]
+        return _listed_shapes(shapes, listed)
+    return _parentless_shapes(shapes)
+
+
+def _listed_shapes(shapes: list[CanvasRecord], listed: list[object]) -> list[CanvasRecord]:
+    roots = {root for root in listed if isinstance(root, str)}
+    return [shape for shape in shapes if shape.get("id") in roots]
+
+
+def _parentless_shapes(shapes: list[CanvasRecord]) -> list[CanvasRecord]:
     ids = {shape.get("id") for shape in shapes}
     return [shape for shape in shapes if shape.get("parentId") not in ids]
 
