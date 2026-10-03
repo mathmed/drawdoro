@@ -1,4 +1,5 @@
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -299,3 +300,74 @@ class TestMinScore:
         monkeypatch.setenv("MUTATION_MIN_SCORE", "72.5")
 
         assert mutation.min_score() == 72.5
+
+
+class FakeProcess:
+    def __init__(self, output: list[str], exit_code: int) -> None:
+        self.stdout = iter(output)
+        self._exit_code = exit_code
+
+    def wait(self) -> int:
+        return self._exit_code
+
+
+class TestProcesses:
+    def test_should_resolve_executables_to_an_absolute_path(self) -> None:
+        assert Path(mutation.executable("python3")).is_absolute()
+
+    def test_should_fail_when_an_executable_is_missing(self) -> None:
+        with pytest.raises(FileNotFoundError, match="no-such-tool is not on the PATH"):
+            mutation.executable("no-such-tool")
+
+    def test_should_run_git_by_its_absolute_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls: list[list[str]] = []
+
+        def run(command: list[str], **options: object) -> subprocess.CompletedProcess[str]:
+            calls.append(command)
+            assert options == {"check": True, "capture_output": True, "text": True}
+            return subprocess.CompletedProcess(command, 0, stdout="a.py\n")
+
+        monkeypatch.setattr(mutation, "executable", lambda name: f"/usr/bin/{name}")
+        monkeypatch.setattr(mutation.subprocess, "run", run)
+        assert mutation.git("diff", "--name-only") == "a.py\n"
+        assert calls == [["/usr/bin/git", "diff", "--name-only"]]
+
+    def test_should_stream_and_return_the_mutmut_output(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        commands: list[list[str]] = []
+
+        def popen(command: list[str], **_: object) -> FakeProcess:
+            commands.append(command)
+            return FakeProcess(["1/2\n", "done\n"], 0)
+
+        monkeypatch.setattr(mutation, "executable", lambda name: f"/venv/bin/{name}")
+        monkeypatch.setattr(mutation.subprocess, "Popen", popen)
+        assert mutation.run_mutmut(["a.*", "b.*"]) == (0, "1/2\ndone\n")
+        assert commands == [["/venv/bin/mutmut", "run", "a.*", "b.*"]]
+        assert capsys.readouterr().out == "1/2\ndone\n"
+
+
+class TestSurvivorsSection:
+    def test_should_show_the_diff_of_the_listed_survivors_only(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(mutation, "diff_of", lambda name: "-a\n+b" if name == "m1" else None)
+        tally = mutation.Tally()
+        for name in ("m1", "m2", "m3"):
+            tally.add(name, mutation.Outcome.SURVIVED)
+        assert mutation.survivors_section({"a.py": tally, "b.py": mutation.Tally()}, 2) == [
+            "### Surviving mutants",
+            "",
+            "<details><summary><code>a.py</code>: 3</summary>",
+            "",
+            "`m1`",
+            "```diff",
+            "-a\n+b",
+            "```",
+            "`m2`",
+            "... and 1 more (`mutmut results`)",
+            "",
+            "</details>",
+            "",
+        ]

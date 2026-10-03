@@ -180,7 +180,9 @@ jobs:
 
       - name: Security scan
         if: ${{ !cancelled() }}
-        run: uv run --locked python scripts/quality_report.py run bandit -- bandit -r app
+        run: >-
+          uv run --locked python scripts/quality_report.py run bandit --
+          bandit -r app mcp scripts -x mcp/tests,mcp/.venv
 
       - name: Dead code check (vulture)
         if: ${{ !cancelled() }}
@@ -192,7 +194,8 @@ jobs:
         if: ${{ !cancelled() }}
         run: >-
           uv run --locked python scripts/quality_report.py run xenon --
-          xenon app --max-absolute A --max-modules A --max-average A
+          xenon app mcp scripts --max-absolute A --max-modules A --max-average A
+          -e "mcp/tests/*,mcp/.venv/*"
 
       - name: Dependency vulnerability scan
         if: ${{ !cancelled() }}
