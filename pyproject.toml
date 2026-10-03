@@ -42,11 +42,13 @@ addopts = "--import-mode=importlib"
 
 [tool.coverage.run]
 source = ["app"]
+branch = true
 relative_files = true
 omit = ["*/__init__.py"]
 
+# Ratchet: just below the measured baseline (95.7% with branches). Raise it, never lower it.
 [tool.coverage.report]
-fail_under = 80
+fail_under = 95
 
 [tool.mypy]
 python_version = "3.14"

@@ -24,7 +24,7 @@ docker/            Dockerfile and docker-compose
 ```bash
 make setup        install uv, dependencies and git hooks
 make run          run the API locally with hot reload
-make test         all tests with coverage (fails under 80%)
+make test         all tests with line and branch coverage (fails under 95%)
 make test-unit    only the fast unit tests
 make hooks        all quality checks: ruff, mypy, bandit, vulture, xenon, pip-audit
 make format-code  fix lint issues and format with ruff

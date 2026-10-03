@@ -35,7 +35,7 @@ run:
 frontend:
 	cd frontend && npm run dev
 
-# Run all tests with coverage
+# Run all tests with line and branch coverage (fails under 95%)
 test:
 	uv run pytest --cov --cov-report=term-missing
 

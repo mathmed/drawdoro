@@ -343,6 +343,24 @@ gallery items and reads the diagram and its history back.
 | `SMOKE_STRICT_SCHEMA` | `0` | `1` fails the smoke when `alembic check` finds drift |
 | `SMOKE_SKIP_MCP` | `0` | `1` skips the MCP smoke inside `make smoke` |
 
+### Static analysis thresholds (`make hooks`, CI jobs `lint` and `quality`)
+
+The backend holds the strictest setting of every tool, with no baseline, per-file ignore, `# noqa`,
+`# type: ignore`, `# nosec` or vulture allowlist. A regression fails pre-commit and CI.
+
+| Tool | Scope | Threshold |
+|---|---|---|
+| ruff (lint + format) | whole repository | zero findings (`E`, `F`, `I`, `UP`, `B`, `SIM`) |
+| mypy | `app`, `tests`, `scripts`; `mcp/` | `strict = true`, zero errors |
+| bandit | `app` | zero findings at **every** severity (no `-ll`) |
+| vulture | `app` | zero findings at confidence 80, **blocking** (no longer advisory) |
+| xenon | `app` | rank **A** absolute, per module and on average (`--max-absolute A --max-modules A --max-average A`) |
+| import-linter | `app`, `mcp/` | every contract, no `ignore_imports` |
+| coverage | `app` | line **and** branch coverage, `fail_under = 95` (ratchet, baseline 95.7%) |
+| mutmut | use cases and domain services | `MUTATION_MIN_SCORE` ratchet, see below |
+
+Thresholds are ratchets: raise them when the code allows it, never lower them to get a PR green.
+
 ### Architecture contracts (`make lint-imports`)
 
 [import-linter](https://import-linter.readthedocs.io/) contracts live in `[tool.importlinter]` of
@@ -357,9 +375,9 @@ gallery items and reads the diagram and its history back.
 - MCP: tools import neither `server` nor `settings`, tool groups depend on `diagrams` → `canvas` →
   `api`, and only `tools.api` imports httpx.
 
-`ignore_imports` entries are the baseline that already broke a contract when it was added, each with its
-reason. import-linter fails when an entry no longer matches, so fixing one forces removing it. Adding
-entries or relaxing a contract needs the owner's approval.
+The contracts hold with **no baseline**: there are no `ignore_imports` entries. A new violation is fixed in
+the import (a domain port, a factory) rather than tolerated; adding entries or relaxing a contract needs the
+owner's approval.
 
 ### Mutation testing (`make mutation-changed` on PRs, `make mutation` weekly)
 
@@ -405,7 +423,7 @@ Every PR gets **one** comment titled *Quality Report* (found and updated through
 - each section below has the summary and, in a collapsed `<details>`, the evidence: least covered files,
   broken contracts with the violating import, smoke scenarios with their boot time, surviving mutants with
   their diffs, lint problems, failures;
-- ✅ passed, ⚠️ warning (advisory vulture findings, ESLint warnings, models/migrations drift), ❌ failed,
+- ✅ passed, ⚠️ warning (ESLint warnings, models/migrations drift), ❌ failed,
   ⏭️ not run (job cancelled or skipped, or nothing to mutate). A job that failed before producing its result
   shows as ❌ with the job result, so the report never breaks.
 
