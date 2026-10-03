@@ -85,16 +85,16 @@ async def test_should_add_member_who_already_signed_in(
     sut = AddWorkspaceMember(members, users, APP_NAME)
     added = await sut.execute(
         AddWorkspaceMemberParams(
-            workspace_id=WORKSPACE_ID, email=" Bia@X.com ", role=WorkspaceRole.VIEWER
+            workspace_id=WORKSPACE_ID, email=" Bia@X.com ", role=WorkspaceRole.EDITOR
         )
     )
-    assert (added.email, added.role) == ("bia@x.com", WorkspaceRole.VIEWER)
+    assert (added.email, added.role) == ("bia@x.com", WorkspaceRole.EDITOR)
     users.get_by_email.assert_awaited_once_with("bia@x.com")
     created = members.create.call_args.args[0]
     assert (created.workspace_id, created.user_id, created.role) == (
         WORKSPACE_ID,
         newcomer.id,
-        WorkspaceRole.VIEWER,
+        WorkspaceRole.EDITOR,
     )
 
 
