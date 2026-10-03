@@ -1,5 +1,5 @@
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from unittest.mock import AsyncMock
 
 import pytest
@@ -45,10 +45,10 @@ def client() -> Iterator[TestClient]:
     app.dependency_overrides.clear()
 
 
-def override(factory: object, spec: type, result: object = None) -> AsyncMock:
+def override(factory: Callable[..., object], spec: type, result: object = None) -> AsyncMock:
     mock = AsyncMock(spec=spec)
     mock.execute.return_value = result
-    app.dependency_overrides[factory] = lambda: mock  # type: ignore[index]
+    app.dependency_overrides[factory] = lambda: mock
     return mock
 
 

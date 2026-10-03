@@ -1,6 +1,5 @@
 import uuid
-from typing import cast
-from unittest.mock import AsyncMock, create_autospec
+from unittest.mock import AsyncMock, NonCallableMagicMock
 
 import pytest
 
@@ -9,20 +8,21 @@ from app.domain.contracts.workspace_repository import WorkspaceRepository
 from app.domain.entities.models.workspace import Workspace
 from app.domain.enums.workspace_role import WorkspaceRole
 from app.domain.usecases.workspace.create_workspace import CreateWorkspace, CreateWorkspaceParams
+from tests.doubles import double
 
 
 @pytest.fixture
-def repo() -> WorkspaceRepository:
-    return cast(WorkspaceRepository, create_autospec(WorkspaceRepository))
+def repo() -> NonCallableMagicMock:
+    return double(WorkspaceRepository)
 
 
 @pytest.fixture
-def members() -> WorkspaceMemberRepository:
-    return cast(WorkspaceMemberRepository, create_autospec(WorkspaceMemberRepository))
+def members() -> NonCallableMagicMock:
+    return double(WorkspaceMemberRepository)
 
 
 @pytest.fixture
-def sut(repo: WorkspaceRepository, members: WorkspaceMemberRepository) -> CreateWorkspace:
+def sut(repo: NonCallableMagicMock, members: NonCallableMagicMock) -> CreateWorkspace:
     return CreateWorkspace(repo, members)
 
 
@@ -32,10 +32,10 @@ def params() -> CreateWorkspaceParams:
 
 
 async def test_should_create_workspace_and_return_it(
-    sut: CreateWorkspace, repo: WorkspaceRepository, params: CreateWorkspaceParams
+    sut: CreateWorkspace, repo: NonCallableMagicMock, params: CreateWorkspaceParams
 ) -> None:
     expected = Workspace(name=params.name, slug=params.slug)
-    repo.create = AsyncMock(return_value=expected)  # type: ignore[method-assign]
+    repo.create.return_value = expected
     result = await sut.execute(params)
     assert result.name == params.name
     assert result.slug == params.slug
@@ -43,22 +43,22 @@ async def test_should_create_workspace_and_return_it(
 
 
 async def test_should_generate_uuid_for_new_workspace(
-    sut: CreateWorkspace, repo: WorkspaceRepository, params: CreateWorkspaceParams
+    sut: CreateWorkspace, repo: NonCallableMagicMock, params: CreateWorkspaceParams
 ) -> None:
     workspace_with_id = Workspace(name=params.name, slug=params.slug)
-    repo.create = AsyncMock(return_value=workspace_with_id)  # type: ignore[method-assign]
+    repo.create.return_value = workspace_with_id
     await sut.execute(params)
     created_arg: Workspace = repo.create.call_args[0][0]
     assert isinstance(created_arg.id, uuid.UUID)
 
 
 async def test_should_make_creator_the_owner(
-    sut: CreateWorkspace, repo: WorkspaceRepository, members: WorkspaceMemberRepository
+    sut: CreateWorkspace, repo: NonCallableMagicMock, members: NonCallableMagicMock
 ) -> None:
     workspace = Workspace(name="Acme Corp", slug="acme")
     creator_id = uuid.uuid4()
-    repo.create = AsyncMock(return_value=workspace)  # type: ignore[method-assign]
-    members.create = AsyncMock()  # type: ignore[method-assign]
+    repo.create.return_value = workspace
+    members.create = AsyncMock()
     await sut.execute(CreateWorkspaceParams(name="Acme Corp", slug="acme", creator_id=creator_id))
     member = members.create.call_args[0][0]
     assert (member.workspace_id, member.user_id, member.role) == (
@@ -70,11 +70,11 @@ async def test_should_make_creator_the_owner(
 
 async def test_should_not_add_member_without_creator(
     sut: CreateWorkspace,
-    repo: WorkspaceRepository,
-    members: WorkspaceMemberRepository,
+    repo: NonCallableMagicMock,
+    members: NonCallableMagicMock,
     params: CreateWorkspaceParams,
 ) -> None:
-    repo.create = AsyncMock(return_value=Workspace(name="Acme Corp", slug="acme"))  # type: ignore[method-assign]
-    members.create = AsyncMock()  # type: ignore[method-assign]
+    repo.create.return_value = Workspace(name="Acme Corp", slug="acme")
+    members.create = AsyncMock()
     await sut.execute(params)
     members.create.assert_not_awaited()

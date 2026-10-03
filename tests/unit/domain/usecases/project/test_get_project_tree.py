@@ -1,7 +1,6 @@
 import uuid
 from datetime import UTC, datetime
-from typing import cast
-from unittest.mock import AsyncMock, create_autospec
+from unittest.mock import NonCallableMagicMock
 
 import pytest
 
@@ -10,28 +9,29 @@ from app.domain.contracts.folder_repository import FolderRepository
 from app.domain.entities.models.diagram_summary import DiagramSummary
 from app.domain.entities.models.folder import Folder
 from app.domain.usecases.project.get_project_tree import GetProjectTree, GetProjectTreeParams
+from tests.doubles import double
 
 PROJECT_ID = uuid.uuid4()
 NOW = datetime.now(UTC)
 
 
 @pytest.fixture
-def folders() -> FolderRepository:
-    return cast(FolderRepository, create_autospec(FolderRepository))
+def folders() -> NonCallableMagicMock:
+    return double(FolderRepository)
 
 
 @pytest.fixture
-def diagrams() -> DiagramRepository:
-    return cast(DiagramRepository, create_autospec(DiagramRepository))
+def diagrams() -> NonCallableMagicMock:
+    return double(DiagramRepository)
 
 
 @pytest.fixture
-def sut(folders: FolderRepository, diagrams: DiagramRepository) -> GetProjectTree:
+def sut(folders: NonCallableMagicMock, diagrams: NonCallableMagicMock) -> GetProjectTree:
     return GetProjectTree(folders, diagrams)
 
 
 async def test_should_return_folders_and_diagram_summaries_of_the_project(
-    sut: GetProjectTree, folders: FolderRepository, diagrams: DiagramRepository
+    sut: GetProjectTree, folders: NonCallableMagicMock, diagrams: NonCallableMagicMock
 ) -> None:
     folder = Folder(project_id=PROJECT_ID, name="Services")
     summary = DiagramSummary(
@@ -42,8 +42,8 @@ async def test_should_return_folders_and_diagram_summaries_of_the_project(
         created_at=NOW,
         updated_at=NOW,
     )
-    folders.list_by_project = AsyncMock(return_value=[folder])  # type: ignore[method-assign]
-    diagrams.list_by_project = AsyncMock(return_value=[summary])  # type: ignore[method-assign]
+    folders.list_by_project.return_value = [folder]
+    diagrams.list_by_project.return_value = [summary]
 
     tree = await sut.execute(GetProjectTreeParams(project_id=PROJECT_ID))
 
@@ -53,10 +53,10 @@ async def test_should_return_folders_and_diagram_summaries_of_the_project(
 
 
 async def test_should_return_empty_tree_for_empty_project(
-    sut: GetProjectTree, folders: FolderRepository, diagrams: DiagramRepository
+    sut: GetProjectTree, folders: NonCallableMagicMock, diagrams: NonCallableMagicMock
 ) -> None:
-    folders.list_by_project = AsyncMock(return_value=[])  # type: ignore[method-assign]
-    diagrams.list_by_project = AsyncMock(return_value=[])  # type: ignore[method-assign]
+    folders.list_by_project.return_value = []
+    diagrams.list_by_project.return_value = []
 
     tree = await sut.execute(GetProjectTreeParams(project_id=PROJECT_ID))
 

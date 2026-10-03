@@ -1,7 +1,7 @@
 import uuid
 from collections.abc import Callable, Iterator
-from typing import Any, cast
-from unittest.mock import AsyncMock, create_autospec
+from typing import Any
+from unittest.mock import AsyncMock, NonCallableMagicMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -53,7 +53,8 @@ from app.presentation.factories.gallery_factories import (
 )
 from app.presentation.factories.presence_factories import track_agent_activity_factory
 from app.presentation.fastapi.dependencies.gallery_owner import PERSONAL_GALLERY_ONLY
-from tests.tldraw_records import binding, canvas, content, geo, group, png
+from tests.doubles import double
+from tests.tldraw_records import binding, canvas, content, geo, group, png, saved_canvas
 
 ANA = User(email="ana@example.com", name="Ana")
 BRUNO = User(email="bruno@example.com", name="Bruno")
@@ -152,10 +153,10 @@ def notifier() -> AsyncMock:
 
 
 @pytest.fixture
-def revisions() -> DiagramRevisionRepository:
-    mock = cast(DiagramRevisionRepository, create_autospec(DiagramRevisionRepository))
-    mock.get_latest = AsyncMock(return_value=None)  # type: ignore[method-assign]
-    mock.create = AsyncMock(side_effect=lambda revision: revision)  # type: ignore[method-assign]
+def revisions() -> NonCallableMagicMock:
+    mock = double(DiagramRevisionRepository)
+    mock.get_latest.return_value = None
+    mock.create.side_effect = lambda revision: revision
     return mock
 
 
@@ -165,7 +166,7 @@ def client(
     diagram: Diagram,
     foreign_diagram: Diagram,
     notifier: AsyncMock,
-    revisions: DiagramRevisionRepository,
+    revisions: NonCallableMagicMock,
 ) -> Iterator[TestClient]:
     gallery = InMemoryGallery(ANAS_ITEM, ANAS_IMAGE, BRUNOS_ITEM)
     diagrams = AsyncMock(spec=DiagramRepository)
@@ -290,7 +291,7 @@ def test_should_insert_into_a_diagram_as_the_owners_agent(
     client: TestClient,
     diagram: Diagram,
     notifier: AsyncMock,
-    revisions: DiagramRevisionRepository,
+    revisions: NonCallableMagicMock,
 ) -> None:
     response = insert(client, diagram, AGENT, near_shape_id="shape:api", side="below", gap=40)
 
@@ -301,9 +302,9 @@ def test_should_insert_into_a_diagram_as_the_owners_agent(
     assert len(body["root_shape_ids"]) == 1
     assert (body["x"], body["y"], body["width"], body["height"]) == (0, 90, 400, 50)
     assert "canvas_state" not in body
-    store = diagram.canvas_state["store"]  # type: ignore[index]
+    store = saved_canvas(diagram)["store"]
     assert set(body["created_ids"]) <= set(store)
-    revision = revisions.create.await_args.args[0]  # type: ignore[attr-defined]
+    revision = revisions.create.await_args.args[0]
     assert (revision.origin, revision.author_id, revision.agent_name, revision.agent_label) == (
         RevisionOrigin.AGENT,
         ANA.id,
@@ -319,7 +320,7 @@ def test_should_insert_an_image(client: TestClient, diagram: Diagram) -> None:
 
     assert response.status_code == 201
     assert (response.json()["width"], response.json()["height"]) == (80, 40)
-    store = diagram.canvas_state["store"]  # type: ignore[index]
+    store = saved_canvas(diagram)["store"]
     asset = next(store[i] for i in response.json()["created_ids"] if i.startswith("asset:"))
     assert asset["props"]["src"].startswith("data:image/png;base64,")
 

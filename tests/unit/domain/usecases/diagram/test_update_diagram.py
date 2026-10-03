@@ -1,6 +1,5 @@
 import uuid
-from typing import cast
-from unittest.mock import AsyncMock, create_autospec
+from unittest.mock import NonCallableMagicMock
 
 import pytest
 
@@ -13,26 +12,27 @@ from app.domain.enums.revision_origin import RevisionOrigin
 from app.domain.errors.domain_errors import NotFoundError
 from app.domain.services.revision_recorder import RevisionRecorder
 from app.domain.usecases.diagram.update_diagram import UpdateDiagram, UpdateDiagramParams
+from tests.doubles import double
 
 
 @pytest.fixture
-def repo() -> DiagramRepository:
-    return cast(DiagramRepository, create_autospec(DiagramRepository))
+def repo() -> NonCallableMagicMock:
+    return double(DiagramRepository)
 
 
 @pytest.fixture
-def notifier() -> DiagramUpdateNotifier:
-    return cast(DiagramUpdateNotifier, create_autospec(DiagramUpdateNotifier))
+def notifier() -> NonCallableMagicMock:
+    return double(DiagramUpdateNotifier)
 
 
 @pytest.fixture
-def recorder() -> RevisionRecorder:
-    return cast(RevisionRecorder, create_autospec(RevisionRecorder, instance=True))
+def recorder() -> NonCallableMagicMock:
+    return double(RevisionRecorder)
 
 
 @pytest.fixture
 def sut(
-    repo: DiagramRepository, notifier: DiagramUpdateNotifier, recorder: RevisionRecorder
+    repo: NonCallableMagicMock, notifier: NonCallableMagicMock, recorder: NonCallableMagicMock
 ) -> UpdateDiagram:
     return UpdateDiagram(repo, notifier, recorder)
 
@@ -42,11 +42,11 @@ def existing_diagram() -> Diagram:
 
 
 async def test_should_replace_fields_and_return_persisted_diagram(
-    sut: UpdateDiagram, repo: DiagramRepository
+    sut: UpdateDiagram, repo: NonCallableMagicMock
 ) -> None:
     diagram = existing_diagram()
-    repo.get_by_id = AsyncMock(return_value=diagram)  # type: ignore[method-assign]
-    repo.update = AsyncMock(side_effect=lambda updated: updated)  # type: ignore[method-assign]
+    repo.get_by_id.return_value = diagram
+    repo.update.side_effect = lambda updated: updated
     result = await sut.execute(
         UpdateDiagramParams(
             diagram_id=diagram.id,
@@ -61,44 +61,44 @@ async def test_should_replace_fields_and_return_persisted_diagram(
 
 
 async def test_should_notify_open_editors_with_origin_client_id(
-    sut: UpdateDiagram, repo: DiagramRepository, notifier: DiagramUpdateNotifier
+    sut: UpdateDiagram, repo: NonCallableMagicMock, notifier: NonCallableMagicMock
 ) -> None:
     diagram = existing_diagram()
     persisted = diagram.model_copy(update={"name": "New"})
-    repo.get_by_id = AsyncMock(return_value=diagram)  # type: ignore[method-assign]
-    repo.update = AsyncMock(return_value=persisted)  # type: ignore[method-assign]
+    repo.get_by_id.return_value = diagram
+    repo.update.return_value = persisted
     await sut.execute(
         UpdateDiagramParams(diagram_id=diagram.id, name="New", origin_client_id="tab-1")
     )
-    cast(AsyncMock, notifier.notify_updated).assert_awaited_once_with(persisted, "tab-1")
+    notifier.notify_updated.assert_awaited_once_with(persisted, "tab-1")
 
 
 async def test_should_notify_without_origin_when_writer_is_not_an_editor(
-    sut: UpdateDiagram, repo: DiagramRepository, notifier: DiagramUpdateNotifier
+    sut: UpdateDiagram, repo: NonCallableMagicMock, notifier: NonCallableMagicMock
 ) -> None:
     diagram = existing_diagram()
-    repo.get_by_id = AsyncMock(return_value=diagram)  # type: ignore[method-assign]
-    repo.update = AsyncMock(return_value=diagram)  # type: ignore[method-assign]
+    repo.get_by_id.return_value = diagram
+    repo.update.return_value = diagram
     await sut.execute(UpdateDiagramParams(diagram_id=diagram.id, name="New"))
-    cast(AsyncMock, notifier.notify_updated).assert_awaited_once_with(diagram, None)
+    notifier.notify_updated.assert_awaited_once_with(diagram, None)
 
 
 async def test_should_raise_not_found_and_notify_nobody_when_diagram_missing(
-    sut: UpdateDiagram, repo: DiagramRepository, notifier: DiagramUpdateNotifier
+    sut: UpdateDiagram, repo: NonCallableMagicMock, notifier: NonCallableMagicMock
 ) -> None:
     diagram_id = uuid.uuid4()
-    repo.get_by_id = AsyncMock(return_value=None)  # type: ignore[method-assign]
+    repo.get_by_id.return_value = None
     with pytest.raises(NotFoundError, match=str(diagram_id)):
         await sut.execute(UpdateDiagramParams(diagram_id=diagram_id, name="New"))
-    cast(AsyncMock, notifier.notify_updated).assert_not_awaited()
+    notifier.notify_updated.assert_not_awaited()
 
 
 async def test_should_record_the_change_with_its_author_and_summary(
-    sut: UpdateDiagram, repo: DiagramRepository, recorder: RevisionRecorder
+    sut: UpdateDiagram, repo: NonCallableMagicMock, recorder: NonCallableMagicMock
 ) -> None:
     diagram = existing_diagram()
-    repo.get_by_id = AsyncMock(return_value=diagram.model_copy())  # type: ignore[method-assign]
-    repo.update = AsyncMock(side_effect=lambda updated: updated)  # type: ignore[method-assign]
+    repo.get_by_id.return_value = diagram.model_copy()
+    repo.update.side_effect = lambda updated: updated
     author = RevisionAuthor(origin=RevisionOrigin.AGENT, agent_name="Claude")
     await sut.execute(
         UpdateDiagramParams(
@@ -109,7 +109,7 @@ async def test_should_record_the_change_with_its_author_and_summary(
             revision_summary="Renamed it",
         )
     )
-    cast(AsyncMock, recorder.record).assert_awaited_once_with(
+    recorder.record.assert_awaited_once_with(
         diagram.id,
         DiagramSnapshot.of(diagram),
         DiagramSnapshot(name="New", canvas_state={"shapes": ["new"]}),
@@ -119,9 +119,9 @@ async def test_should_record_the_change_with_its_author_and_summary(
 
 
 async def test_should_record_nothing_when_diagram_missing(
-    sut: UpdateDiagram, repo: DiagramRepository, recorder: RevisionRecorder
+    sut: UpdateDiagram, repo: NonCallableMagicMock, recorder: NonCallableMagicMock
 ) -> None:
-    repo.get_by_id = AsyncMock(return_value=None)  # type: ignore[method-assign]
+    repo.get_by_id.return_value = None
     with pytest.raises(NotFoundError):
         await sut.execute(UpdateDiagramParams(diagram_id=uuid.uuid4(), name="New"))
-    cast(AsyncMock, recorder.record).assert_not_awaited()
+    recorder.record.assert_not_awaited()

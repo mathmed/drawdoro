@@ -1,6 +1,6 @@
 import base64
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from unittest.mock import AsyncMock
 
 import pytest
@@ -40,8 +40,8 @@ def client() -> Iterator[TestClient]:
     app.dependency_overrides.clear()
 
 
-def _override(factory: object, use_case: AsyncMock) -> None:
-    app.dependency_overrides[factory] = lambda: use_case  # type: ignore[index]
+def _override(factory: Callable[..., object], use_case: AsyncMock) -> None:
+    app.dependency_overrides[factory] = lambda: use_case
 
 
 def test_should_list_items_of_the_signed_in_user(client: TestClient) -> None:

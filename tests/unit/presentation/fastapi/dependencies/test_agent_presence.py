@@ -1,6 +1,5 @@
 import uuid
-from typing import cast
-from unittest.mock import AsyncMock, create_autospec
+from unittest.mock import NonCallableMagicMock
 
 import pytest
 
@@ -17,6 +16,7 @@ from app.presentation.fastapi.dependencies.agent_presence import (
     track_agent_activity,
 )
 from app.presentation.fastapi.dependencies.current_user import Caller
+from tests.doubles import double
 
 ANA = User(email="ana@example.com", name="Ana")
 ANAS_KEY = ApiKey(user_id=ANA.id, label="laptop", prefix="mcpk_abc", key_hash="hash")
@@ -59,19 +59,19 @@ def test_should_trim_and_cap_agent_name() -> None:
 
 
 @pytest.fixture
-def use_case() -> TrackAgentActivity:
-    return cast(TrackAgentActivity, create_autospec(TrackAgentActivity, instance=True))
+def use_case() -> NonCallableMagicMock:
+    return double(TrackAgentActivity)
 
 
-async def test_should_track_activity_of_named_agent(use_case: TrackAgentActivity) -> None:
+async def test_should_track_activity_of_named_agent(use_case: NonCallableMagicMock) -> None:
     diagram_id = uuid.uuid4()
     agent = AgentIdentity(id="agent:Claude", name="Claude")
     await track_agent_activity(diagram_id=diagram_id, agent=agent, use_case=use_case)
-    cast(AsyncMock, use_case.execute).assert_awaited_once_with(
+    use_case.execute.assert_awaited_once_with(
         TrackAgentActivityParams(diagram_id=diagram_id, agent=agent)
     )
 
 
-async def test_should_not_track_callers_that_are_not_agents(use_case: TrackAgentActivity) -> None:
+async def test_should_not_track_callers_that_are_not_agents(use_case: NonCallableMagicMock) -> None:
     await track_agent_activity(diagram_id=uuid.uuid4(), agent=None, use_case=use_case)
-    cast(AsyncMock, use_case.execute).assert_not_awaited()
+    use_case.execute.assert_not_awaited()
