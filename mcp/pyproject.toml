@@ -6,9 +6,9 @@ version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
     "httpx>=0.28.1",
-    "mcp>=2.2.0,<3",
-    "playwright>=1.55",
-    "pydantic>=2.12.0",
+    "mcp>=2.3.0,<3",
+    "playwright>=1.63.0",
+    "pydantic>=2.13.5",
 ]
 
 [project.scripts]
@@ -17,8 +17,8 @@ mcp-server = "server:main"
 [dependency-groups]
 dev = [
     "import-linter>=2.15",
-    "mypy>=1.18.0",
-    "pytest>=8.4.0",
+    "mypy>=2.4.0",
+    "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
 ]
 
