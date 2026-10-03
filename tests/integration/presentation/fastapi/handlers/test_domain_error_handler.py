@@ -5,10 +5,12 @@ from pytest import fixture, mark
 from app.domain.errors.domain_errors import (
     ConflictError,
     DomainError,
+    ForbiddenError,
     InvalidInputError,
     NotFoundError,
     PayloadTooLargeError,
     ServiceUnavailableError,
+    UnauthorizedError,
 )
 from app.presentation.fastapi.handlers.domain_error_handler import register_error_handlers
 
@@ -26,6 +28,8 @@ def client() -> TestClient:
             "invalid": InvalidInputError,
             "too-large": PayloadTooLargeError,
             "unavailable": ServiceUnavailableError,
+            "unauthorized": UnauthorizedError,
+            "forbidden": ForbiddenError,
         }
         raise errors.get(kind, DomainError)("some message")
 
@@ -40,6 +44,8 @@ def client() -> TestClient:
         ("invalid", 422),
         ("too-large", 413),
         ("unavailable", 503),
+        ("unauthorized", 401),
+        ("forbidden", 403),
         ("generic", 400),
     ],
 )
