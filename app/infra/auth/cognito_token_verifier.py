@@ -59,10 +59,15 @@ def _picture_url(claims: dict[str, Any]) -> str | None:
     return picture
 
 
+# The name claim, else the given and family names, else the part of the email before the @.
 def _display_name(claims: dict[str, Any], email: str) -> str:
-    name = claims.get("name")
-    if isinstance(name, str) and name.strip() != "":
-        return name.strip()
+    return _stripped(claims.get("name")) or _given_and_family_name(claims) or email.split("@")[0]
+
+
+def _given_and_family_name(claims: dict[str, Any]) -> str:
     parts = [claims.get("given_name"), claims.get("family_name")]
-    full = " ".join(part for part in parts if isinstance(part, str) and part != "")
-    return full or email.split("@")[0]
+    return " ".join(part for part in parts if isinstance(part, str) and part != "")
+
+
+def _stripped(value: object) -> str:
+    return value.strip() if isinstance(value, str) else ""

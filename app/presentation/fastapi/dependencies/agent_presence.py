@@ -20,6 +20,10 @@ def get_agent_identity(
     name = (x_agent_name or "").strip()[:AGENT_NAME_MAX_LENGTH]
     if name == "":
         return None
+    return _agent_of(caller, name)
+
+
+def _agent_of(caller: Caller, name: str) -> AgentIdentity | None:
     # A personal key makes it the agent of that person, told apart from other people's agents.
     if caller.api_key is not None and caller.user is not None:
         return AgentIdentity(
