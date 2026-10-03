@@ -147,6 +147,13 @@ async def test_should_remove_agent_when_it_goes_quiet(sut: ConnectionManager) ->
     assert CLAUDE not in last_presence_users(ws)
 
 
+async def test_should_keep_the_other_agents_when_one_goes_quiet(sut: ConnectionManager) -> None:
+    await sut.mark_agent_active("room", OWNERLESS_CLAUDE, seconds=0.01)
+    await sut.mark_agent_active("room", personal_agent("Ana", "laptop"), seconds=60)
+    await asyncio.sleep(0.05)
+    assert [entry["id"] for entry in sut.participants("room")] == ["agent:key:Ana"]
+
+
 async def test_should_keep_agent_listed_while_it_stays_active(sut: ConnectionManager) -> None:
     await sut.mark_agent_active("room", OWNERLESS_CLAUDE, seconds=0.1)
     await asyncio.sleep(0.06)
