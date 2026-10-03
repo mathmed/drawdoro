@@ -63,7 +63,7 @@ async def resolve_participant(
     # Browsers can't set headers on a WebSocket handshake, so the ID token travels in the URL.
     if not settings.auth_enabled:
         return Participant(name="Guest")
-    if token == "":
+    if not token:
         return await resolve_guest(share, guest_name, diagram_id, shared_lookup)
     try:
         user = await authenticate.execute(AuthenticateUserParams(token=token))

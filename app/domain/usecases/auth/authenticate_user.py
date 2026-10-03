@@ -15,7 +15,7 @@ class AuthenticateUser(Usecase[AuthenticateUserParams, User]):
         self._repo = repo
 
     async def execute(self, params: AuthenticateUserParams) -> User:
-        if params.token == "":
+        if not params.token:
             raise UnauthorizedError("Missing access token")
         identity = await self._verifier.verify(params.token)
         user = await self._repo.get_by_email(identity.email)
