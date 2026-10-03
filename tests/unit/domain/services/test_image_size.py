@@ -124,3 +124,14 @@ def test_should_read_extended_webp_size_before_the_next_chunk() -> None:
 )
 def test_should_return_none_for_unreadable_headers(data: bytes, mime_type: ImageMimeType) -> None:
     assert read_image_size(data, mime_type) is None
+
+
+def test_should_read_the_lossless_webp_size_from_its_own_bytes_only() -> None:
+    bits = (120 - 1) | ((90 - 1) << 14) | (0b1010 << 28)
+    payload = b"\x2f" + struct.pack("<I", bits) + b"\xff" * 4
+    assert read_image_size(webp(b"VP8L", payload), ImageMimeType.WEBP) == (120, 90)
+
+
+def test_should_read_the_lossy_webp_size_from_its_own_bytes_only() -> None:
+    payload = b"\x00" * 6 + struct.pack("<HH", 0x4000 | 640, 0x8000 | 480) + b"\xff" * 4
+    assert read_image_size(webp(b"VP8 ", payload), ImageMimeType.WEBP) == (640, 480)

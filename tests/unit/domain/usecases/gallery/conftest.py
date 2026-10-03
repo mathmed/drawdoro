@@ -1,12 +1,12 @@
 import uuid
-from typing import cast
-from unittest.mock import create_autospec
+from unittest.mock import NonCallableMagicMock
 
 import pytest
 
 from app.domain.contracts.gallery_item_repository import GalleryItemRepository
 from app.domain.entities.models.gallery_item import GalleryItem
 from app.domain.enums.gallery_item_kind import GalleryItemKind
+from tests.doubles import double
 
 OWNER_ID = uuid.UUID("11111111-1111-1111-1111-111111111111")
 
@@ -22,5 +22,5 @@ FOREIGN_ITEMS = [None, make_item(owner_id=uuid.uuid4()), make_item(owner_id=None
 
 
 @pytest.fixture
-def repo() -> GalleryItemRepository:
-    return cast(GalleryItemRepository, create_autospec(GalleryItemRepository))
+def repo() -> NonCallableMagicMock:
+    return double(GalleryItemRepository)

@@ -1,6 +1,5 @@
 import uuid
-from typing import cast
-from unittest.mock import AsyncMock, create_autospec
+from unittest.mock import NonCallableMagicMock
 
 import pytest
 
@@ -11,23 +10,24 @@ from app.domain.usecases.diagram.get_diagram_by_share_token import (
     GetDiagramByShareToken,
     GetDiagramByShareTokenParams,
 )
+from tests.doubles import double
 
 
 @pytest.fixture
-def repo() -> DiagramRepository:
-    return cast(DiagramRepository, create_autospec(DiagramRepository))
+def repo() -> NonCallableMagicMock:
+    return double(DiagramRepository)
 
 
 @pytest.fixture
-def sut(repo: DiagramRepository) -> GetDiagramByShareToken:
+def sut(repo: NonCallableMagicMock) -> GetDiagramByShareToken:
     return GetDiagramByShareToken(repo)
 
 
 async def test_should_return_diagram_for_valid_token(
-    sut: GetDiagramByShareToken, repo: DiagramRepository
+    sut: GetDiagramByShareToken, repo: NonCallableMagicMock
 ) -> None:
     diagram = Diagram(id=uuid.uuid4(), project_id=uuid.uuid4(), name="Shared", share_token="tok")
-    repo.get_by_share_token = AsyncMock(return_value=diagram)  # type: ignore[method-assign]
+    repo.get_by_share_token.return_value = diagram
 
     result = await sut.execute(GetDiagramByShareTokenParams(share_token="tok"))
 
@@ -36,8 +36,8 @@ async def test_should_return_diagram_for_valid_token(
 
 
 async def test_should_raise_not_found_for_unknown_token(
-    sut: GetDiagramByShareToken, repo: DiagramRepository
+    sut: GetDiagramByShareToken, repo: NonCallableMagicMock
 ) -> None:
-    repo.get_by_share_token = AsyncMock(return_value=None)  # type: ignore[method-assign]
-    with pytest.raises(NotFoundError):
+    repo.get_by_share_token.return_value = None
+    with pytest.raises(NotFoundError, match="^Shared diagram not found$"):
         await sut.execute(GetDiagramByShareTokenParams(share_token="missing"))

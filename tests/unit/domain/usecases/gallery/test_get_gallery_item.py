@@ -1,9 +1,8 @@
 import uuid
-from unittest.mock import AsyncMock
+from unittest.mock import NonCallableMagicMock
 
 import pytest
 
-from app.domain.contracts.gallery_item_repository import GalleryItemRepository
 from app.domain.entities.models.gallery_item import GalleryItem
 from app.domain.enums.gallery_item_kind import GalleryItemKind
 from app.domain.enums.image_mime_type import ImageMimeType
@@ -15,15 +14,15 @@ from .conftest import FOREIGN_ITEMS, OWNER_ID, make_item
 
 
 @pytest.fixture
-def sut(repo: GalleryItemRepository) -> GetGalleryItem:
+def sut(repo: NonCallableMagicMock) -> GetGalleryItem:
     return GetGalleryItem(repo)
 
 
 async def test_should_get_a_measured_item_as_stored(
-    sut: GetGalleryItem, repo: GalleryItemRepository
+    sut: GetGalleryItem, repo: NonCallableMagicMock
 ) -> None:
     item = make_item().model_copy(update={"width": 1, "height": 2, "size_bytes": 3})
-    repo.get_by_id = AsyncMock(return_value=item)  # type: ignore[method-assign]
+    repo.get_by_id.return_value = item
 
     assert await sut.execute(GetGalleryItemParams(item_id=item.id, owner_id=OWNER_ID)) is item
 
@@ -32,7 +31,7 @@ async def test_should_get_a_measured_item_as_stored(
     "measured", [{"width": None, "size_bytes": 3}, {"width": 1, "size_bytes": None}]
 )
 async def test_should_measure_items_saved_before_measures_existed(
-    sut: GetGalleryItem, repo: GalleryItemRepository, measured: dict[str, object]
+    sut: GetGalleryItem, repo: NonCallableMagicMock, measured: dict[str, object]
 ) -> None:
     data = png(30, 20)
     item = GalleryItem(
@@ -42,7 +41,7 @@ async def test_should_measure_items_saved_before_measures_existed(
         image_data=data,
         image_mime_type=ImageMimeType.PNG,
     ).model_copy(update=measured)
-    repo.get_by_id = AsyncMock(return_value=item)  # type: ignore[method-assign]
+    repo.get_by_id.return_value = item
 
     result = await sut.execute(GetGalleryItemParams(item_id=item.id, owner_id=OWNER_ID))
 
@@ -52,9 +51,9 @@ async def test_should_measure_items_saved_before_measures_existed(
 
 @pytest.mark.parametrize("stored", FOREIGN_ITEMS)
 async def test_should_raise_not_found_for_items_of_other_owners(
-    sut: GetGalleryItem, repo: GalleryItemRepository, stored: GalleryItem | None
+    sut: GetGalleryItem, repo: NonCallableMagicMock, stored: GalleryItem | None
 ) -> None:
-    repo.get_by_id = AsyncMock(return_value=stored)  # type: ignore[method-assign]
+    repo.get_by_id.return_value = stored
     item_id = uuid.uuid4()
 
     with pytest.raises(NotFoundError, match=str(item_id)):

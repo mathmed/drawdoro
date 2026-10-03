@@ -35,7 +35,7 @@ run:
 frontend:
 	cd frontend && npm run dev
 
-# Run all tests with coverage
+# Run all tests with line and branch coverage (fails under 95%)
 test:
 	uv run pytest --cov --cov-report=term-missing
 
@@ -87,7 +87,7 @@ mutation-report:
 	@echo ">> full report: mutants/report.md | inspect a mutant: uv run mutmut show <name>"
 
 # What the PR job runs: mutates only the use cases and domain services changed against BASE, down
-# to the changed functions, and fails below MUTATION_MIN_SCORE (default 60, the ratchet).
+# to the changed functions, and fails below MUTATION_MIN_SCORE (default 95, the ratchet).
 BASE ?= origin/main
 mutation-changed:
 	uv run python scripts/mutation.py changed --base $(BASE)

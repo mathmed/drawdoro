@@ -1,6 +1,5 @@
 import uuid
 from collections.abc import Iterator
-from typing import cast
 from unittest.mock import AsyncMock, create_autospec
 
 import pytest
@@ -16,6 +15,7 @@ from app.infra.realtime.connection_manager import manager
 from app.infra.realtime.realtime_diagram_update_notifier import RealtimeDiagramUpdateNotifier
 from app.main.main import app
 from app.presentation.factories.diagram_factories import update_diagram_factory
+from tests.doubles import double
 
 
 @pytest.fixture
@@ -68,9 +68,9 @@ def test_should_reject_oversized_client_id(client: TestClient, diagram: Diagram)
 
 
 def test_should_push_saved_diagram_to_open_editors(client: TestClient, diagram: Diagram) -> None:
-    repo = cast(DiagramRepository, create_autospec(DiagramRepository))
-    repo.get_by_id = AsyncMock(return_value=diagram)  # type: ignore[method-assign]
-    repo.update = AsyncMock(side_effect=lambda updated: updated)  # type: ignore[method-assign]
+    repo = double(DiagramRepository)
+    repo.get_by_id.return_value = diagram
+    repo.update.side_effect = lambda updated: updated
     app.dependency_overrides[update_diagram_factory] = lambda: UpdateDiagram(
         repo,
         RealtimeDiagramUpdateNotifier(manager),

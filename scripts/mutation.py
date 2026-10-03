@@ -5,7 +5,8 @@ import json
 import logging
 import os
 import re
-import subprocess
+import shutil
+import subprocess  # nosec B404
 import sys
 import tomllib
 from collections import defaultdict
@@ -19,7 +20,7 @@ MUTANTS_DIR = Path("mutants")
 PYPROJECT = Path("pyproject.toml")
 # Ratchet for the PR job: a floor below the current baseline that the owner raises over time.
 # Overridden by the MUTATION_MIN_SCORE environment variable (repository variable in CI).
-DEFAULT_MIN_SCORE = 60.0
+DEFAULT_MIN_SCORE = 95.0
 MIN_SCORE_ENV = "MUTATION_MIN_SCORE"
 # Machine-readable line read by scripts/quality_report.py (keep the prefix in sync)
 RESULT_PREFIX = "MUTATION_RESULT: "
@@ -146,19 +147,24 @@ def diff_of(name: str) -> str | None:
 def survivors_section(tallies: dict[str, Tally], limit: int) -> list[str]:
     lines = ["### Surviving mutants", ""]
     for module, tally in sorted(tallies.items()):
-        if not tally.survivors:
-            continue
-        lines.append(f"<details><summary><code>{module}</code>: {len(tally.survivors)}</summary>")
-        lines.append("")
-        for name in tally.survivors[:limit]:
-            diff = diff_of(name)
-            lines.append(f"`{name}`")
-            if diff:
-                lines.extend(["```diff", diff, "```"])
-        if len(tally.survivors) > limit:
-            lines.append(f"... and {len(tally.survivors) - limit} more (`mutmut results`)")
-        lines.extend(["", "</details>", ""])
+        if tally.survivors:
+            lines += module_survivors(module, tally.survivors, limit)
     return lines
+
+
+def module_survivors(module: str, survivors: list[str], limit: int) -> list[str]:
+    lines = [f"<details><summary><code>{module}</code>: {len(survivors)}</summary>", ""]
+    for name in survivors[:limit]:
+        lines += survivor_lines(name)
+    if len(survivors) > limit:
+        lines.append(f"... and {len(survivors) - limit} more (`mutmut results`)")
+    lines.extend(["", "</details>", ""])
+    return lines
+
+
+def survivor_lines(name: str) -> list[str]:
+    diff = diff_of(name)
+    return [f"`{name}`", "```diff", diff, "```"] if diff else [f"`{name}`"]
 
 
 def full_report(tallies: dict[str, Tally], diffs_per_module: int) -> str:
@@ -199,27 +205,43 @@ def function_spans(tree: ast.Module) -> list[FunctionSpan]:
     for node in tree.body:
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             spans.append(span_of(node, f"x_{node.name}"))
-        if not isinstance(node, ast.ClassDef):
-            continue
-        spans += [
-            span_of(item, f"xǁ{node.name}ǁ{item.name}")
-            for item in node.body
-            if isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef)
-        ]
+        if isinstance(node, ast.ClassDef):
+            spans += method_spans(node)
     return spans
+
+
+def method_spans(node: ast.ClassDef) -> list[FunctionSpan]:
+    return [
+        span_of(item, f"xǁ{node.name}ǁ{item.name}")
+        for item in node.body
+        if isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef)
+    ]
 
 
 # Lines whose change cannot alter what a function does: imports, blank lines and comments.
 def neutral_lines(tree: ast.Module, source: str) -> set[int]:
-    neutral = {
+    return blank_or_comment_lines(source) | import_lines(tree)
+
+
+def blank_or_comment_lines(source: str) -> set[int]:
+    return {
         number
         for number, text in enumerate(source.splitlines(), start=1)
-        if not text.strip() or text.strip().startswith("#")
+        if is_blank_or_comment(text)
     }
+
+
+def is_blank_or_comment(text: str) -> bool:
+    stripped = text.strip()
+    return not stripped or stripped.startswith("#")
+
+
+def import_lines(tree: ast.Module) -> set[int]:
+    lines: set[int] = set()
     for node in tree.body:
         if isinstance(node, ast.Import | ast.ImportFrom):
-            neutral.update(range(node.lineno, (node.end_lineno or node.lineno) + 1))
-    return neutral
+            lines.update(range(node.lineno, (node.end_lineno or node.lineno) + 1))
+    return lines
 
 
 def module_name(file: str) -> str:
@@ -233,12 +255,19 @@ def targets_for_file(file: str, source: str, lines: set[int]) -> list[str]:
     relevant = lines - neutral_lines(tree, source)
     if not relevant:
         return []
-    touched = [span for span in spans if any(span.contains(line) for line in relevant)]
-    outside = any(not any(span.contains(line) for span in spans) for line in relevant)
+    touched = touched_spans(spans, relevant)
     # A change outside functions (constants, class attributes...) can affect all of them.
-    if outside or len(touched) == len(spans):
+    if changes_outside(spans, relevant) or len(touched) == len(spans):
         return [f"{module}.*"]
     return [f"{module}.{span.mangled}__mutmut_*" for span in touched]
+
+
+def touched_spans(spans: list[FunctionSpan], lines: set[int]) -> list[FunctionSpan]:
+    return [span for span in spans if any(span.contains(line) for line in lines)]
+
+
+def changes_outside(spans: list[FunctionSpan], lines: set[int]) -> bool:
+    return any(not any(span.contains(line) for span in spans) for line in lines)
 
 
 def parse_changed_lines(diff: str) -> set[int]:
@@ -262,8 +291,18 @@ def in_scope(file: str, scope: list[str]) -> bool:
     return any(fnmatch.fnmatch(file, pattern) for pattern in scope)
 
 
+# Fixed git and mutmut command lines with no shell: the only arguments are the base ref and file
+# names that come from git itself, and the mutant name patterns built from them.
 def git(*args: str) -> str:
-    return subprocess.run(["git", *args], check=True, capture_output=True, text=True).stdout
+    command = [executable("git"), *args]
+    return subprocess.run(command, check=True, capture_output=True, text=True).stdout  # nosec B603
+
+
+def executable(name: str) -> str:
+    path = shutil.which(name)
+    if path is None:
+        raise FileNotFoundError(f"{name} is not on the PATH")
+    return path
 
 
 def changed_targets(base_ref: str, scope: list[str]) -> list[str]:
@@ -353,13 +392,17 @@ class ChangedReport:
             f"{total.detected} of {total.total} mutants killed.",
             "",
             *table("By file", self.tallies),
+            *survivors_list(self.tallies),
         ]
-        survivors = [name for tally in self.tallies.values() for name in tally.survivors]
-        if survivors:
-            lines += ["### Survivors", ""]
-            lines += [f"- `{name}`" for name in survivors]
-            lines += ["", "Inspect one with `uv run mutmut show <name>`."]
         return "\n".join(lines) + "\n"
+
+
+def survivors_list(tallies: dict[str, Tally]) -> list[str]:
+    survivors = [name for tally in tallies.values() for name in tally.survivors]
+    if not survivors:
+        return []
+    names = [f"- `{name}`" for name in survivors]
+    return ["### Survivors", "", *names, "", "Inspect one with `uv run mutmut show <name>`."]
 
 
 def skipped_result_line(min_score: float, reason: str) -> str:
@@ -392,16 +435,15 @@ def publish(markdown: str) -> None:
 
 
 def run_mutmut(targets: list[str]) -> tuple[int, str]:
-    process = subprocess.Popen(
-        ["mutmut", "run", *targets],
+    process = subprocess.Popen(  # nosec B603
+        [executable("mutmut"), "run", *targets],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
         errors="replace",
     )
-    assert process.stdout is not None
     lines: list[str] = []
-    for line in process.stdout:
+    for line in process.stdout or ():
         sys.stdout.write(line)
         lines.append(line)
     return process.wait(), "".join(lines)
@@ -421,15 +463,19 @@ def changed_command(base_ref: str) -> int:
     sys.stdout.write("Mutating:\n" + "".join(f"  {target}\n" for target in targets))
     sys.stdout.flush()
     exit_code, output = run_mutmut(targets)
-    if exit_code != 0 and NOTHING_MATCHED in output:
-        return skip("The changed functions produce no mutants.", threshold)
     if exit_code != 0:
-        logger.error("mutmut run failed with exit code %s", exit_code)
-        return exit_code
+        return mutmut_failure(exit_code, output, threshold)
     report = ChangedReport(collect(MUTANTS_DIR, targets), threshold, targets)
     publish(report.to_markdown())
     sys.stdout.write(report.to_result_line() + "\n")
     return 0 if report.passed else 1
+
+
+def mutmut_failure(exit_code: int, output: str, threshold: float) -> int:
+    if NOTHING_MATCHED in output:
+        return skip("The changed functions produce no mutants.", threshold)
+    logger.error("mutmut run failed with exit code %s", exit_code)
+    return exit_code
 
 
 def report_command(diffs_per_module: int, threshold: float) -> int:

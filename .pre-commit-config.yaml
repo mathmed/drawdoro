@@ -46,7 +46,7 @@ repos:
 
       - id: bandit
         name: bandit (security)
-        entry: uv run bandit -r app -ll -q
+        entry: uv run bandit -r app mcp scripts -q -x mcp/tests,mcp/.venv
         language: system
         types: [python]
         pass_filenames: false
@@ -60,7 +60,7 @@ repos:
 
       - id: xenon
         name: xenon (complexity)
-        entry: uv run xenon app --max-absolute B --max-modules A --max-average A
+        entry: uv run xenon app mcp scripts --max-absolute A --max-modules A --max-average A -e "mcp/tests/*,mcp/.venv/*"
         language: system
         types: [python]
         pass_filenames: false

@@ -48,6 +48,18 @@ def test_should_make_numbers_inside_echoed_lists_and_objects_safe(client: TestCl
     assert error["input"] == ["nan", 2]
 
 
+# A missing field echoes the whole body, so the numbers are made safe inside objects too.
+def test_should_make_numbers_inside_echoed_objects_safe(client: TestClient) -> None:
+    response = post(client, '{"y": {"z": [Infinity, 1.5, "a", true, null]}}')
+
+    assert response.status_code == 422
+    [error] = response.json()["detail"]
+    assert (error["type"], error["input"]) == (
+        "missing",
+        {"y": {"z": ["inf", 1.5, "a", True, None]}},
+    )
+
+
 def test_should_keep_fastapis_answer_for_other_inputs(client: TestClient) -> None:
     response = client.post("/points", json={"x": "far"})
 

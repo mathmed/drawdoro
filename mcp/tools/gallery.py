@@ -246,12 +246,10 @@ class GalleryTools:
             tags: New tags, replacing the current ones; [] removes them all.
             description: New description, up to 500 characters; "" removes it.
         """
-        if name is None and tags is None and description is None:
+        given = _without_none({"name": name, "tags": tags, "description": description})
+        if not given:
             raise ToolError("Pass the name, tags or description to change")
-        body: JsonObject = {"name": name, "tags": tags, "description": description}
-        updated = self._api.patch(
-            f"/gallery/{item_id}", {key: value for key, value in body.items() if value is not None}
-        )
+        updated = self._api.patch(f"/gallery/{item_id}", given)
         return _summary(updated)
 
 
@@ -277,37 +275,52 @@ def _summary(item: JsonObject, description_length: int | None = None) -> Gallery
 # Saved content is stored as the editor sent it, so every part of it is checked before use.
 def _contents(content: JsonObject) -> GalleryContents:
     shapes = _objects(content.get("shapes"))
-    listed = content.get("rootShapeIds")
-    roots = (
-        {root for root in listed if isinstance(root, str)} if isinstance(listed, list) else set()
-    )
-    bindings = _objects(content.get("bindings"))
-    assets = _objects(content.get("assets"))
+    roots = _root_ids(content.get("rootShapeIds"))
     return GalleryContents(
         shape_types=dict(Counter(str(shape.get("type")) for shape in shapes)),
-        connections=sum(1 for binding in bindings if binding.get("type") == "arrow"),
-        embedded_images=sum(1 for asset in assets if asset.get("type") == "image"),
+        connections=_count_of_type(_objects(content.get("bindings")), "arrow"),
+        embedded_images=_count_of_type(_objects(content.get("assets")), "image"),
         shapes=[_shape(shape, roots) for shape in shapes[:MAX_DESCRIBED_SHAPES]],
         truncated=len(shapes) > MAX_DESCRIBED_SHAPES,
     )
 
 
+def _root_ids(listed: object) -> set[str]:
+    if not isinstance(listed, list):
+        return set()
+    return {root for root in listed if isinstance(root, str)}
+
+
+def _count_of_type(records: list[JsonObject], record_type: str) -> int:
+    return sum(1 for record in records if record.get("type") == record_type)
+
+
 def _shape(shape: JsonObject, roots: set[str]) -> ContentShape:
-    saved_props = shape.get("props")
-    props: JsonObject = saved_props if isinstance(saved_props, dict) else {}
+    props = _props(shape.get("props"))
     width, height = shape_size(props)
     text = shape_text(props)
     shape_id = str(shape.get("id"))
-    parent, geo = shape.get("parentId"), props.get("geo")
     return ContentShape(
         id=shape_id,
         type=str(shape.get("type")),
         w=width,
         h=height,
-        parent=parent if isinstance(parent, str) and shape_id not in roots else None,
-        geo=geo if isinstance(geo, str) else None,
+        parent=None if shape_id in roots else _string_or_none(shape.get("parentId")),
+        geo=_string_or_none(props.get("geo")),
         untrusted_text=_cut(text, MAX_TEXT_LENGTH) if text else None,
     )
+
+
+def _props(saved_props: object) -> JsonObject:
+    return saved_props if isinstance(saved_props, dict) else {}
+
+
+def _string_or_none(value: object) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+def _without_none(fields: JsonObject) -> JsonObject:
+    return {key: value for key, value in fields.items() if value is not None}
 
 
 def _objects(value: object) -> list[JsonObject]:

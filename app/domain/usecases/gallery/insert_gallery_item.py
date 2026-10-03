@@ -25,8 +25,8 @@ from app.domain.entities.objects.insertion_plan import InsertionPlan
 from app.domain.enums.placement_side import PlacementSide
 from app.domain.errors.domain_errors import InvalidInputError, NotFoundError, PayloadTooLargeError
 from app.domain.services.canvas_insertion import CanvasInsertion
-from app.domain.services.gallery_item_measure import measure_image
 from app.domain.services.gallery_ownership import get_owned_gallery_item
+from app.domain.services.image_size import read_image_size
 from app.domain.services.revision_recorder import RevisionRecorder
 
 
@@ -102,20 +102,19 @@ class InsertGalleryItem(Usecase[InsertGalleryItemParams, GalleryInsertion]):
     def _merged_canvas(
         self, canvas: dict[str, Any], insertion: CanvasInsertion, plan: InsertionPlan
     ) -> dict[str, Any]:
-        new_shapes = sum(1 for record in plan.records if record["typeName"] == "shape")
-        if insertion.shape_count() + new_shapes > CANVAS_MAX_SHAPES_PER_PAGE:
-            raise InvalidInputError(
-                f"The diagram would have more than {CANVAS_MAX_SHAPES_PER_PAGE} shapes"
-            )
+        _ensure_room_for(insertion, plan)
         store = dict(canvas.get("store") or {})
         store.update({str(record["id"]): record for record in plan.records})
         merged = canvas | {"store": store}
-        size = len(json.dumps(merged).encode())
+        self._ensure_fits(merged)
+        return merged
+
+    def _ensure_fits(self, canvas: dict[str, Any]) -> None:
+        size = len(json.dumps(canvas).encode())
         if size > self._limits.max_canvas_bytes:
             raise PayloadTooLargeError(
                 f"The diagram would grow to {size} bytes (limit {self._limits.max_canvas_bytes})"
             )
-        return merged
 
     async def _save(
         self,
@@ -152,14 +151,17 @@ def _plan(
     )
     if item.image_data is None or item.image_mime_type is None:
         return insertion.place_shapes(item.content or {}, placement, params.scale)
-    measure = measure_image(item.image_data, item.image_mime_type)
-    if measure.width is None or measure.height is None:
+    size = read_image_size(item.image_data, item.image_mime_type)
+    if size is None:
         raise InvalidInputError("The size of this image can't be read, so it can't be inserted")
     return insertion.place_image(
-        item.image_data,
-        item.image_mime_type,
-        item.name,
-        (measure.width, measure.height),
-        placement,
-        params.scale,
+        item.image_data, item.image_mime_type, item.name, size, placement, params.scale
     )
+
+
+def _ensure_room_for(insertion: CanvasInsertion, plan: InsertionPlan) -> None:
+    new_shapes = sum(1 for record in plan.records if record["typeName"] == "shape")
+    if insertion.shape_count() + new_shapes > CANVAS_MAX_SHAPES_PER_PAGE:
+        raise InvalidInputError(
+            f"The diagram would have more than {CANVAS_MAX_SHAPES_PER_PAGE} shapes"
+        )

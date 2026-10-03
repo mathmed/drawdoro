@@ -14,13 +14,19 @@ caller_api_key: ContextVar[str | None] = ContextVar("caller_api_key", default=No
 def api_key_from_headers(headers: Any) -> str | None:
     if headers is None:
         return None
+    return header_api_key(headers) or bearer_token(headers)
+
+
+def header_api_key(headers: Any) -> str | None:
     key = (headers.get("x-api-key") or "").strip()
-    if key:
-        return str(key)
+    return str(key) if key else None
+
+
+def bearer_token(headers: Any) -> str | None:
     authorization = (headers.get("authorization") or "").strip()
-    if authorization.lower().startswith(BEARER_PREFIX):
-        return authorization[len(BEARER_PREFIX) :].strip() or None
-    return None
+    if not authorization.lower().startswith(BEARER_PREFIX):
+        return None
+    return authorization[len(BEARER_PREFIX) :].strip() or None
 
 
 class ForwardCallerApiKey:

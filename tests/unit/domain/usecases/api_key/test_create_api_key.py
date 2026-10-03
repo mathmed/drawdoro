@@ -1,6 +1,5 @@
 import uuid
-from typing import cast
-from unittest.mock import AsyncMock, create_autospec
+from unittest.mock import NonCallableMagicMock
 
 import pytest
 from pydantic import ValidationError
@@ -9,17 +8,18 @@ from app.domain.constants.api_keys import API_KEY_PREFIX, API_KEY_VISIBLE_CHARS
 from app.domain.contracts.api_key_repository import ApiKeyRepository
 from app.domain.services.api_key_secret import hash_api_key_secret
 from app.domain.usecases.api_key.create_api_key import CreateApiKey, CreateApiKeyParams
+from tests.doubles import double
 
 
 @pytest.fixture
-def repo() -> ApiKeyRepository:
-    mock = cast(ApiKeyRepository, create_autospec(ApiKeyRepository))
-    mock.create = AsyncMock(side_effect=lambda created: created)  # type: ignore[method-assign]
+def repo() -> NonCallableMagicMock:
+    mock = double(ApiKeyRepository)
+    mock.create.side_effect = lambda created: created
     return mock
 
 
 @pytest.fixture
-def sut(repo: ApiKeyRepository) -> CreateApiKey:
+def sut(repo: NonCallableMagicMock) -> CreateApiKey:
     return CreateApiKey(repo)
 
 

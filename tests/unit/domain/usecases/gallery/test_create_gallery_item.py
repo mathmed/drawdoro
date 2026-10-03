@@ -1,7 +1,7 @@
 import json
 import uuid
-from typing import Any, cast
-from unittest.mock import AsyncMock, create_autospec
+from typing import Any
+from unittest.mock import NonCallableMagicMock
 
 import pytest
 
@@ -16,6 +16,7 @@ from app.domain.usecases.gallery.create_gallery_item import (
     CreateGalleryItem,
     CreateGalleryItemParams,
 )
+from tests.doubles import double
 from tests.tldraw_records import content, geo, png
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
@@ -24,14 +25,14 @@ CONTENT: dict[str, Any] = {"shapes": [{"id": "shape:a"}], "rootShapeIds": ["shap
 
 
 @pytest.fixture
-def repo() -> GalleryItemRepository:
-    mock = cast(GalleryItemRepository, create_autospec(GalleryItemRepository))
-    mock.create = AsyncMock(side_effect=lambda item: item)  # type: ignore[method-assign]
+def repo() -> NonCallableMagicMock:
+    mock = double(GalleryItemRepository)
+    mock.create.side_effect = lambda item: item
     return mock
 
 
 @pytest.fixture
-def sut(repo: GalleryItemRepository) -> CreateGalleryItem:
+def sut(repo: NonCallableMagicMock) -> CreateGalleryItem:
     return CreateGalleryItem(repo, GalleryLimits(max_image_bytes=64, max_shapes_bytes=200))
 
 
@@ -115,14 +116,14 @@ NEEDS_IMAGE = "An image item needs image data and no content"
 )
 async def test_should_reject_invalid_input(
     sut: CreateGalleryItem,
-    repo: GalleryItemRepository,
+    repo: NonCallableMagicMock,
     params: CreateGalleryItemParams,
     message: str,
 ) -> None:
     with pytest.raises(InvalidInputError) as refused:
         await sut.execute(params)
     assert refused.value.message == message
-    cast(AsyncMock, repo.create).assert_not_awaited()
+    repo.create.assert_not_awaited()
 
 
 # Saved content whose JSON takes exactly `size` bytes.
@@ -182,17 +183,18 @@ async def test_should_reject_payloads_above_the_limit(
     ],
 )
 async def test_should_accept_payloads_exactly_at_the_limit(
-    sut: CreateGalleryItem, repo: GalleryItemRepository, params: CreateGalleryItemParams
+    sut: CreateGalleryItem, repo: NonCallableMagicMock, params: CreateGalleryItemParams
 ) -> None:
     await sut.execute(params)
-    cast(AsyncMock, repo.create).assert_awaited_once()
+    repo.create.assert_awaited_once()
 
 
 async def test_should_return_what_the_repository_stored(
-    sut: CreateGalleryItem, repo: GalleryItemRepository
+    sut: CreateGalleryItem, repo: NonCallableMagicMock
 ) -> None:
     stored = GalleryItem(name="Stored", kind=GalleryItemKind.IMAGE, image_data=PNG)
-    repo.create = AsyncMock(return_value=stored)  # type: ignore[method-assign]
+    repo.create.side_effect = None
+    repo.create.return_value = stored
 
     item = await sut.execute(
         CreateGalleryItemParams(name="x", kind=GalleryItemKind.IMAGE, image_data=PNG)
@@ -217,7 +219,7 @@ async def test_should_normalize_tags_and_description(sut: CreateGalleryItem) -> 
 
 
 async def test_should_reject_invalid_tags(
-    sut: CreateGalleryItem, repo: GalleryItemRepository
+    sut: CreateGalleryItem, repo: NonCallableMagicMock
 ) -> None:
     with pytest.raises(InvalidInputError, match="unsupported characters"):
         await sut.execute(
@@ -225,10 +227,10 @@ async def test_should_reject_invalid_tags(
                 name="Logo", kind=GalleryItemKind.IMAGE, image_data=JPEG, tags=["<b>"]
             )
         )
-    repo.create.assert_not_called()  # type: ignore[attr-defined]
+    repo.create.assert_not_called()
 
 
-async def test_should_measure_images(repo: GalleryItemRepository) -> None:
+async def test_should_measure_images(repo: NonCallableMagicMock) -> None:
     data = png(40, 30)
     sut = CreateGalleryItem(repo, GalleryLimits(max_image_bytes=10_000, max_shapes_bytes=200))
 
@@ -239,7 +241,7 @@ async def test_should_measure_images(repo: GalleryItemRepository) -> None:
     assert (item.width, item.height, item.size_bytes) == (40, 30, len(data))
 
 
-async def test_should_measure_shapes(repo: GalleryItemRepository) -> None:
+async def test_should_measure_shapes(repo: NonCallableMagicMock) -> None:
     saved = content([geo("shape:a", 10, 10, 120, 60)])
     sut = CreateGalleryItem(repo, GalleryLimits(max_image_bytes=64, max_shapes_bytes=10_000))
 

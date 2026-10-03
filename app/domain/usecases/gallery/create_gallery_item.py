@@ -64,9 +64,7 @@ class CreateGalleryItem(Usecase[CreateGalleryItemParams, GalleryItem]):
         content = params.content
         if content is None or params.image_data is not None:
             raise InvalidInputError("A shapes item needs content and no image")
-        shapes = content.get("shapes")
-        if not isinstance(shapes, list) or len(shapes) == 0:
-            raise InvalidInputError("A shapes item needs at least one shape")
+        _ensure_has_shapes(content)
         size = content_size_bytes(content)
         if size > self._limits.max_shapes_bytes:
             raise PayloadTooLargeError(
@@ -92,6 +90,12 @@ def _measured(item: GalleryItem, measure: GalleryMeasure) -> GalleryItem:
     return item.model_copy(
         update={"width": measure.width, "height": measure.height, "size_bytes": measure.size_bytes}
     )
+
+
+def _ensure_has_shapes(content: dict[str, Any]) -> None:
+    shapes = content.get("shapes")
+    if not isinstance(shapes, list) or len(shapes) == 0:
+        raise InvalidInputError("A shapes item needs at least one shape")
 
 
 def _validate_thumbnail(thumbnail: bytes | None) -> None:

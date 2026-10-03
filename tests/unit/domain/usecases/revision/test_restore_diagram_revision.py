@@ -1,6 +1,5 @@
 import uuid
-from typing import cast
-from unittest.mock import AsyncMock, create_autospec
+from unittest.mock import NonCallableMagicMock
 
 import pytest
 
@@ -17,6 +16,7 @@ from app.domain.usecases.revision.restore_diagram_revision import (
     RestoreDiagramRevision,
     RestoreDiagramRevisionParams,
 )
+from tests.doubles import double
 
 ANA = RevisionAuthor(user_id=uuid.uuid4(), name="Ana")
 
@@ -35,86 +35,90 @@ def old_revision(diagram: Diagram) -> DiagramRevision:
 
 
 @pytest.fixture
-def diagrams() -> DiagramRepository:
-    mock = cast(DiagramRepository, create_autospec(DiagramRepository))
-    mock.update = AsyncMock(side_effect=lambda updated: updated)  # type: ignore[method-assign]
+def diagrams() -> NonCallableMagicMock:
+    mock = double(DiagramRepository)
+    mock.update.side_effect = lambda updated: updated
     return mock
 
 
 @pytest.fixture
-def revisions() -> DiagramRevisionRepository:
-    return cast(DiagramRevisionRepository, create_autospec(DiagramRevisionRepository))
+def revisions() -> NonCallableMagicMock:
+    return double(DiagramRevisionRepository)
 
 
 @pytest.fixture
-def recorder() -> RevisionRecorder:
-    return cast(RevisionRecorder, create_autospec(RevisionRecorder, instance=True))
+def recorder() -> NonCallableMagicMock:
+    return double(RevisionRecorder)
 
 
 @pytest.fixture
-def notifier() -> DiagramUpdateNotifier:
-    return cast(DiagramUpdateNotifier, create_autospec(DiagramUpdateNotifier))
+def notifier() -> NonCallableMagicMock:
+    return double(DiagramUpdateNotifier)
 
 
 @pytest.fixture
 def sut(
-    diagrams: DiagramRepository,
-    revisions: DiagramRevisionRepository,
-    recorder: RevisionRecorder,
-    notifier: DiagramUpdateNotifier,
+    diagrams: NonCallableMagicMock,
+    revisions: NonCallableMagicMock,
+    recorder: NonCallableMagicMock,
+    notifier: NonCallableMagicMock,
 ) -> RestoreDiagramRevision:
     return RestoreDiagramRevision(diagrams, revisions, recorder, notifier)
 
 
 async def test_should_bring_back_the_canvas_and_record_a_restore(
     sut: RestoreDiagramRevision,
-    diagrams: DiagramRepository,
-    revisions: DiagramRevisionRepository,
-    recorder: RevisionRecorder,
-    notifier: DiagramUpdateNotifier,
+    diagrams: NonCallableMagicMock,
+    revisions: NonCallableMagicMock,
+    recorder: NonCallableMagicMock,
+    notifier: NonCallableMagicMock,
 ) -> None:
     diagram = current_diagram()
     before = DiagramSnapshot.of(diagram)
     revision = old_revision(diagram)
-    diagrams.get_by_id = AsyncMock(return_value=diagram)  # type: ignore[method-assign]
-    revisions.get = AsyncMock(return_value=revision)  # type: ignore[method-assign]
+    diagrams.get_by_id.return_value = diagram
+    revisions.get.return_value = revision
     restored = await sut.execute(
         RestoreDiagramRevisionParams(diagram_id=diagram.id, revision_id=revision.id, author=ANA)
     )
     assert restored.name == "Checkout v3"
     assert restored.canvas_state == {"shapes": ["old"]}
     assert restored.semantic_metadata == {"a": {}}
-    cast(AsyncMock, recorder.record).assert_awaited_once_with(
+    recorder.record.assert_awaited_once_with(
         diagram.id,
         before,
         DiagramSnapshot.of(restored),
         ANA,
         restored_from_id=revision.id,
     )
-    cast(AsyncMock, notifier.notify_updated).assert_awaited_once_with(restored, None)
+    notifier.notify_updated.assert_awaited_once_with(restored, None)
+    diagrams.get_by_id.assert_awaited_once_with(diagram.id)
+    revisions.get.assert_awaited_once_with(diagram.id, revision.id)
 
 
 async def test_should_raise_not_found_for_missing_diagram(
-    sut: RestoreDiagramRevision, diagrams: DiagramRepository, notifier: DiagramUpdateNotifier
+    sut: RestoreDiagramRevision, diagrams: NonCallableMagicMock, notifier: NonCallableMagicMock
 ) -> None:
-    diagrams.get_by_id = AsyncMock(return_value=None)  # type: ignore[method-assign]
-    with pytest.raises(NotFoundError):
+    diagrams.get_by_id.return_value = None
+    diagram_id = uuid.uuid4()
+    with pytest.raises(NotFoundError, match=f"^Diagram {diagram_id} not found$"):
         await sut.execute(
-            RestoreDiagramRevisionParams(diagram_id=uuid.uuid4(), revision_id=uuid.uuid4())
+            RestoreDiagramRevisionParams(diagram_id=diagram_id, revision_id=uuid.uuid4())
         )
-    cast(AsyncMock, notifier.notify_updated).assert_not_awaited()
+    notifier.notify_updated.assert_not_awaited()
 
 
 async def test_should_raise_not_found_for_missing_revision(
     sut: RestoreDiagramRevision,
-    diagrams: DiagramRepository,
-    revisions: DiagramRevisionRepository,
+    diagrams: NonCallableMagicMock,
+    revisions: NonCallableMagicMock,
 ) -> None:
     diagram = current_diagram()
-    diagrams.get_by_id = AsyncMock(return_value=diagram)  # type: ignore[method-assign]
-    revisions.get = AsyncMock(return_value=None)  # type: ignore[method-assign]
-    with pytest.raises(NotFoundError):
+    diagrams.get_by_id.return_value = diagram
+    revisions.get.return_value = None
+    revision_id = uuid.uuid4()
+    with pytest.raises(NotFoundError, match=f"^Revision {revision_id} not found$"):
         await sut.execute(
-            RestoreDiagramRevisionParams(diagram_id=diagram.id, revision_id=uuid.uuid4())
+            RestoreDiagramRevisionParams(diagram_id=diagram.id, revision_id=revision_id)
         )
-    cast(AsyncMock, diagrams.update).assert_not_awaited()
+    diagrams.update.assert_not_awaited()

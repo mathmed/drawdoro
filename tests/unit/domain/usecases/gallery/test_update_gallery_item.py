@@ -1,9 +1,8 @@
 import uuid
-from unittest.mock import AsyncMock
+from unittest.mock import NonCallableMagicMock
 
 import pytest
 
-from app.domain.contracts.gallery_item_repository import GalleryItemRepository
 from app.domain.entities.models.gallery_item import GalleryItem, GalleryItemSummary
 from app.domain.errors.domain_errors import InvalidInputError, NotFoundError
 from app.domain.usecases.gallery.update_gallery_item import (
@@ -20,19 +19,19 @@ def item() -> GalleryItem:
 
 
 @pytest.fixture
-def sut(repo: GalleryItemRepository, item: GalleryItem) -> UpdateGalleryItem:
-    repo.get_by_id = AsyncMock(return_value=item)  # type: ignore[method-assign]
-    repo.update_details = AsyncMock(side_effect=lambda summary: summary)  # type: ignore[method-assign]
+def sut(repo: NonCallableMagicMock, item: GalleryItem) -> UpdateGalleryItem:
+    repo.get_by_id.return_value = item
+    repo.update_details.side_effect = lambda summary: summary
     return UpdateGalleryItem(repo)
 
 
-def saved(repo: GalleryItemRepository) -> GalleryItemSummary:
-    summary: GalleryItemSummary = repo.update_details.await_args.args[0]  # type: ignore[attr-defined]
+def saved(repo: NonCallableMagicMock) -> GalleryItemSummary:
+    summary: GalleryItemSummary = repo.update_details.await_args.args[0]
     return summary
 
 
 async def test_should_rename_with_a_trimmed_name_and_keep_the_rest(
-    sut: UpdateGalleryItem, repo: GalleryItemRepository, item: GalleryItem
+    sut: UpdateGalleryItem, repo: NonCallableMagicMock, item: GalleryItem
 ) -> None:
     result = await sut.execute(
         UpdateGalleryItemParams(item_id=item.id, owner_id=OWNER_ID, name="  New ")
@@ -45,15 +44,15 @@ async def test_should_rename_with_a_trimmed_name_and_keep_the_rest(
 
 # Ownership is checked on the item that was loaded, so it must be the one asked for.
 async def test_should_load_the_requested_item(
-    sut: UpdateGalleryItem, repo: GalleryItemRepository, item: GalleryItem
+    sut: UpdateGalleryItem, repo: NonCallableMagicMock, item: GalleryItem
 ) -> None:
     await sut.execute(UpdateGalleryItemParams(item_id=item.id, owner_id=OWNER_ID, name="New"))
 
-    repo.get_by_id.assert_awaited_once_with(item.id)  # type: ignore[attr-defined]
+    repo.get_by_id.assert_awaited_once_with(item.id)
 
 
 async def test_should_replace_tags_with_normalized_ones(
-    sut: UpdateGalleryItem, repo: GalleryItemRepository, item: GalleryItem
+    sut: UpdateGalleryItem, repo: NonCallableMagicMock, item: GalleryItem
 ) -> None:
     result = await sut.execute(
         UpdateGalleryItemParams(item_id=item.id, owner_id=OWNER_ID, tags=["AWS", " aws", "Queue"])
@@ -78,12 +77,12 @@ async def test_should_set_the_description(sut: UpdateGalleryItem, item: GalleryI
 
 
 async def test_should_need_something_to_change(
-    sut: UpdateGalleryItem, repo: GalleryItemRepository
+    sut: UpdateGalleryItem, repo: NonCallableMagicMock
 ) -> None:
     with pytest.raises(InvalidInputError) as refused:
         await sut.execute(UpdateGalleryItemParams(item_id=uuid.uuid4(), owner_id=OWNER_ID))
     assert refused.value.message == "Pass the name, tags or description to change"
-    repo.get_by_id.assert_not_awaited()  # type: ignore[attr-defined]
+    repo.get_by_id.assert_not_awaited()
 
 
 @pytest.mark.parametrize(
@@ -95,22 +94,22 @@ async def test_should_need_something_to_change(
     ],
 )
 async def test_should_reject_invalid_values_before_reading(
-    sut: UpdateGalleryItem, repo: GalleryItemRepository, params: UpdateGalleryItemParams
+    sut: UpdateGalleryItem, repo: NonCallableMagicMock, params: UpdateGalleryItemParams
 ) -> None:
     with pytest.raises(InvalidInputError):
         await sut.execute(params)
-    repo.get_by_id.assert_not_awaited()  # type: ignore[attr-defined]
-    repo.update_details.assert_not_awaited()  # type: ignore[attr-defined]
+    repo.get_by_id.assert_not_awaited()
+    repo.update_details.assert_not_awaited()
 
 
 @pytest.mark.parametrize("stored", FOREIGN_ITEMS)
 async def test_should_not_update_items_of_other_owners(
-    sut: UpdateGalleryItem, repo: GalleryItemRepository, stored: GalleryItem | None
+    sut: UpdateGalleryItem, repo: NonCallableMagicMock, stored: GalleryItem | None
 ) -> None:
-    repo.get_by_id = AsyncMock(return_value=stored)  # type: ignore[method-assign]
+    repo.get_by_id.return_value = stored
 
     with pytest.raises(NotFoundError):
         await sut.execute(
             UpdateGalleryItemParams(item_id=uuid.uuid4(), owner_id=OWNER_ID, name="New")
         )
-    repo.update_details.assert_not_awaited()  # type: ignore[attr-defined]
+    repo.update_details.assert_not_awaited()

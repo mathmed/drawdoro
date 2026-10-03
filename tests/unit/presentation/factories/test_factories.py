@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.settings import Settings
+from app.domain.contracts.diagram_rooms import DiagramRooms
 from app.domain.usecases.comment.create_comment import CreateComment
 from app.domain.usecases.comment.delete_comment import DeleteComment
 from app.domain.usecases.comment.list_comments import ListComments
@@ -38,6 +39,7 @@ from app.domain.usecases.workspace.delete_workspace import DeleteWorkspace
 from app.domain.usecases.workspace.get_workspace import GetWorkspace
 from app.domain.usecases.workspace.list_workspaces import ListWorkspaces
 from app.domain.usecases.workspace.update_workspace import UpdateWorkspace
+from app.infra.realtime.connection_manager import manager
 from app.presentation.factories.comment_factories import (
     create_comment_factory,
     delete_comment_factory,
@@ -73,6 +75,7 @@ from app.presentation.factories.gallery_factories import (
     update_gallery_item_factory,
 )
 from app.presentation.factories.health_factories import check_readiness_factory
+from app.presentation.factories.presence_factories import diagram_rooms_factory
 from app.presentation.factories.project_factories import (
     create_project_factory,
     delete_project_factory,
@@ -154,3 +157,11 @@ async def test_gallery_factories() -> None:
 async def test_health_factories() -> None:
     session = MagicMock(spec=AsyncSession)
     assert isinstance(await check_readiness_factory(session), CheckReadiness)
+
+
+# Every editor of a diagram must reach the others, so the rooms are one registry per process.
+def test_should_share_one_room_registry() -> None:
+    rooms = diagram_rooms_factory()
+    assert isinstance(rooms, DiagramRooms)
+    assert rooms is manager
+    assert diagram_rooms_factory() is rooms

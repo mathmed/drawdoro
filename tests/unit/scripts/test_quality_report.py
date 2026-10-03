@@ -711,3 +711,71 @@ class TestCommandLine:
         monkeypatch.delenv("GITHUB_RUN_ID", raising=False)
 
         assert quality_report.footer_from_environment() == ""
+
+
+class TestCharacterization:
+    def test_should_report_a_smoke_step_that_stopped_without_finishing(self) -> None:
+        output = SMOKE_OK.replace(">> Smoke passed", "")
+        steps = quality_report.smoke_steps(output)
+        assert steps[-1].status == Status.FAILED
+        assert steps[-1].note == "stopped without finishing"
+
+    def test_should_list_least_covered_files_only_with_a_header_and_a_total(self) -> None:
+        assert quality_report.least_covered("app/a.py  10  5  50%\nTOTAL  10  5  50%\n") == ""
+
+    def test_should_count_files_hidden_from_the_least_covered_table(self) -> None:
+        rows = "".join(f"app/f{i}.py  10  1  {90 - i}%\n" for i in range(12))
+        table = quality_report.least_covered(
+            f"Name  Stmts  Miss  Cover\n{rows}TOTAL  120  12  85%\n"
+        )
+        assert "... and 2 more files below 100%" in table
+        assert table.splitlines()[1].startswith("app/f11.py")
+
+    def test_should_fail_eslint_without_a_problems_line(self) -> None:
+        finding = analyze_eslint(Fragment(Analysis.ESLINT, 2, "Oops: config not found", False))
+        assert (finding.status, finding.summary) == (Status.FAILED, "ESLint failed")
+
+    @pytest.mark.parametrize(
+        ("output", "summary"),
+        [
+            ("built in 1.2s\n", "built in 1.2s"),
+            ("nothing useful\n", "built"),
+            (
+                "dist/a.js  1,234.5 kB\nbuilt in 3s\nSome chunks are larger than 500 kB\n",
+                "built in 3s · largest asset 1,234 kB · above Vite's chunk size warning",
+            ),
+        ],
+    )
+    def test_should_describe_the_frontend_build(self, output: str, summary: str) -> None:
+        finding = analyze_frontend_build(Fragment(Analysis.FRONTEND_BUILD, 0, output, False))
+        assert (finding.status, finding.summary) == (Status.OK, summary)
+
+    def test_should_list_how_many_survivors_were_hidden_and_their_diffs(self) -> None:
+        survivors = [
+            {"file": "a.py", "function": "f", "status": "survived", "name": f"m{i}", "diff": "-a"}
+            for i in range(quality_report.MAX_SURVIVORS_LISTED + 2)
+        ]
+        line = quality_report.MUTATION_RESULT_PREFIX + json.dumps(
+            {
+                "skipped": False,
+                "score": 50.0,
+                "min_score": 60,
+                "killed": 1,
+                "total": 2,
+                "survivors": survivors,
+            }
+        )
+        outcome = quality_report.MutationOutcome.parse(line)
+        assert outcome is not None
+        details = quality_report.mutation_details(outcome)
+        assert "... and 2 more: see the `mutation` job summary." in details
+        assert details.count("```diff") == quality_report.MAX_SURVIVORS_LISTED
+
+    def test_should_say_which_sections_have_warnings_or_did_not_run(self) -> None:
+        def result(status: Status) -> quality_report.SectionResult:
+            return quality_report.SectionResult(SECTIONS[0], status, [])
+
+        warned = quality_report.verdict([result(Status.WARNING), result(Status.OK)])
+        assert warned == "⚠️ **Passed with warnings**: 1 section with warnings"
+        skipped = quality_report.verdict([result(Status.SKIPPED), result(Status.SKIPPED)])
+        assert skipped == "✅ **All good** (2 sections not run)"

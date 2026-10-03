@@ -240,15 +240,9 @@ class DiagramTools:
             summary: One sentence on what you changed and why, shown in the diagram's history
                 next to your change (e.g. "Renamed the auth service and linked it to the DB").
         """
-        if not upsert and not delete:
-            raise ToolError("Pass the records to upsert, the ids to delete, or both")
+        _require_edits(upsert, delete)
         diagram = self.get_diagram(diagram_id)
-        updated_at = DiagramSummary.model_validate(diagram).updated_at
-        if expected_updated_at is not None and updated_at != _assume_utc(expected_updated_at):
-            raise ToolError(
-                f"The diagram was saved at {updated_at.isoformat()}, after the version you read; "
-                "read it again before editing"
-            )
+        _check_not_stale(DiagramSummary.model_validate(diagram).updated_at, expected_updated_at)
         current = StoredDiagram.model_validate(diagram)
         canvas = Canvas(current.canvas_state)
         deleted = canvas.delete(delete or [])
@@ -282,3 +276,16 @@ def _describe_edits(created: list[str], changed: list[str], deleted: list[str]) 
     counts = {"created": len(created), "changed": len(changed), "deleted": len(deleted)}
     done = [f"{count} {verb}" for verb, count in counts.items() if count]
     return f"Edited the canvas: {', '.join(done) or 'no records'}"
+
+
+def _require_edits(upsert: list[dict[str, Any]] | None, delete: list[str] | None) -> None:
+    if not upsert and not delete:
+        raise ToolError("Pass the records to upsert, the ids to delete, or both")
+
+
+def _check_not_stale(updated_at: datetime, expected_updated_at: datetime | None) -> None:
+    if expected_updated_at is not None and updated_at != _assume_utc(expected_updated_at):
+        raise ToolError(
+            f"The diagram was saved at {updated_at.isoformat()}, after the version you read; "
+            "read it again before editing"
+        )

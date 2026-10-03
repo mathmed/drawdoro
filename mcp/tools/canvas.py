@@ -67,22 +67,26 @@ class Canvas:
         return created, changed
 
     def delete(self, record_ids: list[str]) -> list[str]:
-        unknown = [record_id for record_id in record_ids if record_id not in self._store]
-        if unknown:
-            raise ToolError(f"Not in the diagram: {', '.join(unknown)}")
-        if any(record_id.startswith("document:") for record_id in record_ids):
-            raise ToolError("The document record cannot be deleted")
+        self._check_deletable(record_ids)
         doomed = self._with_descendants(record_ids)
         # An arrow binding pointing at a deleted shape would leave the arrow attached to nothing.
-        doomed |= {
-            record_id
-            for record_id, record in self._store.items()
-            if record.get("typeName") == "binding"
-            and (record.get("fromId") in doomed or record.get("toId") in doomed)
-        }
+        doomed |= self._bindings_touching(doomed)
         for record_id in doomed:
             del self._store[record_id]
         return sorted(doomed)
+
+    def _check_deletable(self, record_ids: list[str]) -> None:
+        unknown = [record_id for record_id in record_ids if record_id not in self._store]
+        if unknown:
+            raise ToolError(f"Not in the diagram: {', '.join(unknown)}")
+        check_not_document(record_ids)
+
+    def _bindings_touching(self, record_ids: set[str]) -> set[str]:
+        return {
+            record_id
+            for record_id, record in self._store.items()
+            if record.get("typeName") == "binding" and binds_any(record, record_ids)
+        }
 
     def outline(self) -> list[ShapeOutline]:
         bindings = self._arrow_ends()
@@ -96,9 +100,7 @@ class Canvas:
     def _complete(self, record: JsonObject) -> JsonObject:
         record_id = str(record["id"])
         if not record_id.startswith("shape:"):
-            if "typeName" not in record:
-                raise ToolError(f"{record_id} is new, so it must be a complete tldraw record")
-            return record
+            return complete_record(record_id, record)
         if "type" not in record or "props" not in record:
             raise ToolError(f"{record_id} is new, so it needs at least its type and complete props")
         defaults: JsonObject = SHAPE_DEFAULTS | {
@@ -240,12 +242,30 @@ def _inline(node: JsonObject) -> str:
 def shape_size(props: JsonObject) -> tuple[int | None, int | None]:
     points = props.get("points")
     if isinstance(points, dict) and points:
-        xs = [point.get("x", 0) for point in points.values()]
-        ys = [point.get("y", 0) for point in points.values()]
-        return round(max(xs) - min(xs)), round(max(ys) - min(ys))
-    width = props.get("w")
-    height = props.get("h")
-    return (
-        round(width) if isinstance(width, int | float) else None,
-        round(height) if isinstance(height, int | float) else None,
-    )
+        return points_size(list(points.values()))
+    return rounded(props.get("w")), rounded(props.get("h"))
+
+
+def points_size(points: list[JsonObject]) -> tuple[int, int]:
+    xs = [point.get("x", 0) for point in points]
+    ys = [point.get("y", 0) for point in points]
+    return round(max(xs) - min(xs)), round(max(ys) - min(ys))
+
+
+def rounded(value: object) -> int | None:
+    return round(value) if isinstance(value, int | float) else None
+
+
+def complete_record(record_id: str, record: JsonObject) -> JsonObject:
+    if "typeName" not in record:
+        raise ToolError(f"{record_id} is new, so it must be a complete tldraw record")
+    return record
+
+
+def binds_any(binding: JsonObject, record_ids: set[str]) -> bool:
+    return binding.get("fromId") in record_ids or binding.get("toId") in record_ids
+
+
+def check_not_document(record_ids: list[str]) -> None:
+    if any(record_id.startswith("document:") for record_id in record_ids):
+        raise ToolError("The document record cannot be deleted")

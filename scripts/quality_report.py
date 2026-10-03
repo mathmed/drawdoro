@@ -3,13 +3,14 @@ import json
 import logging
 import os
 import re
-import subprocess
+import subprocess  # nosec B404
 import sys
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -270,9 +271,13 @@ def analyze_vulture(fragment: Fragment) -> Finding:
     output = clean(fragment.output)
     if fragment.passed and not output:
         return Finding(Status.OK, "No dead code detected")
-    lines = [line for line in output.splitlines() if line.strip()]
+    count = len(non_blank_lines(output))
     status = Status.WARNING if fragment.advisory else Status.FAILED
-    return Finding(status, plural(len(lines), "dead code item", "dead code items"), tail(output))
+    return Finding(status, plural(count, "dead code item", "dead code items"), tail(output))
+
+
+def non_blank_lines(text: str) -> list[str]:
+    return [line for line in text.splitlines() if line.strip()]
 
 
 def analyze_xenon(fragment: Fragment) -> Finding:
@@ -293,20 +298,34 @@ COVERAGE_ROW = re.compile(r"^(?P<name>\S+)\s+\d+\s+\d+\s+(?:\d+\s+\d+\s+)?(?P<co
 
 def least_covered(output: str) -> str:
     lines = output.splitlines()
-    header = next((line for line in lines if line.startswith("Name ")), None)
-    total = next((line for line in lines if line.startswith("TOTAL")), None)
+    header = first_line_starting(lines, "Name ")
+    total = first_line_starting(lines, "TOTAL")
     if header is None or total is None:
         return ""
-    rows = [
+    lowest = files_below_full_coverage(lines)
+    listed = lowest[:MAX_COVERAGE_ROWS]
+    return "\n".join([header, *listed, *more_files_note(len(lowest) - len(listed)), total])
+
+
+def first_line_starting(lines: list[str], prefix: str) -> str | None:
+    return next((line for line in lines if line.startswith(prefix)), None)
+
+
+def coverage_rows(lines: list[str]) -> list[tuple[int, str]]:
+    return [
         (int(match["cover"]), line)
         for line in lines
         if (match := COVERAGE_ROW.match(line)) and not line.startswith("TOTAL")
     ]
-    lowest = [line for cover, line in sorted(rows, key=lambda row: row[0]) if cover < 100]
-    listed = lowest[:MAX_COVERAGE_ROWS]
-    hidden = len(lowest) - len(listed)
-    footer = [f"... and {hidden} more files below 100%"] if hidden > 0 else []
-    return "\n".join([header, *listed, *footer, total])
+
+
+def files_below_full_coverage(lines: list[str]) -> list[str]:
+    rows = sorted(coverage_rows(lines), key=lambda row: row[0])
+    return [line for cover, line in rows if cover < 100]
+
+
+def more_files_note(hidden: int) -> list[str]:
+    return [f"... and {hidden} more files below 100%"] if hidden > 0 else []
 
 
 def coverage_of(output: str) -> str:
@@ -320,28 +339,41 @@ def coverage_of(output: str) -> str:
 
 def analyze_pytest(fragment: Fragment) -> Finding:
     output = clean(fragment.output)
-    summary_line = next(
-        (
-            line
-            for line in reversed(output.splitlines())
-            if re.search(r" in [\d.]+s", line) and re.search(r"\d+ (passed|failed|error)", line)
-        ),
-        "",
-    )
-    passed = first_int(r"(\d+) passed", summary_line)
-    failed = first_int(r"(\d+) failed", summary_line) + first_int(r"(\d+) errors?", summary_line)
-    skipped = first_int(r"(\d+) skipped", summary_line)
-    counts = f"{passed} passed, {failed} failed" + (f", {skipped} skipped" if skipped else "")
-    coverage = coverage_of(output)
+    summary_line = pytest_summary_line(output)
     if not summary_line:
         return Finding(Status.FAILED, "pytest failed before finishing", tail(output))
-    if failed:
+    counts = pytest_counts(summary_line)
+    coverage = coverage_of(output)
+    if pytest_failures(summary_line):
         failures = matching_lines(r"^(FAILED|ERROR) ", output) or output
         return Finding(Status.FAILED, f"{counts} · coverage {coverage}", tail(failures), "Failures")
-    table = least_covered(output)
-    status = Status.OK if fragment.passed else Status.FAILED
-    prefix = "coverage below the minimum: " if not fragment.passed else "coverage "
-    return Finding(status, f"{counts} · {prefix}{coverage}", table, "Least covered files")
+    return coverage_finding(fragment.passed, f"{counts} · ", coverage, least_covered(output))
+
+
+def pytest_summary_line(output: str) -> str:
+    return next((line for line in reversed(output.splitlines()) if is_pytest_summary(line)), "")
+
+
+def is_pytest_summary(line: str) -> bool:
+    return bool(re.search(r" in [\d.]+s", line) and re.search(r"\d+ (passed|failed|error)", line))
+
+
+def pytest_failures(summary_line: str) -> int:
+    return first_int(r"(\d+) failed", summary_line) + first_int(r"(\d+) errors?", summary_line)
+
+
+def pytest_counts(summary_line: str) -> str:
+    passed = first_int(r"(\d+) passed", summary_line)
+    skipped = first_int(r"(\d+) skipped", summary_line)
+    counts = f"{passed} passed, {pytest_failures(summary_line)} failed"
+    return counts + (f", {skipped} skipped" if skipped else "")
+
+
+def coverage_finding(passed: bool, counts: str, coverage: str, table: str) -> Finding:
+    if passed:
+        return Finding(Status.OK, f"{counts}coverage {coverage}", table, "Least covered files")
+    summary = f"{counts}coverage below the minimum: {coverage}"
+    return Finding(Status.FAILED, summary, table, "Least covered files")
 
 
 CONTRACTS_BLOCK = re.compile(r"dependencies\.\n-+\n(?P<body>.*?)\n\s*Contracts: ", re.DOTALL)
@@ -354,12 +386,15 @@ def parse_contracts(output: str) -> list[tuple[str, str, int]]:
     block = CONTRACTS_BLOCK.search(output)
     if block is None:
         return []
-    # import-linter wraps long contract names over several lines.
-    flat = " ".join(line.strip() for line in block["body"].splitlines() if line.strip())
     return [
         (match["name"], match["state"], int(match["ignored"] or 0))
-        for match in CONTRACT_ENTRY.finditer(flat)
+        for match in CONTRACT_ENTRY.finditer(unwrapped(block["body"]))
     ]
+
+
+# import-linter wraps long contract names over several lines.
+def unwrapped(body: str) -> str:
+    return " ".join(line.strip() for line in body.splitlines() if line.strip())
 
 
 def analyze_import_linter(fragment: Fragment) -> Finding:
@@ -369,20 +404,46 @@ def analyze_import_linter(fragment: Fragment) -> Finding:
         return Finding(
             Status.FAILED, "import-linter failed before evaluating the contracts", tail(output)
         )
-    kept = sum(state == "KEPT" for _, state, _ in contracts)
+    broken = broken_contracts(contracts)
+    if not broken and fragment.passed:
+        return Finding(
+            Status.OK, kept_summary(contracts), contracts_listing(contracts), "Contracts"
+        )
+    return broken_contracts_finding(output, contracts, broken)
+
+
+def broken_contracts(contracts: list[tuple[str, str, int]]) -> list[str]:
+    return [name for name, state, _ in contracts if state == "BROKEN"]
+
+
+def kept_count(contracts: list[tuple[str, str, int]]) -> int:
+    return sum(state == "KEPT" for _, state, _ in contracts)
+
+
+def kept_summary(contracts: list[tuple[str, str, int]]) -> str:
     ignored = sum(count for _, _, count in contracts)
-    baseline = f" ({plural(ignored, 'ignored import', 'ignored imports')} in the baseline)"
-    listing = "\n".join(
+    baseline = (
+        f" ({plural(ignored, 'ignored import', 'ignored imports')} in the baseline)"
+        if ignored
+        else ""
+    )
+    return plural(kept_count(contracts), "contract kept", "contracts kept") + baseline
+
+
+def contracts_listing(contracts: list[tuple[str, str, int]]) -> str:
+    return "\n".join(
         f"{state:6} {name}" + (f" ({count} ignored)" if count else "")
         for name, state, count in contracts
     )
-    broken = [name for name, state, _ in contracts if state == "BROKEN"]
-    if not broken and fragment.passed:
-        summary = plural(kept, "contract kept", "contracts kept") + (baseline if ignored else "")
-        return Finding(Status.OK, summary, listing, "Contracts")
+
+
+def broken_contracts_finding(
+    output: str, contracts: list[tuple[str, str, int]], broken: list[str]
+) -> Finding:
     marker = output.find("Broken contracts")
     violation = output[marker:] if marker >= 0 else output
-    summary = f"{kept} kept, {len(broken)} broken: " + "; ".join(f"**{name}**" for name in broken)
+    names = "; ".join(f"**{name}**" for name in broken)
+    summary = f"{kept_count(contracts)} kept, {len(broken)} broken: {names}"
     return Finding(
         Status.FAILED, summary, tail(violation), "Broken contracts and violating imports"
     )
@@ -411,14 +472,17 @@ class SmokeStep:
 def smoke_step(name: str, text: str, finished: bool) -> SmokeStep:
     ready = READY_LINE.search(text)
     seconds = f"{ready['seconds']}s" if ready else "-"
-    checks = len(OK_LINE.findall(text)) - (1 if ready else 0)
     applied = len(APPLIED_LINE.findall(text))
-    checks += applied
+    checks = len(OK_LINE.findall(text)) - (1 if ready else 0) + applied
     failure = FAILURE_LINE.search(text)
     if failure:
         return SmokeStep(name, Status.FAILED, seconds, checks, failure["reason"])
     if not finished:
         return SmokeStep(name, Status.FAILED, seconds, checks, "stopped without finishing")
+    return finished_smoke_step(SmokeStep(name, Status.OK, seconds, checks), text, applied)
+
+
+def finished_smoke_step(step: SmokeStep, text: str, applied: int) -> SmokeStep:
     note = (
         f"{plural(applied, 'migration', 'migrations')} applied on a clean database"
         if applied
@@ -426,8 +490,8 @@ def smoke_step(name: str, text: str, finished: bool) -> SmokeStep:
     )
     if DRIFT_WARNING in text:
         drift = "; ".join(part for part in (note, "models and migrations drifted") if part)
-        return SmokeStep(name, Status.WARNING, seconds, checks, drift)
-    return SmokeStep(name, Status.OK, seconds, checks, note)
+        return replace(step, status=Status.WARNING, note=drift)
+    return replace(step, note=note)
 
 
 def smoke_steps(output: str) -> list[SmokeStep]:
@@ -435,15 +499,23 @@ def smoke_steps(output: str) -> list[SmokeStep]:
     passed = ">> Smoke passed" in output
     steps: list[SmokeStep] = []
     for index, header in enumerate(headers):
-        end = headers[index + 1].start() if index + 1 < len(headers) else len(output)
-        text = output[header.start() : end]
-        name = header["mode"] or ("mcp" if header["mcp"] else "migrations")
-        if header["mcp"]:
-            finished = ">> MCP smoke passed" in text
-        else:
-            finished = index + 1 < len(headers) or passed
-        steps.append(smoke_step(name, text, finished))
+        last = index + 1 == len(headers)
+        text = output[header.start() : len(output) if last else headers[index + 1].start()]
+        finished = step_finished(header, text, not last or passed)
+        steps.append(smoke_step(step_name(header), text, finished))
     return steps
+
+
+def step_name(header: re.Match[str]) -> str:
+    return header["mode"] or ("mcp" if header["mcp"] else "migrations")
+
+
+# The MCP smoke prints its own success line; any other step finished when another one started
+# after it or when the whole smoke passed.
+def step_finished(header: re.Match[str], text: str, followed_or_passed: bool) -> bool:
+    if header["mcp"]:
+        return ">> MCP smoke passed" in text
+    return followed_or_passed
 
 
 def smoke_table(steps: list[SmokeStep]) -> str:
@@ -463,32 +535,50 @@ def probe_status(output: str, path: str) -> str:
 def analyze_smoke(fragment: Fragment) -> Finding:
     output = clean(fragment.output)
     steps = smoke_steps(output)
-    ready = [(m["name"], float(m["seconds"])) for m in READY_LINE.finditer(output)]
-    api = [seconds for name, seconds in ready if name.startswith("API")]
-    mcp = [seconds for name, seconds in ready if name.startswith("MCP")]
-    boot = " · ".join(
-        f"{name} ready in {max(times):.1f}s"
-        for name, times in (("API", api), ("MCP", mcp))
-        if times
-    )
+    ready = ready_times(output)
     probes = f"/health {probe_status(output, 'health')} · /ready {probe_status(output, 'ready')}"
-    scenarios = [step for step in steps if step.name != "migrations"]
-    ok = sum(step.status != Status.FAILED for step in scenarios)
-    counts = f"{ok}/{len(scenarios)} scenarios passed"
+    counts = scenarios_passed(steps)
     table = smoke_table(steps)
     if fragment.passed:
-        status = worst([step.status for step in steps])
-        drift = " · ⚠️ models and migrations drifted" if status == Status.WARNING else ""
-        summary = " · ".join(part for part in (counts, probes, boot) if part) + drift
-        return Finding(status, summary, table, "Scenarios", DetailsFormat.MARKDOWN)
+        return passed_smoke_finding(steps, [counts, probes, boot_times(ready)], table)
+    return failed_smoke_finding(output, bool(ready), f"{counts} · {probes}", table)
+
+
+def ready_times(output: str) -> list[tuple[str, float]]:
+    return [(match["name"], float(match["seconds"])) for match in READY_LINE.finditer(output)]
+
+
+def seconds_of(ready: list[tuple[str, float]], prefix: str) -> list[float]:
+    return [seconds for name, seconds in ready if name.startswith(prefix)]
+
+
+def boot_times(ready: list[tuple[str, float]]) -> str:
+    times = (("API", seconds_of(ready, "API")), ("MCP", seconds_of(ready, "MCP")))
+    return " · ".join(f"{name} ready in {max(seconds):.1f}s" for name, seconds in times if seconds)
+
+
+def scenarios_passed(steps: list[SmokeStep]) -> str:
+    scenarios = [step for step in steps if step.name != "migrations"]
+    ok = sum(step.status != Status.FAILED for step in scenarios)
+    return f"{ok}/{len(scenarios)} scenarios passed"
+
+
+def passed_smoke_finding(steps: list[SmokeStep], parts: list[str], table: str) -> Finding:
+    status = worst([step.status for step in steps])
+    drift = " · ⚠️ models and migrations drifted" if status == Status.WARNING else ""
+    summary = " · ".join(part for part in parts if part) + drift
+    return Finding(status, summary, table, "Scenarios", DetailsFormat.MARKDOWN)
+
+
+def failed_smoke_finding(output: str, started: bool, counts: str, table: str) -> Finding:
     failure = FAILURE_LINE.search(output)
     cause = f": {failure['reason']}" if failure else ""
-    started = "started but failed" if ready else "did not start"
+    state = "started but failed" if started else "did not start"
     logs = output[failure.start() :] if failure else output
     details = f"{table}\n\n" + fence(tail(logs, MAX_DETAILS_CHARS // 2))
     return Finding(
         Status.FAILED,
-        f"API {started}{cause} · {counts} · {probes}",
+        f"API {state}{cause} · {counts}",
         details,
         "Scenarios and logs",
         DetailsFormat.MARKDOWN,
@@ -525,12 +615,13 @@ class MutationOutcome:
 
     @classmethod
     def parse(cls, output: str) -> MutationOutcome | None:
-        line = next(
-            (line for line in output.splitlines() if line.startswith(MUTATION_RESULT_PREFIX)), None
-        )
+        line = mutation_result_line(output)
         if line is None:
             return None
-        data = json.loads(line.removeprefix(MUTATION_RESULT_PREFIX))
+        return cls.from_json(json.loads(line.removeprefix(MUTATION_RESULT_PREFIX)))
+
+    @classmethod
+    def from_json(cls, data: dict[str, Any]) -> MutationOutcome:
         return cls(
             skipped=bool(data["skipped"]),
             reason=str(data.get("reason", "")),
@@ -543,26 +634,45 @@ class MutationOutcome:
         )
 
 
+def mutation_result_line(output: str) -> str | None:
+    return next(
+        (line for line in output.splitlines() if line.startswith(MUTATION_RESULT_PREFIX)), None
+    )
+
+
 def mutation_details(outcome: MutationOutcome) -> str:
     lines = ["| File | Mutants | Killed | Score |", "|---|---:|---:|---:|"]
     lines += [f"| `{f.file}` | {f.total} | {f.killed} | {f.score:.1f}% |" for f in outcome.files]
     if not outcome.survivors:
         return "\n".join(lines)
-    listed = outcome.survivors[:MAX_SURVIVORS_LISTED]
-    lines += ["", "**Survivors in the changed code**", "", "| File | Function | Status |"]
+    return "\n".join([*lines, *survivors_listing(outcome.survivors)])
+
+
+def survivors_listing(survivors: list[Survivor]) -> list[str]:
+    listed = survivors[:MAX_SURVIVORS_LISTED]
+    lines = ["", "**Survivors in the changed code**", "", "| File | Function | Status |"]
     lines += ["|---|---|---|"]
     lines += [f"| `{s.file}` | `{s.function}` | {s.status} |" for s in listed]
-    hidden = len(outcome.survivors) - len(listed)
-    if hidden > 0:
-        lines.append(f"\n... and {hidden} more: see the `mutation` job summary.")
-    diffs = [s for s in listed if s.diff]
-    for survivor in diffs:
-        lines += ["", f"`{survivor.name}`", "```diff", survivor.diff.replace("```", "'''"), "```"]
+    lines += hidden_survivors_note(len(survivors) - len(listed))
+    lines += survivor_diffs(listed)
     lines += [
         "",
         "Reproduce locally with `make mutation-changed`, then `uv run mutmut show <name>`.",
     ]
-    return "\n".join(lines)
+    return lines
+
+
+def hidden_survivors_note(hidden: int) -> list[str]:
+    return [f"\n... and {hidden} more: see the `mutation` job summary."] if hidden > 0 else []
+
+
+def survivor_diffs(survivors: list[Survivor]) -> list[str]:
+    lines: list[str] = []
+    for survivor in survivors:
+        if survivor.diff:
+            diff = survivor.diff.replace("```", "'''")
+            lines += ["", f"`{survivor.name}`", "```diff", diff, "```"]
+    return lines
 
 
 def analyze_mutation(fragment: Fragment) -> Finding:
@@ -622,15 +732,24 @@ def eslint_issues(output: str) -> str:
 def analyze_eslint(fragment: Fragment) -> Finding:
     output = clean(fragment.output)
     problems = ESLINT_PROBLEMS.search(output)
-    errors = int(problems[2]) if problems else 0
-    warnings = int(problems[3]) if problems else 0
-    counts = f"{plural(errors, 'error', 'errors')}, {plural(warnings, 'warning', 'warnings')}"
+    errors, warnings = eslint_counts(problems)
     if fragment.passed and not warnings:
         return Finding(Status.OK, "No lint problems")
-    details = tail(eslint_issues(output) or output)
+    counts = f"{plural(errors, 'error', 'errors')}, {plural(warnings, 'warning', 'warnings')}"
+    details = eslint_details(output)
     if fragment.passed:
         return Finding(Status.WARNING, counts, details, "Problems")
     return Finding(Status.FAILED, counts if problems else "ESLint failed", details, "Problems")
+
+
+def eslint_counts(problems: re.Match[str] | None) -> tuple[int, int]:
+    if problems is None:
+        return 0, 0
+    return int(problems[2]), int(problems[3])
+
+
+def eslint_details(output: str) -> str:
+    return tail(eslint_issues(output) or output)
 
 
 def analyze_tsc(fragment: Fragment) -> Finding:
@@ -658,23 +777,30 @@ def vitest_counts(output: str) -> tuple[int, int] | None:
 def analyze_vitest(fragment: Fragment) -> Finding:
     output = clean(fragment.output)
     counts = vitest_counts(output)
-    coverage = {name.lower(): value for name, value in VITEST_COVERAGE.findall(output)}
-    coverage_text = (
-        " / ".join(f"{name} {value}%" for name, value in coverage.items()) if coverage else "n/a"
-    )
     if counts is None:
         return Finding(Status.FAILED, "Vitest failed before finishing", tail(output))
     passed, failed = counts
-    summary = f"{passed} passed, {failed} failed · coverage {coverage_text}"
+    summary = f"{passed} passed, {failed} failed · coverage {vitest_coverage(output)}"
     if failed:
         failures = matching_lines(r"(FAIL|×|✗) ", output) or output
         return Finding(Status.FAILED, summary, tail(failures), "Failures")
-    thresholds = matching_lines(r"^ERROR: Coverage for ", output)
     if not fragment.passed:
-        detail = thresholds or tail(output)
-        reason = "coverage below the thresholds" if thresholds else "Vitest failed"
-        return Finding(Status.FAILED, f"{summary} · {reason}", detail, "Output")
+        return vitest_threshold_finding(output, summary)
     return Finding(Status.OK, summary)
+
+
+def vitest_coverage(output: str) -> str:
+    coverage = {name.lower(): value for name, value in VITEST_COVERAGE.findall(output)}
+    if not coverage:
+        return "n/a"
+    return " / ".join(f"{name} {value}%" for name, value in coverage.items())
+
+
+def vitest_threshold_finding(output: str, summary: str) -> Finding:
+    thresholds = matching_lines(r"^ERROR: Coverage for ", output)
+    detail = thresholds or tail(output)
+    reason = "coverage below the thresholds" if thresholds else "Vitest failed"
+    return Finding(Status.FAILED, f"{summary} · {reason}", detail, "Output")
 
 
 BUILD_ASSET = re.compile(r"^dist/\S+\s+(?P<size>[\d,.]+) kB", re.MULTILINE)
@@ -685,14 +811,20 @@ def analyze_frontend_build(fragment: Fragment) -> Finding:
     if not fragment.passed:
         errors = matching_lines(r"error", output)
         return Finding(Status.FAILED, "Build failed", tail(errors or output))
+    return Finding(Status.OK, " · ".join(build_facts(output)))
+
+
+def build_facts(output: str) -> list[str]:
     built = re.search(r"built in ([\d.]+m?s)", output)
-    sizes = [float(match["size"].replace(",", "")) for match in BUILD_ASSET.finditer(output)]
-    parts = [f"built in {built[1]}" if built else "built"]
-    if sizes:
-        parts.append(f"largest asset {max(sizes):,.0f} kB")
+    parts = [f"built in {built[1]}" if built else "built", *largest_asset(output)]
     if "Some chunks are larger than" in output:
         parts.append("above Vite's chunk size warning")
-    return Finding(Status.OK, " · ".join(parts))
+    return parts
+
+
+def largest_asset(output: str) -> list[str]:
+    sizes = [float(match["size"].replace(",", "")) for match in BUILD_ASSET.finditer(output)]
+    return [f"largest asset {max(sizes):,.0f} kB"] if sizes else []
 
 
 ANALYZERS: dict[Analysis, Callable[[Fragment], Finding]] = {
@@ -797,17 +929,23 @@ def one_line(result: SectionResult) -> str:
 
 
 def verdict(results: list[SectionResult]) -> str:
-    failed = sum(r.status == Status.FAILED for r in results)
-    warnings = sum(r.status == Status.WARNING for r in results)
-    skipped = sum(r.status == Status.SKIPPED for r in results)
+    failed = count_with_status(results, Status.FAILED)
     if failed:
         return f"❌ **Failed**: {plural(failed, 'section failed', 'sections failed')}"
+    warnings = count_with_status(results, Status.WARNING)
     if warnings:
         return (
             f"⚠️ **Passed with warnings**: {plural(warnings, 'section', 'sections')} with warnings"
         )
-    extra = f" ({plural(skipped, 'section', 'sections')} not run)" if skipped else ""
-    return "✅ **All good**" + extra
+    return "✅ **All good**" + not_run_note(count_with_status(results, Status.SKIPPED))
+
+
+def count_with_status(results: list[SectionResult], status: Status) -> int:
+    return sum(result.status == status for result in results)
+
+
+def not_run_note(skipped: int) -> str:
+    return f" ({plural(skipped, 'section', 'sections')} not run)" if skipped else ""
 
 
 def render_with_limit(results: list[SectionResult], footer: str, limit: int) -> str:
@@ -869,28 +1007,33 @@ def parse_job_results(needs_json: str) -> dict[str, str]:
 def run_command(analysis: Analysis, command: list[str], directory: Path, advisory: bool) -> int:
     started = time.monotonic()
     try:
-        process = subprocess.Popen(
-            command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            errors="replace",
-        )
+        process = start_process(command)
     except OSError as error:
         message = f"could not run {command[0]}: {error}"
         logger.error(message)
         Fragment(analysis, 127, message, advisory).write(directory)
         return 127
-    assert process.stdout is not None
-    lines: list[str] = []
-    for line in process.stdout:
-        sys.stdout.write(line)
-        lines.append(line)
-    exit_code = process.wait()
+    exit_code, output = stream_output(process)
     # Absolute checkout paths only add noise (and differ between machines).
-    output = "".join(lines).replace(f"{Path.cwd()}/", "")
+    output = output.replace(f"{Path.cwd()}/", "")
     Fragment(analysis, exit_code, output, advisory, time.monotonic() - started).write(directory)
     return 0 if advisory else exit_code
+
+
+# Running the command given after `--` is what `run` is for: CI passes its own analysis commands,
+# never untrusted input, and no shell is involved.
+def start_process(command: list[str]) -> subprocess.Popen[str]:
+    return subprocess.Popen(  # nosec B603
+        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace"
+    )
+
+
+def stream_output(process: subprocess.Popen[str]) -> tuple[int, str]:
+    lines: list[str] = []
+    for line in process.stdout or ():
+        sys.stdout.write(line)
+        lines.append(line)
+    return process.wait(), "".join(lines)
 
 
 def footer_from_environment() -> str:

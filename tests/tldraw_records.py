@@ -2,6 +2,8 @@ import struct
 import zlib
 from typing import Any
 
+from app.domain.entities.models.diagram import Diagram
+
 # The schema tldraw 3.15 serialises with every canvas and gallery item.
 SCHEMA: dict[str, Any] = {
     "schemaVersion": 2,
@@ -181,3 +183,9 @@ def png(width: int, height: int) -> bytes:
     return (
         b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", pixels) + chunk(b"IEND", b"")
     )
+
+
+# The canvas a diagram ends up with; the tests that read it back always saved one first.
+def saved_canvas(diagram: Diagram) -> dict[str, Any]:
+    assert diagram.canvas_state is not None
+    return diagram.canvas_state

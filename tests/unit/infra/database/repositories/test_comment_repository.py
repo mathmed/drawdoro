@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from sqlalchemy.dialects import postgresql
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.domain.entities.models.comment import Comment
 from app.domain.enums.comment_status import CommentStatus
@@ -14,6 +14,8 @@ from app.infra.database.repositories.comment_repository import CommentRepository
 
 DIAGRAM_ID = uuid.uuid4()
 KEY_ID = uuid.uuid4()
+# The dialect the API runs on, so the SQL is checked as Postgres will receive it.
+POSTGRES = create_async_engine("postgresql+asyncpg://").dialect
 
 
 def orm(**values: object) -> CommentORM:
@@ -46,7 +48,7 @@ def rows(*results: tuple[CommentORM, str | None, str | None]) -> MagicMock:
 
 def sql(session: AsyncMock) -> str:
     statement = session.execute.await_args.args[0]
-    return str(statement.compile(dialect=postgresql.dialect()))  # type: ignore[no-untyped-call]
+    return str(statement.compile(dialect=POSTGRES))
 
 
 @pytest.fixture

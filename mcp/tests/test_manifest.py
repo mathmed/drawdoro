@@ -8,7 +8,6 @@ import manifest
 import pytest
 from catalog import AREA_TITLES, Requirement, ToolArea
 from manifest import (
-    MANIFEST_PATH,
     build_manifest,
     parse_arguments,
     registered_tools,
@@ -24,12 +23,27 @@ def tools() -> list[Tool]:
     return registered_tools()
 
 
+# Found by walking up to the monorepo root rather than at a fixed depth, so the check also holds
+# when the tests run from a copy of the MCP sources (mutmut's mutants/, for example).
+def frontend_manifest_path() -> Path:
+    root = next(
+        parent
+        for parent in Path(__file__).resolve().parents
+        if (parent / "frontend" / "package.json").is_file()
+    )
+    return root / "frontend" / "src" / "config" / "mcpTools.json"
+
+
 # The frontend's "Available tools" tab reads this file: it must list exactly what the server
 # registers, with the descriptions the model reads.
 def test_should_keep_the_frontend_manifest_in_sync_with_the_server(tools: list[Tool]) -> None:
-    assert MANIFEST_PATH.read_text(encoding="utf-8") == render_manifest(tools), (
+    assert frontend_manifest_path().read_text(encoding="utf-8") == render_manifest(tools), (
         "frontend/src/config/mcpTools.json is out of date: run `make mcp-manifest`"
     )
+
+
+def test_should_write_the_manifest_into_the_frontend_config() -> None:
+    assert manifest.MANIFEST_PATH.parts[-4:] == ("frontend", "src", "config", "mcpTools.json")
 
 
 def test_should_list_every_registered_tool_once(tools: list[Tool]) -> None:

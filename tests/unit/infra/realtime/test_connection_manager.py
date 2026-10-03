@@ -8,7 +8,8 @@ import pytest
 from fastapi import WebSocket
 
 from app.domain.entities.models.agent_identity import AgentIdentity
-from app.infra.realtime.connection_manager import ConnectionManager, Participant
+from app.domain.entities.objects.participant import Participant
+from app.infra.realtime.connection_manager import ConnectionManager
 
 ANA = Participant(name="Ana", user_id="user-ana")
 BRUNO = Participant(name="Bruno", user_id="user-bruno")
@@ -145,6 +146,13 @@ async def test_should_remove_agent_when_it_goes_quiet(sut: ConnectionManager) ->
     await asyncio.sleep(0.05)
     assert CLAUDE not in sut.participants("room")
     assert CLAUDE not in last_presence_users(ws)
+
+
+async def test_should_keep_the_other_agents_when_one_goes_quiet(sut: ConnectionManager) -> None:
+    await sut.mark_agent_active("room", OWNERLESS_CLAUDE, seconds=0.01)
+    await sut.mark_agent_active("room", personal_agent("Ana", "laptop"), seconds=60)
+    await asyncio.sleep(0.05)
+    assert [entry["id"] for entry in sut.participants("room")] == ["agent:key:Ana"]
 
 
 async def test_should_keep_agent_listed_while_it_stays_active(sut: ConnectionManager) -> None:

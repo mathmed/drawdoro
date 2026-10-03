@@ -54,8 +54,12 @@ async def get_caller(
     if x_api_key is not None and x_api_key.startswith(API_KEY_PREFIX):
         owner = await authenticate_key.execute(AuthenticateApiKeyParams(secret=x_api_key))
         return Caller(user=owner.user, api_key=owner.api_key)
-    token = credentials.credentials if credentials is not None else ""
+    token = _bearer_token(credentials)
     return Caller(user=await authenticate.execute(AuthenticateUserParams(token=token)))
+
+
+def _bearer_token(credentials: HTTPAuthorizationCredentials | None) -> str:
+    return credentials.credentials if credentials is not None else ""
 
 
 async def get_current_user(caller: Caller = Depends(get_caller)) -> User | None:

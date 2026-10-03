@@ -171,8 +171,8 @@ jobs:
         uses: py-cov-action/python-coverage-comment-action@v3
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          MINIMUM_GREEN: 80
-          MINIMUM_ORANGE: 70
+          MINIMUM_GREEN: 95
+          MINIMUM_ORANGE: 90
 
       - name: Type check
         if: ${{ !cancelled() }}
@@ -180,20 +180,22 @@ jobs:
 
       - name: Security scan
         if: ${{ !cancelled() }}
-        run: uv run --locked python scripts/quality_report.py run bandit -- bandit -r app -ll
+        run: >-
+          uv run --locked python scripts/quality_report.py run bandit --
+          bandit -r app mcp scripts -x mcp/tests,mcp/.venv
 
-      # Advisory: dead code is reported, never fails the job.
       - name: Dead code check (vulture)
         if: ${{ !cancelled() }}
         run: >-
-          uv run --locked python scripts/quality_report.py run vulture --advisory --
+          uv run --locked python scripts/quality_report.py run vulture --
           vulture app --min-confidence 80
 
       - name: Complexity check (xenon)
         if: ${{ !cancelled() }}
         run: >-
           uv run --locked python scripts/quality_report.py run xenon --
-          xenon app --max-absolute B --max-modules A --max-average A
+          xenon app mcp scripts --max-absolute A --max-modules A --max-average A
+          -e "mcp/tests/*,mcp/.venv/*"
 
       - name: Dependency vulnerability scan
         if: ${{ !cancelled() }}
@@ -216,7 +218,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      MUTATION_MIN_SCORE: ${{ vars.MUTATION_MIN_SCORE || '60' }}
+      MUTATION_MIN_SCORE: ${{ vars.MUTATION_MIN_SCORE || '95' }}
     steps:
       - uses: actions/checkout@v7
         with:

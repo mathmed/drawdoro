@@ -1,17 +1,18 @@
-from unittest.mock import AsyncMock, create_autospec
+from unittest.mock import AsyncMock
 
 import pytest
 
 from app.domain.contracts.readiness_probe import ReadinessProbe
 from app.domain.errors.domain_errors import ServiceUnavailableError
 from app.domain.usecases.health.check_readiness import CheckReadiness, CheckReadinessParams
+from tests.doubles import double
 
 
 def make_probe(name: str, ready: bool) -> ReadinessProbe:
-    probe = create_autospec(ReadinessProbe, instance=True)
+    probe = double(ReadinessProbe)
     type(probe).name = name
-    probe.is_ready = AsyncMock(return_value=ready)
-    return probe  # type: ignore[no-any-return]
+    probe.is_ready.return_value = ready
+    return probe
 
 
 @pytest.fixture

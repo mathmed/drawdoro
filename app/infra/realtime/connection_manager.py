@@ -1,31 +1,18 @@
 import asyncio
 import json
-import uuid
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import StrEnum
 
-from fastapi import WebSocket
-
+from app.domain.contracts.diagram_rooms import DiagramRooms
+from app.domain.contracts.realtime_connection import RealtimeConnection
 from app.domain.entities.models.agent_identity import AgentIdentity
+from app.domain.entities.objects.participant import Participant
 
 
 class PresenceKind(StrEnum):
     PERSON = "person"
     AGENT = "agent"
-
-
-@dataclass(frozen=True)
-class Participant:
-    name: str
-    # None for guests (authentication disabled); they are told apart per connection.
-    user_id: str | None = None
-    picture_url: str | None = None
-    connection_id: str = field(default_factory=lambda: uuid.uuid4().hex)
-
-    @property
-    def presence_id(self) -> str:
-        return self.user_id or self.connection_id
 
 
 @dataclass
@@ -54,17 +41,19 @@ class ActiveAgent:
         )
 
 
-class ConnectionManager:
+class ConnectionManager(DiagramRooms):
     def __init__(self) -> None:
-        self._rooms: dict[str, dict[WebSocket, Participant]] = {}
+        self._rooms: dict[str, dict[RealtimeConnection, Participant]] = {}
         # Agents (the MCP server) have no socket; each one's timer removes it when it goes quiet.
         self._agents: dict[str, dict[str, ActiveAgent]] = {}
 
-    async def connect(self, ws: WebSocket, diagram_id: str, participant: Participant) -> None:
+    async def connect(
+        self, ws: RealtimeConnection, diagram_id: str, participant: Participant
+    ) -> None:
         await ws.accept()
         self._rooms.setdefault(diagram_id, {})[ws] = participant
 
-    def disconnect(self, ws: WebSocket, diagram_id: str) -> None:
+    def disconnect(self, ws: RealtimeConnection, diagram_id: str) -> None:
         room = self._rooms.get(diagram_id, {})
         room.pop(ws, None)
         if not room:
@@ -111,7 +100,7 @@ class ConnectionManager:
         await self.broadcast_presence(diagram_id)
 
     async def broadcast(
-        self, message: str, diagram_id: str, exclude: WebSocket | None = None
+        self, message: str, diagram_id: str, exclude: RealtimeConnection | None = None
     ) -> None:
         peers = [ws for ws in self._rooms.get(diagram_id, {}) if ws is not exclude]
         results = await asyncio.gather(
@@ -144,7 +133,7 @@ class ConnectionManager:
 
     # A socket that can't be written to is gone (closed tab, sleeping laptop): stop counting it.
     def _drop_failed(
-        self, diagram_id: str, peers: list[WebSocket], results: Sequence[object]
+        self, diagram_id: str, peers: list[RealtimeConnection], results: Sequence[object]
     ) -> bool:
         failed = [
             ws for ws, result in zip(peers, results, strict=True) if isinstance(result, Exception)

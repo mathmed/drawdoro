@@ -343,6 +343,30 @@ gallery items and reads the diagram and its history back.
 | `SMOKE_STRICT_SCHEMA` | `0` | `1` fails the smoke when `alembic check` finds drift |
 | `SMOKE_SKIP_MCP` | `0` | `1` skips the MCP smoke inside `make smoke` |
 
+### Static analysis thresholds (`make hooks`, CI jobs `lint` and `quality`)
+
+The backend holds the strictest setting of every tool, with no baseline, per-file ignore, `# noqa`,
+`# type: ignore` or vulture allowlist. A regression fails pre-commit and CI.
+
+The only suppressions are five line-scoped `# nosec` in `scripts/`, where running a process is the job:
+`B404` (importing `subprocess`) and `B603` (a process started without a shell) in `quality_report.py`
+(`run <analysis> -- <command>` runs the CI analysis commands) and `mutation.py` (`git` and `mutmut`, resolved
+to absolute paths with `shutil.which`). Bandit flags every `subprocess` call at low severity whatever its
+input, so these are reviewed call sites, not tolerated findings; nothing else may be suppressed.
+
+| Tool | Scope | Threshold |
+|---|---|---|
+| ruff (lint + format) | whole repository | zero findings (`E`, `F`, `I`, `UP`, `B`, `SIM`) |
+| mypy | `app`, `tests`, `scripts`; `mcp/` | `strict = true`, zero errors |
+| bandit | `app`, `mcp/`, `scripts/` (not `mcp/tests`) | zero findings at **every** severity (no `-ll`) |
+| vulture | `app` | zero findings at confidence 80, **blocking** (no longer advisory) |
+| xenon | `app`, `mcp/`, `scripts/` (not `mcp/tests`) | rank **A** absolute, per module and on average (`--max-absolute A --max-modules A --max-average A`) |
+| import-linter | `app`, `mcp/` | every contract, no `ignore_imports` |
+| coverage | `app` | line **and** branch coverage, `fail_under = 95` (ratchet, baseline 95.7%) |
+| mutmut | use cases and domain services | `MUTATION_MIN_SCORE` ratchet, see below |
+
+Thresholds are ratchets: raise them when the code allows it, never lower them to get a PR green.
+
 ### Architecture contracts (`make lint-imports`)
 
 [import-linter](https://import-linter.readthedocs.io/) contracts live in `[tool.importlinter]` of
@@ -357,9 +381,9 @@ gallery items and reads the diagram and its history back.
 - MCP: tools import neither `server` nor `settings`, tool groups depend on `diagrams` → `canvas` →
   `api`, and only `tools.api` imports httpx.
 
-`ignore_imports` entries are the baseline that already broke a contract when it was added, each with its
-reason. import-linter fails when an entry no longer matches, so fixing one forces removing it. Adding
-entries or relaxing a contract needs the owner's approval.
+The contracts hold with **no baseline**: there are no `ignore_imports` entries. A new violation is fixed in
+the import (a domain port, a factory) rather than tolerated; adding entries or relaxing a contract needs the
+owner's approval.
 
 ### Mutation testing (`make mutation-changed` on PRs, `make mutation` weekly)
 
@@ -374,11 +398,13 @@ argument becomes `None`...) and runs the unit tests against each change. The sco
   score of what it mutated is below `MUTATION_MIN_SCORE`, and the Quality Report lists the survivors of the
   changed code with their diffs. It has a 20-minute timeout and caches `mutants/`.
 - **Weekly** (*Mutation testing* workflow, Mondays 06:00 UTC, and on demand with `workflow_dispatch` and an
-  optional minimum score): mutates the whole scope (787 mutants, about 10 minutes locally) and publishes the
+  optional minimum score): mutates the whole scope (about 2,700 mutants, 5 to 10 minutes locally) and publishes the
   per-package and per-file report in the job summary and the `mutation-report` artifact. It never gates.
 
-`MUTATION_MIN_SCORE` is a **ratchet**: a floor a bit below the current baseline (67.7% on the first full
-run), 60 by default. It only goes up: raise it as tests improve, in the repository variable
+`MUTATION_MIN_SCORE` is a **ratchet**: a floor a bit below the current baseline, 95 by default. The first
+full run scored 67.7% (ratchet 60); the whole scope now scores 100% (2,704 mutants) with no surviving mutant, and the
+floor stays a little below 100% because the PR job scores only the few functions a change touches, where a
+single mutant that no test can tell apart (an equivalent mutant) weighs a lot. It only goes up: raise it as tests improve, in the repository variable
 `MUTATION_MIN_SCORE` (Settings → Secrets and variables → Actions → Variables) or the default in
 `scripts/mutation.py` and `ci.yml`. To change what is mutated, edit `only_mutate`; both runs follow it.
 
@@ -405,7 +431,7 @@ Every PR gets **one** comment titled *Quality Report* (found and updated through
 - each section below has the summary and, in a collapsed `<details>`, the evidence: least covered files,
   broken contracts with the violating import, smoke scenarios with their boot time, surviving mutants with
   their diffs, lint problems, failures;
-- ✅ passed, ⚠️ warning (advisory vulture findings, ESLint warnings, models/migrations drift), ❌ failed,
+- ✅ passed, ⚠️ warning (ESLint warnings, models/migrations drift), ❌ failed,
   ⏭️ not run (job cancelled or skipped, or nothing to mutate). A job that failed before producing its result
   shows as ❌ with the job result, so the report never breaks.
 

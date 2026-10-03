@@ -65,17 +65,14 @@ class CanvasInsertion:
         ensure_same_versions(content.get("schema"), self._schema, shapes + bindings + assets)
         shape_ids = {str(shape["id"]): self._fresh_id("shape") for shape in shapes}
         roots = _roots(content, shapes)
-        children = children_by_parent(shapes)
-        _ensure_tree(shapes, roots, children)
-        # Every shape hangs from a root, so there is at least one.
-        origin = reduce(Bounds.union, (shape_bounds(root, children) for root in roots))
+        origin = _layout_bounds(shapes, roots)
         width, height = origin.width * scale, origin.height * scale
         x, y = self._corner(placement, width, height)
         asset_ids, new_assets = self._copy_assets(assets)
-        moves = _Moves(origin=origin, x=x, y=y, scale=scale, roots={str(r["id"]) for r in roots})
+        moves = _Moves(origin=origin, x=x, y=y, scale=scale, roots=_ids(roots))
         placed = [
             self._place_shape(shape, shape_ids, asset_ids, moves)
-            for shape in sorted(shapes, key=lambda shape: str(shape.get("index", "")))
+            for shape in sorted(shapes, key=_stacking_order)
         ]
         return InsertionPlan(
             records=new_assets + placed + _copy_bindings(bindings, shape_ids, self._fresh_id),
@@ -159,20 +156,15 @@ class CanvasInsertion:
     def _corner(
         self, placement: GalleryPlacement, width: float, height: float
     ) -> tuple[float, float]:
-        has_point = placement.x is not None or placement.y is not None
-        if placement.near_shape_id is not None and has_point:
-            raise InvalidInputError("Pass either x and y or near_shape_id, not both")
         if placement.near_shape_id is not None:
             return self._next_to(placement, width, height)
-        if placement.x is not None and placement.y is not None:
-            return placement.x, placement.y
-        if has_point:
-            raise InvalidInputError("Pass both x and y, or neither")
-        return self._beside_content(placement.gap)
+        return self._at_point(placement)
 
     def _next_to(
         self, placement: GalleryPlacement, width: float, height: float
     ) -> tuple[float, float]:
+        if placement.x is not None or placement.y is not None:
+            raise InvalidInputError("Pass either x and y or near_shape_id, not both")
         shape_id = str(placement.near_shape_id)
         if (self._store.get(shape_id) or {}).get("typeName") != "shape":
             raise InvalidInputError(f"{shape_id} is not a shape in this diagram")
@@ -185,6 +177,13 @@ class CanvasInsertion:
             PlacementSide.ABOVE: (target.min_x, target.min_y - gap - height),
         }
         return corners[placement.side]
+
+    def _at_point(self, placement: GalleryPlacement) -> tuple[float, float]:
+        if placement.x is not None and placement.y is not None:
+            return placement.x, placement.y
+        if placement.x is not None or placement.y is not None:
+            raise InvalidInputError("Pass both x and y, or neither")
+        return self._beside_content(placement.gap)
 
     # With no position given the copy goes to the right of everything on the page, top-aligned.
     def _beside_content(self, gap: float) -> tuple[float, float]:
@@ -227,11 +226,19 @@ class CanvasInsertion:
 def _assets_by_source(records: Iterable[CanvasRecord]) -> dict[str, CanvasRecord]:
     found: dict[str, CanvasRecord] = {}
     for record in records:
-        props = record.get("props")
-        src = props.get("src") if isinstance(props, dict) else None
-        if record.get("typeName") == "asset" and isinstance(src, str) and src != "":
+        src = _asset_source(record)
+        if src is not None:
             found.setdefault(src, record)
     return found
+
+
+# The data URL or link an asset shows; None for other records and for assets without one.
+def _asset_source(record: CanvasRecord) -> str | None:
+    props = record.get("props")
+    src = props.get("src") if isinstance(props, dict) else None
+    if record.get("typeName") != "asset" or not isinstance(src, str) or src == "":
+        return None
+    return src
 
 
 def _records(value: object) -> list[CanvasRecord]:
@@ -244,13 +251,10 @@ def _records(value: object) -> list[CanvasRecord]:
 
 def _shapes(content: dict[str, Any]) -> list[CanvasRecord]:
     shapes = content.get("shapes")
-    if not isinstance(shapes, list) or not shapes:
+    if not isinstance(shapes, list) or not shapes or not all(map(_is_shape, shapes)):
         raise InvalidInputError(INVALID_CONTENT)
-    for shape in shapes:
-        if not _is_shape(shape):
-            raise InvalidInputError(INVALID_CONTENT)
     # Two shapes with one id would become one record, leaving its children with two parents.
-    if len({shape["id"] for shape in shapes}) != len(shapes):
+    if len(_ids(shapes)) != len(shapes):
         raise InvalidInputError(INVALID_CONTENT)
     return shapes
 
@@ -267,10 +271,26 @@ def _is_shape(shape: object) -> bool:
 
 # Saved roots, plus any shape whose parent wasn't saved with it, which would otherwise be lost.
 def _roots(content: dict[str, Any], shapes: list[CanvasRecord]) -> list[CanvasRecord]:
-    ids = {shape["id"] for shape in shapes}
-    listed = {shape["id"] for shape in content_root_shapes(content)}
+    ids = _ids(shapes)
+    listed = _ids(content_root_shapes(content))
     roots = [shape for shape in shapes if shape["id"] in listed or shape.get("parentId") not in ids]
-    return sorted(roots, key=lambda shape: str(shape.get("index", "")))
+    return sorted(roots, key=_stacking_order)
+
+
+def _ids(shapes: Iterable[CanvasRecord]) -> set[str]:
+    return {str(shape["id"]) for shape in shapes}
+
+
+def _stacking_order(shape: CanvasRecord) -> str:
+    return str(shape.get("index", ""))
+
+
+# Bounds of the saved layout, spanned by its roots, once every shape is known to hang from one.
+def _layout_bounds(shapes: list[CanvasRecord], roots: list[CanvasRecord]) -> Bounds:
+    children = children_by_parent(shapes)
+    _ensure_tree(shapes, roots, children)
+    # Every shape hangs from a root, so there is at least one.
+    return reduce(Bounds.union, (shape_bounds(root, children) for root in roots))
 
 
 # Every saved shape must hang from a root: shapes whose parents loop back to them would be
@@ -278,6 +298,12 @@ def _roots(content: dict[str, Any], shapes: list[CanvasRecord]) -> list[CanvasRe
 def _ensure_tree(
     shapes: list[CanvasRecord], roots: list[CanvasRecord], children: dict[str, list[CanvasRecord]]
 ) -> None:
+    if len(_descendants(roots, children)) != len(shapes):
+        raise InvalidInputError(INVALID_CONTENT)
+
+
+# The roots and every shape below them.
+def _descendants(roots: list[CanvasRecord], children: dict[str, list[CanvasRecord]]) -> set[str]:
     reached: set[str] = set()
     pending = [str(root["id"]) for root in roots]
     while pending:
@@ -285,8 +311,7 @@ def _ensure_tree(
         if shape_id not in reached:
             reached.add(shape_id)
             pending.extend(str(child["id"]) for child in children.get(shape_id, []))
-    if len(reached) != len(shapes):
-        raise InvalidInputError(INVALID_CONTENT)
+    return reached
 
 
 # Bindings tie an arrow to the shapes it connects; one with an end outside the item is dropped.

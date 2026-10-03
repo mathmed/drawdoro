@@ -2,7 +2,7 @@ from typing import Any
 
 import pytest
 from mcp.server.mcpserver.exceptions import ToolError
-from tools.canvas import Canvas, ShapeOutline, indexes_above, shape_text
+from tools.canvas import Canvas, ShapeOutline, indexes_above, shape_size, shape_text
 
 from tests.tldraw_records import rich_text
 
@@ -178,3 +178,51 @@ def test_should_generate_valid_indexes_above_the_top_one() -> None:
     indexes = list(indexes_above("b1C"))
     assert indexes == sorted(indexes)
     assert all(index > "b1C" and not index.endswith("0") for index in indexes)
+
+
+def test_should_store_a_new_non_shape_record_as_given(sut: Canvas) -> None:
+    binding = {"id": "binding:new", "typeName": "binding", "fromId": "shape:api"}
+    created, _ = sut.upsert([binding])
+    assert created == ["binding:new"]
+    assert stored(sut, "binding:new") == binding
+
+
+def test_should_refuse_a_new_non_shape_record_without_its_type_name(sut: Canvas) -> None:
+    with pytest.raises(ToolError, match="binding:new is new, so it must be a complete"):
+        sut.upsert([{"id": "binding:new", "fromId": "shape:api"}])
+
+
+@pytest.mark.parametrize("record", [{"type": "geo"}, {"props": {}}])
+def test_should_refuse_a_new_shape_without_its_type_or_props(
+    sut: Canvas, record: dict[str, Any]
+) -> None:
+    with pytest.raises(ToolError, match="shape:new is new, so it needs at least its type"):
+        sut.upsert([{"id": "shape:new", **record}])
+
+
+def test_should_delete_a_binding_that_starts_at_a_deleted_shape(sut: Canvas) -> None:
+    sut.upsert([{"id": "binding:out", "typeName": "binding", "fromId": "shape:api", "toId": "x"}])
+    assert "binding:out" in sut.delete(["shape:api"])
+    assert "binding:out" not in sut.to_snapshot()["store"]
+
+
+def test_should_keep_bindings_and_shapes_unrelated_to_the_deleted_ones(sut: Canvas) -> None:
+    sut.upsert([{"id": "binding:other", "typeName": "binding", "fromId": "a", "toId": "b"}])
+    sut.delete(["shape:api"])
+    assert "binding:other" in sut.to_snapshot()["store"]
+
+
+@pytest.mark.parametrize(
+    ("props", "expected"),
+    [
+        ({"points": {"a": {"x": 0, "y": 0}, "b": {"x": 10.4, "y": -5}}}, (10, 5)),
+        ({"points": {"a": {"x": 3}}}, (0, 0)),
+        ({"points": {}, "w": 4.6, "h": 2}, (5, 2)),
+        ({"w": "wide", "h": None}, (None, None)),
+        ({}, (None, None)),
+    ],
+)
+def test_should_measure_a_shape_from_its_points_or_its_size(
+    props: dict[str, Any], expected: tuple[int | None, int | None]
+) -> None:
+    assert shape_size(props) == expected

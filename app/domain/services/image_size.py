@@ -1,3 +1,4 @@
+import struct
 from collections.abc import Callable
 
 from app.domain.enums.image_mime_type import ImageMimeType
@@ -6,6 +7,9 @@ from app.domain.enums.image_mime_type import ImageMimeType
 _JPEG_FRAME_MARKERS = {0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF}
 # Markers without a length field after them.
 _JPEG_STANDALONE_MARKERS = {0x01, *range(0xD0, 0xDA)}
+# Little-endian WebP size fields: two 16-bit dimensions (lossy), one 32-bit bit field (lossless).
+_WEBP_LOSSY_DIMENSIONS = struct.Struct("<HH")
+_WEBP_LOSSLESS_BITS = struct.Struct("<I")
 
 
 # Width and height in pixels, read from the file header; None when the header is unreadable.
@@ -56,14 +60,14 @@ def _webp_size(data: bytes) -> tuple[int, int] | None:
     return flavour[0](data)
 
 
+# The top two bits of each 16-bit lossy dimension are a scale hint, not part of the size.
 def _webp_lossy_size(data: bytes) -> tuple[int, int]:
-    width = int.from_bytes(data[26:28], "little") & 0x3FFF
-    height = int.from_bytes(data[28:30], "little") & 0x3FFF
-    return width, height
+    width, height = _WEBP_LOSSY_DIMENSIONS.unpack_from(data, 26)
+    return width & 0x3FFF, height & 0x3FFF
 
 
 def _webp_lossless_size(data: bytes) -> tuple[int, int]:
-    bits = int.from_bytes(data[21:25], "little")
+    (bits,) = _WEBP_LOSSLESS_BITS.unpack_from(data, 21)
     return (bits & 0x3FFF) + 1, ((bits >> 14) & 0x3FFF) + 1
 
 

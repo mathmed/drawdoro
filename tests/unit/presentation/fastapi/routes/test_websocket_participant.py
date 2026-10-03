@@ -18,26 +18,20 @@ def authenticate() -> AsyncMock:
     return AsyncMock(spec=AuthenticateUser)
 
 
-@pytest.fixture
-def sut_args(authenticate: AsyncMock) -> dict[str, object]:
-    return {
-        "share": "",
-        "guest_name": "",
-        "diagram_id": str(uuid.uuid4()),
-        "settings": Settings(auth_enabled=True),
-        "authenticate": authenticate,
-        "authorize": AsyncMock(spec=AuthorizeWorkspaceAccess),
-        "shared_lookup": AsyncMock(spec=GetDiagramByShareToken),
-    }
-
-
-async def test_should_carry_signed_in_user_photo_into_presence(
-    sut_args: dict[str, object], authenticate: AsyncMock
-) -> None:
+async def test_should_carry_signed_in_user_photo_into_presence(authenticate: AsyncMock) -> None:
     user = User(email="ana@example.com", name="Ana", picture_url=PHOTO)
     authenticate.execute.return_value = user
 
-    participant = await resolve_participant(token="id-token", **sut_args)  # type: ignore[arg-type]
+    participant = await resolve_participant(
+        token="id-token",
+        share="",
+        guest_name="",
+        diagram_id=str(uuid.uuid4()),
+        settings=Settings(auth_enabled=True),
+        authenticate=authenticate,
+        authorize=AsyncMock(spec=AuthorizeWorkspaceAccess),
+        shared_lookup=AsyncMock(spec=GetDiagramByShareToken),
+    )
 
     assert participant is not None
     assert (participant.name, participant.user_id, participant.picture_url) == (

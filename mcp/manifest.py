@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from catalog import AREA_TITLES
-from mcp.types import Tool
+from mcp.types import Tool, ToolAnnotations
 from server import create_api, create_server
 from settings import Settings
 from tools.api import JsonObject
@@ -74,26 +74,41 @@ def render_manifest(tools: list[Tool]) -> str:
 
 def tool_manifest(tool: Tool) -> ToolManifest:
     meta = tool.meta or {}
-    annotations = tool.annotations
     body, arguments = split_docstring(tool.description or "")
-    paragraphs = [
-        " ".join(line.strip() for line in part.splitlines()) for part in body.split("\n\n")
-    ]
-    paragraphs = [paragraph for paragraph in paragraphs if paragraph]
-    required = set(tool.input_schema.get("required", []))
+    paragraphs = docstring_paragraphs(body)
     return ToolManifest(
         name=tool.name,
         area=str(meta.get("area", "")),
         requires=[str(requirement) for requirement in meta.get("requires", [])],
-        read_only=bool(annotations and annotations.read_only_hint),
-        destructive=bool(annotations and annotations.destructive_hint),
-        summary=paragraphs[0] if paragraphs else "",
+        read_only=is_read_only(tool.annotations),
+        destructive=is_destructive(tool.annotations),
+        summary=next(iter(paragraphs), ""),
         description=paragraphs,
-        parameters=[
-            Parameter(name=name, required=name in required, description=text)
-            for name, text in parse_arguments(arguments)
-        ],
+        parameters=tool_parameters(tool, arguments),
     )
+
+
+def docstring_paragraphs(body: str) -> list[str]:
+    paragraphs = [
+        " ".join(line.strip() for line in part.splitlines()) for part in body.split("\n\n")
+    ]
+    return [paragraph for paragraph in paragraphs if paragraph]
+
+
+def is_read_only(annotations: ToolAnnotations | None) -> bool:
+    return bool(annotations and annotations.read_only_hint)
+
+
+def is_destructive(annotations: ToolAnnotations | None) -> bool:
+    return bool(annotations and annotations.destructive_hint)
+
+
+def tool_parameters(tool: Tool, arguments: str) -> list[Parameter]:
+    required = set(tool.input_schema.get("required", []))
+    return [
+        Parameter(name=name, required=name in required, description=text)
+        for name, text in parse_arguments(arguments)
+    ]
 
 
 # The SDK sends __doc__ as is, and only Python 3.13+ strips the source indentation from it when

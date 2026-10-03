@@ -2,6 +2,7 @@ from typing import cast
 from unittest.mock import AsyncMock
 
 import pytest
+from fastapi.security import HTTPAuthorizationCredentials
 
 from app.common.settings import Settings
 from app.domain.entities.models.api_key import ApiKey
@@ -12,7 +13,7 @@ from app.domain.usecases.auth.authenticate_api_key import (
     AuthenticateApiKey,
     AuthenticateApiKeyParams,
 )
-from app.domain.usecases.auth.authenticate_user import AuthenticateUser
+from app.domain.usecases.auth.authenticate_user import AuthenticateUser, AuthenticateUserParams
 from app.presentation.fastapi.dependencies.current_user import (
     Caller,
     get_caller,
@@ -43,9 +44,10 @@ async def resolve(
     authenticate_key: AuthenticateApiKey,
     api_key: str | None,
     settings: Settings = AUTH_ON,
+    credentials: HTTPAuthorizationCredentials | None = None,
 ) -> Caller:
     return await get_caller(
-        credentials=None,
+        credentials=credentials,
         x_api_key=api_key,
         settings=settings,
         authenticate=authenticate,
@@ -84,9 +86,38 @@ async def test_should_fall_back_to_the_session_token(
     cast(AsyncMock, authenticate_key.execute).assert_not_awaited()
 
 
+async def test_should_authenticate_the_bearer_token(
+    authenticate: AuthenticateUser, authenticate_key: AuthenticateApiKey
+) -> None:
+    bearer = HTTPAuthorizationCredentials(scheme="Bearer", credentials="id-token")
+    caller = await resolve(authenticate, authenticate_key, None, credentials=bearer)
+    assert caller == Caller(user=ANA)
+    cast(AsyncMock, authenticate.execute).assert_awaited_once_with(
+        AuthenticateUserParams(token="id-token")
+    )
+
+
+# Without a bearer token the session check still runs, with an empty token, and rejects it.
+async def test_should_check_an_empty_token_without_credentials(
+    authenticate: AuthenticateUser, authenticate_key: AuthenticateApiKey
+) -> None:
+    await resolve(authenticate, authenticate_key, None)
+    cast(AsyncMock, authenticate.execute).assert_awaited_once_with(AuthenticateUserParams(token=""))
+
+
+# An unset service key must never match, not even an empty X-API-Key header.
+async def test_should_not_take_an_empty_key_for_an_unset_service_key(
+    authenticate: AuthenticateUser, authenticate_key: AuthenticateApiKey
+) -> None:
+    settings = Settings(auth_enabled=True, service_api_key="")
+    assert await resolve(authenticate, authenticate_key, "", settings) == Caller(user=ANA)
+
+
 async def test_should_manage_keys_only_from_a_session() -> None:
     assert await get_session_user(Caller(user=ANA)) == ANA
-    with pytest.raises(ForbiddenError):
+    with pytest.raises(ForbiddenError) as forbidden:
         await get_session_user(Caller(user=ANA, api_key=ANAS_KEY))
-    with pytest.raises(NotFoundError):
+    assert forbidden.value.message == "API keys can only be managed from a signed-in session"
+    with pytest.raises(NotFoundError) as missing:
         await get_session_user(Caller())
+    assert missing.value.message == "No signed-in user (authentication is disabled)"
