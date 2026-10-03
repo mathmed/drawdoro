@@ -398,11 +398,13 @@ argument becomes `None`...) and runs the unit tests against each change. The sco
   score of what it mutated is below `MUTATION_MIN_SCORE`, and the Quality Report lists the survivors of the
   changed code with their diffs. It has a 20-minute timeout and caches `mutants/`.
 - **Weekly** (*Mutation testing* workflow, Mondays 06:00 UTC, and on demand with `workflow_dispatch` and an
-  optional minimum score): mutates the whole scope (787 mutants, about 10 minutes locally) and publishes the
+  optional minimum score): mutates the whole scope (about 2,700 mutants, 5 to 10 minutes locally) and publishes the
   per-package and per-file report in the job summary and the `mutation-report` artifact. It never gates.
 
-`MUTATION_MIN_SCORE` is a **ratchet**: a floor a bit below the current baseline (67.7% on the first full
-run), 60 by default. It only goes up: raise it as tests improve, in the repository variable
+`MUTATION_MIN_SCORE` is a **ratchet**: a floor a bit below the current baseline, 95 by default. The first
+full run scored 67.7% (ratchet 60); the whole scope now scores 100% (2,704 mutants) with no surviving mutant, and the
+floor stays a little below 100% because the PR job scores only the few functions a change touches, where a
+single mutant that no test can tell apart (an equivalent mutant) weighs a lot. It only goes up: raise it as tests improve, in the repository variable
 `MUTATION_MIN_SCORE` (Settings → Secrets and variables → Actions → Variables) or the default in
 `scripts/mutation.py` and `ci.yml`. To change what is mutated, edit `only_mutate`; both runs follow it.
 

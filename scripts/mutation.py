@@ -20,7 +20,7 @@ MUTANTS_DIR = Path("mutants")
 PYPROJECT = Path("pyproject.toml")
 # Ratchet for the PR job: a floor below the current baseline that the owner raises over time.
 # Overridden by the MUTATION_MIN_SCORE environment variable (repository variable in CI).
-DEFAULT_MIN_SCORE = 60.0
+DEFAULT_MIN_SCORE = 95.0
 MIN_SCORE_ENV = "MUTATION_MIN_SCORE"
 # Machine-readable line read by scripts/quality_report.py (keep the prefix in sync)
 RESULT_PREFIX = "MUTATION_RESULT: "

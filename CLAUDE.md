@@ -87,7 +87,7 @@ tests/integration/ HTTP tests with TestClient
 - Never remove or rename `/health` (liveness) or `/ready` (readiness): deploy probes depend on them.
 - Mutation testing runs on every PR (CI job `mutation`, `make mutation-changed` locally): only the use cases
   and domain services changed in the diff, down to the changed functions. The job fails when their score is
-  below `MUTATION_MIN_SCORE` (a ratchet, default 60, repository variable). Survivors of the changed code are
+  below `MUTATION_MIN_SCORE` (a ratchet, default 95, repository variable). Survivors of the changed code are
   listed in the Quality Report with their diffs: add the missing assertion; never weaken or delete tests,
   shrink `only_mutate` or lower the ratchet to get it green. `make mutation` (whole scope, slow) runs weekly.
   Never commit `mutants/`.
