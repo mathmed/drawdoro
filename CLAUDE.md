@@ -105,6 +105,14 @@ tests/integration/ HTTP tests with TestClient
 
 ## Personal preferences
 
+Backend Python (`app/` and `mcp/`); the frontend follows its own tooling.
+
+- **Reuse first (YAGNI)**: follow existing patterns. Before creating a function, class, contract, service or
+  dependency, reuse what exists. When changing shared code, update every caller.
+- **SOLID**: one reason to change per module/class; extend instead of modifying; depend on domain contracts
+  received through the constructor, never on `infra` directly.
+- **DDD**: invariants, calculations and state transitions live in entities/services in `app/domain`, with no I/O.
+  Request/response schemas only carry data and validation.
 - **`__init__.py`**: only create when it exports symbols. Never empty.
 - **Comments**: no docstrings. Comments only when code is genuinely confusing.
   - Exception: MCP tool functions (`mcp/tools/`) have docstrings, because the MCP SDK sends the docstring to the agent as the tool description. Describe the tool and each parameter (`Args:`).
@@ -115,9 +123,19 @@ tests/integration/ HTTP tests with TestClient
 - **Typing**: every parameter and return value is typed. `Any` only if unavoidable.
 - **Logging**: never `print`; always `logger = logging.getLogger(__name__)`.
 - **Dates**: always timezone-aware UTC: `datetime.now(UTC)`.
-- **Thin routes**: a route only converts the request, calls the use case and returns response.
-- **Use case names**: start with a verb (CreateUser, ListInvoices), one per file.
-- **Exceptions**: never `except Exception: pass`. Catch specific exceptions.
+- **Edge cases**: list the states, dates and input values that can reach the code and handle each one.
+  Irreversible effects (delete, send) happen exactly once.
+- **Idempotency**: a repeated call (retry, double click) never duplicates an effect: use an upsert, a unique
+  key or a state check.
+- **Fail loudly**: never `except Exception: pass`. Catch specific exceptions only where something can be done;
+  log unexpected ones with `logger.exception` and propagate or translate them.
+- **Nothing internal leaks**: error responses carry no exception text, stack traces, infrastructure names or
+  internal details.
+- **Hot paths**: no N+1 (query or call inside a loop) and no slow work on paths every request goes through.
 - **Early return**: prefer guard clauses over nested ifs.
+- **Thin routes**: a route only converts the request, calls the use case and returns response.
+- **Public API**: new endpoints require the authenticated user (`dependencies/current_user.py`) unless
+  explicitly public, and validate input at the edge. Public contracts only grow additively.
+- **Use case names**: start with a verb (CreateUser, ListInvoices), one per file.
 - **Tests**: name them `test_should_<behaviour>` and build the SUT in a `sut` fixture.
 - **Commits**: Conventional Commits in English: feat, fix, refactor, chore, test, docs, ci, build.
