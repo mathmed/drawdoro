@@ -17,6 +17,12 @@ updates:
       python-major:
         update-types:
           - "major"
+    # Supply-chain safety: give the community time to detect malicious or broken releases.
+    cooldown:
+      default-days: 10
+      semver-major-days: 15
+      semver-minor-days: 10
+      semver-patch-days: 5
 
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -34,3 +40,6 @@ updates:
       actions-major:
         update-types:
           - "major"
+    # Supply-chain safety: give the community time to detect malicious or broken releases.
+    cooldown:
+      default-days: 10
