@@ -8,6 +8,7 @@ import pytest
 from fastapi import WebSocket
 
 from app.domain.entities.models.agent_identity import AgentIdentity
+from app.domain.entities.objects.cursor_position import CanvasPoint, CursorPosition
 from app.domain.entities.objects.participant import Participant
 from app.infra.realtime.connection_manager import ConnectionManager
 
@@ -220,3 +221,72 @@ async def test_should_announce_agent_again_when_its_identity_changes(
     await sut.mark_agent_active("room", personal_agent("Ana", "work laptop"), seconds=60)
     assert len(sent(ws)) == 2
     assert last_presence_users(ws)[-1]["label"] == "work laptop"
+
+
+ON_CANVAS = CursorPosition(point=CanvasPoint(x=12.5, y=-4.0), page_id="page:page")
+
+
+async def test_should_relay_a_cursor_under_the_sender_identity(sut: ConnectionManager) -> None:
+    sender, other = make_ws(), make_ws()
+    await sut.connect(sender, "room", ANA)
+    await sut.connect(other, "room", BRUNO)
+
+    await sut.relay_cursor(sender, "room", ON_CANVAS)
+
+    assert sent(other) == [
+        {
+            "type": "cursor",
+            "id": "user-ana",
+            "name": "Ana",
+            "point": {"x": 12.5, "y": -4.0},
+            "page": "page:page",
+        }
+    ]
+    cast(AsyncMock, sender.send_text).assert_not_awaited()
+
+
+async def test_should_relay_a_guest_cursor_under_their_connection(sut: ConnectionManager) -> None:
+    guest = Participant(name="Guest")
+    sender, other = make_ws(), make_ws()
+    await sut.connect(sender, "room", guest)
+    await sut.connect(other, "room", BRUNO)
+
+    await sut.relay_cursor(sender, "room", ON_CANVAS)
+
+    assert sent(other)[0]["id"] == guest.connection_id
+
+
+async def test_should_relay_that_the_pointer_left_the_canvas(sut: ConnectionManager) -> None:
+    sender, other = make_ws(), make_ws()
+    await sut.connect(sender, "room", ANA)
+    await sut.connect(other, "room", BRUNO)
+
+    await sut.relay_cursor(sender, "room", None)
+
+    assert sent(other) == [
+        {"type": "cursor", "id": "user-ana", "name": "Ana", "point": None, "page": None}
+    ]
+
+
+async def test_should_keep_cursors_inside_their_diagram(sut: ConnectionManager) -> None:
+    sender, same_room, other_room = make_ws(), make_ws(), make_ws()
+    await sut.connect(sender, "room", ANA)
+    await sut.connect(same_room, "room", BRUNO)
+    await sut.connect(other_room, "elsewhere", Participant(name="Carla", user_id="user-carla"))
+
+    await sut.relay_cursor(sender, "room", ON_CANVAS)
+
+    assert len(sent(same_room)) == 1
+    cast(AsyncMock, other_room.send_text).assert_not_awaited()
+
+
+async def test_should_ignore_a_cursor_from_a_connection_outside_the_room(
+    sut: ConnectionManager,
+) -> None:
+    stranger, member = make_ws(), make_ws()
+    await sut.connect(stranger, "elsewhere", ANA)
+    await sut.connect(member, "room", BRUNO)
+
+    await sut.relay_cursor(stranger, "room", ON_CANVAS)
+
+    cast(AsyncMock, member.send_text).assert_not_awaited()

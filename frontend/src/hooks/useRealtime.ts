@@ -5,6 +5,7 @@ import type { PushedDiagram } from '../api/types'
 import { TAB_CLIENT_ID } from '../api/tabClientId'
 import { authConfig } from '../auth/config'
 import { getIdToken } from '../auth/session'
+import { parseCursorMessage, type CursorPosition, type RemoteCursorStore } from '../utils/remoteCursors'
 
 export interface PresenceUser {
   id: string
@@ -36,6 +37,8 @@ interface RealtimeOptions {
   // Guests reach a diagram through a share link instead of a signed-in session.
   shareToken?: string
   guestName?: string
+  // Receives the other people's pointers; this tab's own never come back to it.
+  remoteCursors?: RemoteCursorStore
 }
 
 interface RealtimeMessage {
@@ -57,8 +60,11 @@ export function useRealtime({
   onCommentsChanged,
   shareToken,
   guestName,
+  remoteCursors,
 }: RealtimeOptions) {
   const wsRef = useRef<WebSocket | null>(null)
+  // Who this tab is in the presence: the same person in another tab must not see their own cursor.
+  const you = useRef<string | null>(null)
   const applyingRemote = useRef(false)
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Every (re)mount gets a new generation. Sockets and pending connects from an older one
@@ -104,10 +110,26 @@ export function useRealtime({
       }
 
       ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data) as RealtimeMessage
+        let msg: RealtimeMessage
+        try {
+          msg = JSON.parse(event.data) as RealtimeMessage
+        } catch {
+          return
+        }
 
         if (msg.type === 'presence') {
-          onPresenceChange({ users: msg.users ?? [], you: msg.you ?? null })
+          const users = msg.users ?? []
+          you.current = msg.you ?? null
+          remoteCursors?.retain(new Set(users.map((user) => user.id)))
+          onPresenceChange({ users, you: you.current })
+          return
+        }
+
+        if (msg.type === 'cursor') {
+          const cursor = parseCursorMessage(msg)
+          if (cursor !== null && cursor.id !== you.current) {
+            remoteCursors?.apply(cursor, Date.now())
+          }
           return
         }
 
@@ -135,18 +157,27 @@ export function useRealtime({
         if (connectionGeneration !== generation.current) {
           return
         }
+        // Without the socket nobody's moves arrive, so their cursors would freeze in place.
+        remoteCursors?.clear()
         // Dropped unexpectedly (server restart, network): try again shortly.
         reconnectTimer.current = setTimeout(() => void connect(connectionGeneration), RECONNECT_DELAY_MS)
       }
 
       wsRef.current = ws
     },
-    [diagramId, editor, onPresenceChange, onDiagramPushed, onCommentsChanged, shareToken, guestName],
+    [diagramId, editor, onPresenceChange, onDiagramPushed, onCommentsChanged, shareToken, guestName, remoteCursors],
   )
 
   const sendUpdate = useCallback((snapshot: object) => {
     if (wsRef.current?.readyState === WebSocket.OPEN && !applyingRemote.current) {
       wsRef.current.send(JSON.stringify({ type: 'update', client_id: TAB_CLIENT_ID, snapshot }))
+    }
+  }, [])
+
+  const sendCursor = useCallback((position: CursorPosition | null) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      const message = position === null ? { type: 'cursor', point: null } : { type: 'cursor', ...position }
+      wsRef.current.send(JSON.stringify(message))
     }
   }, [])
 
@@ -160,8 +191,9 @@ export function useRealtime({
       }
       wsRef.current?.close()
       wsRef.current = null
+      remoteCursors?.clear()
     }
-  }, [connect])
+  }, [connect, remoteCursors])
 
-  return { sendUpdate }
+  return { sendUpdate, sendCursor }
 }

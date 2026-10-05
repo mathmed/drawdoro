@@ -219,6 +219,7 @@ frontend/                 React + Vite + TypeScript
     components/sidebar/   Workspace switcher and project/folder/diagram tree with rename/delete
     components/home/      Project overview and onboarding screens
     components/canvas/    tldraw wrapper: persistence, style panel, toolbar, quick-connect handles
+    components/presence/  Presence avatars and the other people's live cursors on the canvas
     components/palette/   Command palette (Cmd/Ctrl+K)
     components/diagram/   New diagram dialog
     components/docs/      Markdown documentation panel (auto-save)
@@ -232,8 +233,8 @@ frontend/                 React + Vite + TypeScript
     api/                  Axios client and per-resource API functions
     store/                Zustand stores (app, theme, dialogs, toasts)
     styles/               Design tokens (light/dark) and component styles
-    hooks/                Reusable hooks (shortcuts, realtime, comments, presentation, delayed loader visibility)
-    utils/                Pure helpers (validation, export, shape selection/connection)
+    hooks/                Reusable hooks (shortcuts, realtime, cursor broadcast, comments, presentation, delayed loader visibility)
+    utils/                Pure helpers (validation, export, shape selection/connection, remote cursors and their throttle)
     shapes/               tldraw shape extensions (rounded edges, custom stroke colours)
     config/               White-label branding (product name, storage key prefix)
 mcp/                      Python MCP server
@@ -276,9 +277,30 @@ scripts/                  Validation tooling: boot smoke (API and MCP), mutation
 | GET/POST | /gallery | List the caller's gallery items (without payloads; `?query=` words in the name, tags and description, `?kind=shapes\|image`, `?tag=`, `?limit=`, `?include_thumbnails=false`) / save a selection (`kind=shapes`, tldraw content) or an image (`kind=image`, base64) with a PNG thumbnail, optional `tags` and `description` |
 | GET/PATCH/DELETE | /gallery/{id} | Get an item with its payload and size / change its name, tags or description / delete it. Items are private: someone else's item answers 404. See [Personal gallery](#personal-gallery) |
 | POST | /diagrams/{id}/gallery-insertions | Insert a copy of one of the caller's gallery items into the diagram (editor): at `x`/`y`, next to `near_shape_id` (`side`, `gap`) or to the right of everything, with `scale`. New ids, recorded in the history and pushed to open editors |
-| WS | /ws/diagrams/{id} | Real-time collaboration: broadcasts canvas updates, cursors, peer count, saved changes (`diagram_updated`, including those made through the API or the MCP server) and `comments_changed` (no comment text) so open editors reload the comments to everyone connected to the same diagram. An agent that reads or saves the diagram through the MCP server (`X-Agent-Name`, honoured with the service key or a personal key when auth is on) is listed in the presence for 60s after its last call. Guests join with `?share=<token>&name=<name>` as read-only viewers |
+| WS | /ws/diagrams/{id} | Real-time collaboration: broadcasts canvas updates, the other people's pointers (see [Live cursors](#live-cursors)), peer count, saved changes (`diagram_updated`, including those made through the API or the MCP server) and `comments_changed` (no comment text) so open editors reload the comments to everyone connected to the same diagram. An agent that reads or saves the diagram through the MCP server (`X-Agent-Name`, honoured with the service key or a personal key when auth is on) is listed in the presence for 60s after its last call. Guests join with `?share=<token>&name=<name>` as read-only viewers |
 
 All routes except `/health` and `/ready` return `501 Not Implemented` until infra is wired.
+
+## Live cursors
+
+Everyone with a diagram open sees the other people's pointers as coloured arrows with their name, in the editor,
+in presentation mode and on a shared link, over the same `/ws/diagrams/{id}` socket as the presence. The colour and
+name are the ones of the presence avatars; nobody sees their own pointer, not even from another tab.
+
+Pointers travel in page (canvas) coordinates, so each viewer draws them at their own zoom, pan and window size:
+
+- Client to server, at most ~30 a second and only when the position changes (rounded to 0.1):
+  `{"type": "cursor", "point": {"x": 120.5, "y": -40}, "page": "page:page"}`, or `{"type": "cursor", "point": null}`
+  when the pointer leaves the canvas.
+- Server to the other connections of the same diagram, stamped with the sender's presence id and name (a client
+  cannot speak for someone else): `{"type": "cursor", "id": "<presence id>", "name": "Ana", "point": {...} | null,
+  "page": "page:page" | null}`.
+
+The server never stores positions. It validates each message (finite coordinates within ±10,000,000, a tldraw page
+id, no extra fields) and relays at most 60 a second per connection, dropping the rest. Receivers ease each cursor
+towards its latest position on every animation frame without re-rendering the app, show only the cursors on the page
+they are looking at, and drop a cursor when its pointer leaves the canvas, when the person leaves the diagram, when
+the connection drops or after 30s without moving. Messages a client does not understand are ignored.
 
 ## Diagram history and personal API keys
 

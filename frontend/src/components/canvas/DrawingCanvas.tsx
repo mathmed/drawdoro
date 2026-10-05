@@ -1,4 +1,4 @@
-import { useCallback, useEffect, type DragEvent } from 'react'
+import { useCallback, useEffect, useState, type DragEvent } from 'react'
 import {
   ArrowShapeKindStyle,
   DefaultContextMenu,
@@ -13,6 +13,7 @@ import {
 import 'tldraw/tldraw.css'
 
 import type { CanvasState, Diagram } from '../../api/types'
+import { useCursorBroadcast } from '../../hooks/useCursorBroadcast'
 import { useRealtime } from '../../hooks/useRealtime'
 import { useSelectionShortcuts } from '../../hooks/useSelectionShortcuts'
 import { useAppStore } from '../../store/useAppStore'
@@ -20,7 +21,10 @@ import { useThemeStore } from '../../store/useThemeStore'
 import { registerGeoDefaults } from '../../shapes/CustomGeoShapeUtil'
 import { registerSloppinessDefaults } from '../../shapes/sloppiness'
 import { GALLERY_DRAG_TYPE, insertGalleryItem } from '../../utils/gallery'
+import { RemoteCursorStore } from '../../utils/remoteCursors'
 import CommentBadge from '../comments/CommentBadge'
+import RemoteCursorsLayer from '../presence/RemoteCursorsLayer'
+import { RemoteCursorsContext } from '../presence/RemoteCursorsContext'
 import CanvasLoadingScreen from '../ui/loading/CanvasLoadingScreen'
 import AppContextMenuItems from './AppContextMenuItems'
 import ConnectHandles from './ConnectHandles'
@@ -49,6 +53,7 @@ const components: TLComponents = {
   Toolbar,
   RichTextToolbar,
   LoadingScreen: CanvasLoadingScreen,
+  InFrontOfTheCanvas: RemoteCursorsLayer,
 }
 
 export default function DrawingCanvas({ diagram }: DrawingCanvasProps) {
@@ -75,13 +80,16 @@ export default function DrawingCanvas({ diagram }: DrawingCanvasProps) {
   const loadComments = useAppStore((state) => state.loadComments)
   const reloadComments = useCallback(() => void loadComments(diagram.id), [loadComments, diagram.id])
 
-  const { sendUpdate } = useRealtime({
+  const [remoteCursors] = useState(() => new RemoteCursorStore())
+  const { sendUpdate, sendCursor } = useRealtime({
     diagramId: diagram.id,
     editor,
     onPresenceChange: setPresence,
     onDiagramPushed: applyPushedDiagram,
     onCommentsChanged: reloadComments,
+    remoteCursors,
   })
+  useCursorBroadcast(editor, sendCursor)
 
   function handleMount(mountedEditor: Editor): () => void {
     setEditor(mountedEditor)
@@ -156,14 +164,16 @@ export default function DrawingCanvas({ diagram }: DrawingCanvasProps) {
       onDragOverCapture={handleDragOverCapture}
       onDropCapture={handleDropCapture}
     >
-      <Tldraw
-        onMount={handleMount}
-        components={components}
-        shapeUtils={shapeUtils}
-        overrides={toolOverrides}
-        textOptions={textOptions}
-        hideUi={isPresentationMode}
-      />
+      <RemoteCursorsContext.Provider value={remoteCursors}>
+        <Tldraw
+          onMount={handleMount}
+          components={components}
+          shapeUtils={shapeUtils}
+          overrides={toolOverrides}
+          textOptions={textOptions}
+          hideUi={isPresentationMode}
+        />
+      </RemoteCursorsContext.Provider>
       {isPresentationMode || editor === null ? null : <ConnectHandles editor={editor} />}
       {isPresentationMode ? null : <CommentBadge />}
     </div>

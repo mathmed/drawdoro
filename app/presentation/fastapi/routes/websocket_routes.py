@@ -1,14 +1,18 @@
 import json
 import logging
 import uuid
+from time import monotonic
 
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect, status
+from pydantic import ValidationError
 
 from app.common.settings import Settings, get_settings
+from app.domain.constants.presence import CURSOR_MESSAGE_BURST, CURSOR_MESSAGES_PER_SECOND
 from app.domain.contracts.diagram_rooms import DiagramRooms
 from app.domain.entities.objects.participant import Participant
 from app.domain.enums.workspace_role import WorkspaceRole
 from app.domain.errors.domain_errors import DomainError
+from app.domain.services.token_bucket import TokenBucket
 from app.domain.usecases.auth.authenticate_user import AuthenticateUser, AuthenticateUserParams
 from app.domain.usecases.auth.authorize_workspace_access import (
     AuthorizeWorkspaceAccess,
@@ -24,6 +28,7 @@ from app.presentation.factories.auth_factories import (
 )
 from app.presentation.factories.diagram_factories import get_diagram_by_share_token_factory
 from app.presentation.factories.presence_factories import diagram_rooms_factory
+from app.presentation.fastapi.schemas.cursor_schemas import CursorMessageRequest
 
 GUEST_NAME_MAX_LENGTH = 40
 
@@ -117,12 +122,30 @@ async def diagram_websocket(
 
 
 async def relay_updates(ws: WebSocket, diagram_id: str, rooms: DiagramRooms) -> None:
+    cursor_budget = TokenBucket(CURSOR_MESSAGE_BURST, CURSOR_MESSAGES_PER_SECOND, monotonic())
     while True:
         data = await ws.receive_text()
         try:
-            kind = json.loads(data).get("type")
+            message = json.loads(data)
+            kind = message.get("type")
         except ValueError, AttributeError:
             # A malformed message is dropped instead of taking the whole session down.
             continue
-        if kind in {"update", "cursor"}:
+        if kind == "update":
             await rooms.broadcast(data, diagram_id, exclude=ws)
+        elif kind == "cursor":
+            await relay_cursor(ws, diagram_id, message, rooms, cursor_budget)
+
+
+# The budget is spent before validating, so a flood of malformed cursors is cut down too.
+async def relay_cursor(
+    ws: WebSocket, diagram_id: str, message: object, rooms: DiagramRooms, budget: TokenBucket
+) -> None:
+    if not budget.try_take(monotonic()):
+        return
+    try:
+        request = CursorMessageRequest.model_validate(message)
+    except ValidationError:
+        logger.debug("dropped a malformed cursor message in diagram %s", diagram_id)
+        return
+    await rooms.relay_cursor(ws, diagram_id, request.to_position())

@@ -7,7 +7,9 @@ from enum import StrEnum
 from app.domain.contracts.diagram_rooms import DiagramRooms
 from app.domain.contracts.realtime_connection import RealtimeConnection
 from app.domain.entities.models.agent_identity import AgentIdentity
+from app.domain.entities.objects.cursor_position import CursorPosition
 from app.domain.entities.objects.participant import Participant
+from app.infra.realtime.cursor_message import CursorMessage
 
 
 class PresenceKind(StrEnum):
@@ -107,6 +109,20 @@ class ConnectionManager(DiagramRooms):
             *[ws.send_text(message) for ws in peers], return_exceptions=True
         )
         self._drop_failed(diagram_id, peers, results)
+
+    async def relay_cursor(
+        self, ws: RealtimeConnection, diagram_id: str, position: CursorPosition | None
+    ) -> None:
+        sender = self._rooms.get(diagram_id, {}).get(ws)
+        if sender is None:
+            return
+        message = CursorMessage(
+            id=sender.presence_id,
+            name=sender.name,
+            point=position.point if position else None,
+            page=position.page_id if position else None,
+        )
+        await self.broadcast(message.model_dump_json(), diagram_id, exclude=ws)
 
     # Everyone gets the full list plus which entry is them, so clients can hide themselves.
     async def broadcast_presence(self, diagram_id: str) -> None:
