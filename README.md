@@ -317,8 +317,8 @@ Each open sidebar holds one socket, `/ws/workspaces/{id}/presence`, whatever the
 - On connect: `{"type": "presence_snapshot", "you": "<your presence id>" | null, "diagrams": [{"diagram_id":
   "...", "project_id": "...", "users": [<presence entries>]}]}`, with only the diagrams someone is in.
 - Then: `{"type": "presence_delta", "diagrams": [...]}` with only the diagrams whose people changed, each with its
-  full list (`"users": []` when everyone left). Changes are batched for 1s per workspace, so a reload (leave and
-  come back) sends nothing and a burst of joins sends one message.
+  full list (`"users": []` when everyone left). Changes are batched for 1s per workspace, so a signed-in person
+  who reloads and is back within the batch causes no message, and a burst of joins sends one.
 - Presence entries are the ones of the diagram socket: `id`, `name`, `kind` (`person` or `agent`), `picture_url`
   for people and `owner_id`/`owner_name`/`label` for agents with a personal key.
 
