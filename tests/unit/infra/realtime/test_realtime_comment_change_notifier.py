@@ -9,6 +9,8 @@ from fastapi import WebSocket
 from app.domain.entities.objects.participant import Participant
 from app.infra.realtime.connection_manager import ConnectionManager
 from app.infra.realtime.realtime_comment_change_notifier import RealtimeCommentChangeNotifier
+from app.infra.realtime.room_presence_listener import RoomPresenceListener
+from tests.doubles import double
 
 DIAGRAM_ID = uuid.uuid4()
 
@@ -23,7 +25,7 @@ def sent(ws: WebSocket) -> list[object]:
 
 @pytest.fixture
 def connections() -> ConnectionManager:
-    return ConnectionManager()
+    return ConnectionManager(double(RoomPresenceListener))
 
 
 @pytest.fixture

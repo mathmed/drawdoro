@@ -17,16 +17,30 @@ from app.domain.errors.domain_errors import NotFoundError, UnauthorizedError
 from app.domain.usecases.auth.authenticate_user import AuthenticateUser
 from app.domain.usecases.auth.authorize_workspace_access import AuthorizeWorkspaceAccess
 from app.domain.usecases.diagram.get_diagram_by_share_token import GetDiagramByShareToken
+from app.domain.usecases.diagram.get_diagram_location import GetDiagramLocation
 from app.main.main import app
 from app.presentation.factories.auth_factories import (
     authenticate_user_factory,
     authorize_workspace_access_factory,
 )
-from app.presentation.factories.diagram_factories import get_diagram_by_share_token_factory
+from app.presentation.factories.diagram_factories import (
+    get_diagram_by_share_token_factory,
+    get_diagram_location_factory,
+)
 from app.presentation.fastapi.routes import websocket_routes
 
 ANA = User(email="ana@example.com", name="Ana", picture_url="https://example.com/ana.png")
 POLICY_VIOLATION = 1008
+
+
+# The rooms here are not real diagrams: none of them is placed in a workspace.
+@pytest.fixture(autouse=True)
+def locate() -> Iterator[AsyncMock]:
+    mock = AsyncMock(spec=GetDiagramLocation)
+    mock.execute.side_effect = NotFoundError("Diagram not found")
+    app.dependency_overrides[get_diagram_location_factory] = lambda: mock
+    yield mock
+    app.dependency_overrides.clear()
 
 
 def test_should_send_presence_on_connect() -> None:
@@ -131,10 +145,20 @@ def test_should_close_when_the_token_is_rejected(
 
 
 def test_should_close_when_the_user_cannot_read_the_diagram(
-    client: TestClient, authorize: AsyncMock
+    client: TestClient, authorize: AsyncMock, locate: AsyncMock
 ) -> None:
     authorize.execute.side_effect = NotFoundError("Workspace not found")
     assert closed_code(client, f"/ws/diagrams/{room()}?token=id-token") == POLICY_VIOLATION
+    locate.execute.assert_not_awaited()
+
+
+def test_should_look_up_where_the_diagram_is_once_admitted(
+    client: TestClient, locate: AsyncMock
+) -> None:
+    diagram_id = room()
+    with client.websocket_connect(f"/ws/diagrams/{diagram_id}?token=id-token") as ws:
+        assert ws.receive_json()["type"] == "presence"
+    assert locate.execute.await_args.args[0].diagram_id == uuid.UUID(diagram_id)
 
 
 def test_should_close_when_the_diagram_id_is_not_a_uuid(client: TestClient) -> None:

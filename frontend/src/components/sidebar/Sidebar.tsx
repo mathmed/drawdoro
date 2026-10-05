@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import type { Project } from '../../api/types'
+import { useWorkspacePresence } from '../../hooks/useWorkspacePresence'
 import { useAppStore } from '../../store/useAppStore'
 import { modKey } from '../../utils/format'
 import LoadingGate from '../ui/loading/LoadingGate'
@@ -32,6 +33,7 @@ export default function Sidebar() {
       (state.isLoadingProjects || (state.activeWorkspace === null && (state.isLoadingWorkspaces || state.workspaces.length > 0))),
   )
   const myRole = useAppStore((state) => state.myRole)
+  useWorkspacePresence(activeWorkspace?.id ?? null)
 
   const setActiveProject = useAppStore((state) => state.setActiveProject)
   const toggleSidebar = useAppStore((state) => state.toggleSidebar)

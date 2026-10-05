@@ -1,20 +1,22 @@
 import asyncio
-import json
 from collections.abc import Sequence
 from dataclasses import dataclass
-from enum import StrEnum
 
 from app.domain.contracts.diagram_rooms import DiagramRooms
 from app.domain.contracts.realtime_connection import RealtimeConnection
 from app.domain.entities.models.agent_identity import AgentIdentity
 from app.domain.entities.objects.cursor_position import CursorPosition
+from app.domain.entities.objects.diagram_location import DiagramLocation
 from app.domain.entities.objects.participant import Participant
 from app.infra.realtime.cursor_message import CursorMessage
-
-
-class PresenceKind(StrEnum):
-    PERSON = "person"
-    AGENT = "agent"
+from app.infra.realtime.presence_messages import (
+    AgentEntry,
+    PersonEntry,
+    PresenceEntry,
+    PresenceMessage,
+)
+from app.infra.realtime.room_presence_listener import RoomPresenceListener
+from app.infra.realtime.workspace_presence_hub import workspace_presence_hub
 
 
 @dataclass
@@ -22,18 +24,14 @@ class ActiveAgent:
     identity: AgentIdentity
     expiry: asyncio.Task[None]
 
-    def presence_entry(self) -> dict[str, str | None]:
-        entry: dict[str, str | None] = {
-            "id": self.identity.id,
-            "name": self.identity.name,
-            "kind": PresenceKind.AGENT,
-        }
-        owner = {
-            "owner_id": str(self.identity.owner_id) if self.identity.owner_id else None,
-            "owner_name": self.identity.owner_name,
-            "label": self.identity.label,
-        }
-        return entry | {key: value for key, value in owner.items() if value is not None}
+    def presence_entry(self) -> AgentEntry:
+        return AgentEntry(
+            id=self.identity.id,
+            name=self.identity.name,
+            owner_id=str(self.identity.owner_id) if self.identity.owner_id else None,
+            owner_name=self.identity.owner_name,
+            label=self.identity.label,
+        )
 
     def sort_key(self) -> tuple[str, str, str]:
         return (
@@ -44,45 +42,59 @@ class ActiveAgent:
 
 
 class ConnectionManager(DiagramRooms):
-    def __init__(self) -> None:
+    def __init__(self, listener: RoomPresenceListener) -> None:
         self._rooms: dict[str, dict[RealtimeConnection, Participant]] = {}
         # Agents (the MCP server) have no socket; each one's timer removes it when it goes quiet.
         self._agents: dict[str, dict[str, ActiveAgent]] = {}
+        # Rooms of real diagrams, kept while someone (or an agent) is in them.
+        self._locations: dict[str, DiagramLocation] = {}
+        self._listener = listener
 
     async def connect(
-        self, ws: RealtimeConnection, diagram_id: str, participant: Participant
+        self,
+        ws: RealtimeConnection,
+        diagram_id: str,
+        participant: Participant,
+        location: DiagramLocation | None = None,
     ) -> None:
         await ws.accept()
         self._rooms.setdefault(diagram_id, {})[ws] = participant
+        self._locate(diagram_id, location)
+        self._room_changed(diagram_id)
 
     def disconnect(self, ws: RealtimeConnection, diagram_id: str) -> None:
         room = self._rooms.get(diagram_id, {})
-        room.pop(ws, None)
+        if room.pop(ws, None) is None:
+            return
         if not room:
             self._rooms.pop(diagram_id, None)
+        self._room_changed(diagram_id)
 
     def peer_count(self, diagram_id: str) -> int:
         return len(self.participants(diagram_id))
 
     # One entry per person: the same user in two tabs is shown once. Agents come last.
-    def participants(self, diagram_id: str) -> list[dict[str, str | None]]:
-        unique: dict[str, dict[str, str | None]] = {}
+    def participants(self, diagram_id: str) -> list[PresenceEntry]:
+        unique: dict[str, PersonEntry] = {}
         for participant in self._rooms.get(diagram_id, {}).values():
             unique.setdefault(
                 participant.presence_id,
-                {
-                    "id": participant.presence_id,
-                    "name": participant.name,
-                    "kind": PresenceKind.PERSON,
-                    "picture_url": participant.picture_url,
-                },
+                PersonEntry(
+                    id=participant.presence_id,
+                    name=participant.name,
+                    picture_url=participant.picture_url,
+                ),
             )
-        people = sorted(unique.values(), key=lambda item: str(item["name"]).lower())
+        people: list[PresenceEntry] = sorted(unique.values(), key=lambda item: item.name.lower())
         agents = sorted(self._agents.get(diagram_id, {}).values(), key=ActiveAgent.sort_key)
         return people + [agent.presence_entry() for agent in agents]
 
     async def mark_agent_active(
-        self, diagram_id: str, identity: AgentIdentity, seconds: float
+        self,
+        diagram_id: str,
+        identity: AgentIdentity,
+        seconds: float,
+        location: DiagramLocation | None = None,
     ) -> None:
         agents = self._agents.setdefault(diagram_id, {})
         previous = agents.pop(identity.id, None)
@@ -90,7 +102,9 @@ class ConnectionManager(DiagramRooms):
             previous.expiry.cancel()
         expiry = asyncio.create_task(self._expire_agent(diagram_id, identity.id, seconds))
         agents[identity.id] = ActiveAgent(identity=identity, expiry=expiry)
+        self._locate(diagram_id, location)
         if previous is None or previous.identity != identity:
+            self._room_changed(diagram_id)
             await self.broadcast_presence(diagram_id)
 
     async def _expire_agent(self, diagram_id: str, agent_id: str, seconds: float) -> None:
@@ -99,6 +113,7 @@ class ConnectionManager(DiagramRooms):
         agents.pop(agent_id, None)
         if not agents:
             self._agents.pop(diagram_id, None)
+        self._room_changed(diagram_id)
         await self.broadcast_presence(diagram_id)
 
     async def broadcast(
@@ -130,22 +145,30 @@ class ConnectionManager(DiagramRooms):
         users = self.participants(diagram_id)
         peers = list(room)
         messages = [
-            json.dumps(
-                {
-                    "type": "presence",
-                    "users": users,
-                    "you": room[ws].presence_id,
-                    "peers": len(users),
-                }
-            )
-            for ws in peers
+            PresenceMessage(users=users, you=room[ws].presence_id, peers=len(users)) for ws in peers
         ]
         results = await asyncio.gather(
-            *[ws.send_text(message) for ws, message in zip(peers, messages, strict=True)],
+            *[
+                ws.send_text(message.model_dump_json())
+                for ws, message in zip(peers, messages, strict=True)
+            ],
             return_exceptions=True,
         )
         if self._drop_failed(diagram_id, peers, results):
             await self.broadcast_presence(diagram_id)
+
+    def _locate(self, diagram_id: str, location: DiagramLocation | None) -> None:
+        if location is not None:
+            self._locations[diagram_id] = location
+
+    # Tells the workspace's sidebars, then forgets where an empty room was.
+    def _room_changed(self, diagram_id: str) -> None:
+        location = self._locations.get(diagram_id)
+        if location is None:
+            return
+        self._listener.room_changed(diagram_id, location, self.participants(diagram_id))
+        if diagram_id not in self._rooms and diagram_id not in self._agents:
+            del self._locations[diagram_id]
 
     # A socket that can't be written to is gone (closed tab, sleeping laptop): stop counting it.
     def _drop_failed(
@@ -159,4 +182,4 @@ class ConnectionManager(DiagramRooms):
         return failed != []
 
 
-manager = ConnectionManager()
+manager = ConnectionManager(workspace_presence_hub)

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 
 import type { DiagramSummary } from '../../api/types'
 import RowMenu, { INDENT } from './RowMenu'
+import { DiagramPresence } from './SidebarPresence'
 import type { TreeActions } from './useTreeActions'
 
 interface DiagramRowProps {
@@ -24,6 +25,7 @@ function DiagramRow({ diagram, depth, isActive, actions }: DiagramRowProps) {
     >
       <Workflow size={15} />
       <span className="tree-label">{diagram.name}</span>
+      <DiagramPresence diagramId={diagram.id} />
       <div className="tree-actions">
         <RowMenu
           label="More"

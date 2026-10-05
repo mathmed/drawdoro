@@ -216,7 +216,7 @@ frontend/                 React + Vite + TypeScript
   src/
     components/layout/    App shell and tabbed right panel (Properties/Docs/Comments)
     components/topbar/    Breadcrumbs, inline rename, save status, presence, Validate/Export/Present
-    components/sidebar/   Workspace switcher and project/folder/diagram tree with rename/delete
+    components/sidebar/   Workspace switcher and project/folder/diagram tree with rename/delete and who is in each
     components/home/      Project overview and onboarding screens
     components/canvas/    tldraw wrapper: persistence, style panel, toolbar, quick-connect handles
     components/presence/  Presence avatars and the other people's live cursors on the canvas
@@ -231,10 +231,10 @@ frontend/                 React + Vite + TypeScript
     pages/                Landing (sign-in), AuthCallback, Home, Diagram, SharedDiagram, Render (MCP export), NotFound
     auth/                 Cognito managed login: PKCE flow, token storage and refresh
     api/                  Axios client and per-resource API functions
-    store/                Zustand stores (app, theme, dialogs, toasts)
+    store/                Zustand stores (app, theme, dialogs, toasts, workspace presence)
     styles/               Design tokens (light/dark) and component styles
-    hooks/                Reusable hooks (shortcuts, realtime, cursor broadcast, comments, presentation, delayed loader visibility)
-    utils/                Pure helpers (validation, export, shape selection/connection, remote cursors and their throttle)
+    hooks/                Reusable hooks (shortcuts, realtime, workspace presence, cursor broadcast, comments, presentation, delayed loader visibility)
+    utils/                Pure helpers (validation, export, shape selection/connection, remote cursors and their throttle, sidebar presence)
     shapes/               tldraw shape extensions (rounded edges, custom stroke colours)
     config/               White-label branding (product name, storage key prefix)
 mcp/                      Python MCP server
@@ -278,6 +278,7 @@ scripts/                  Validation tooling: boot smoke (API and MCP), mutation
 | GET/PATCH/DELETE | /gallery/{id} | Get an item with its payload and size / change its name, tags or description / delete it. Items are private: someone else's item answers 404. See [Personal gallery](#personal-gallery) |
 | POST | /diagrams/{id}/gallery-insertions | Insert a copy of one of the caller's gallery items into the diagram (editor): at `x`/`y`, next to `near_shape_id` (`side`, `gap`) or to the right of everything, with `scale`. New ids, recorded in the history and pushed to open editors |
 | WS | /ws/diagrams/{id} | Real-time collaboration: broadcasts canvas updates, the other people's pointers (see [Live cursors](#live-cursors)), peer count, saved changes (`diagram_updated`, including those made through the API or the MCP server) and `comments_changed` (no comment text) so open editors reload the comments to everyone connected to the same diagram. An agent that reads or saves the diagram through the MCP server (`X-Agent-Name`, honoured with the service key or a personal key when auth is on) is listed in the presence for 60s after its last call. Guests join with `?share=<token>&name=<name>` as read-only viewers |
+| WS | /ws/workspaces/{id}/presence | Who is in each diagram of the workspace, for the sidebar: a snapshot on connect, then batched deltas (see [Sidebar presence](#sidebar-presence)). Signed-in members only (`?token=<ID token>`); share-link guests are refused. Nothing is stored |
 
 All routes except `/health` and `/ready` return `501 Not Implemented` until infra is wired.
 
@@ -301,6 +302,35 @@ id, no extra fields) and relays at most 60 a second per connection, dropping the
 towards its latest position on every animation frame without re-rendering the app, show only the cursors on the page
 they are looking at, and drop a cursor when its pointer leaves the canvas, when the person leaves the diagram, when
 the connection drops or after 30s without moving. Messages a client does not understand are ignored.
+
+## Sidebar presence
+
+The sidebar shows, next to each diagram, the photos of the people who have it open right now and, next to each
+project (even collapsed), everyone in any of its diagrams, each person once. Up to three faces are stacked with a
+`+N` for the rest; tooltips and the group's `aria-label` carry the names. Photos come from the same `picture_url`
+as the presence avatars (initial on the person's colour when there is none or it fails to load), agents look as they
+do in the presence, and share-link guests in a diagram are shown under the name they entered. You are left out of the
+sidebar (the top bar already shows you in the open diagram), whether you are in one tab or several.
+
+Each open sidebar holds one socket, `/ws/workspaces/{id}/presence`, whatever the number of diagrams:
+
+- On connect: `{"type": "presence_snapshot", "you": "<your presence id>" | null, "diagrams": [{"diagram_id":
+  "...", "project_id": "...", "users": [<presence entries>]}]}`, with only the diagrams someone is in.
+- Then: `{"type": "presence_delta", "diagrams": [...]}` with only the diagrams whose people changed, each with its
+  full list (`"users": []` when everyone left). Changes are batched for 1s per workspace, so a reload (leave and
+  come back) sends nothing and a burst of joins sends one message.
+- Presence entries are the ones of the diagram socket: `id`, `name`, `kind` (`person` or `agent`), `picture_url`
+  for people and `owner_id`/`owner_name`/`label` for agents with a personal key.
+
+Permissions follow the workspace: any member (viewer and up) can open every diagram of the workspace, so a member
+sees the presence of every diagram of that workspace and of no other. The socket needs a signed-in member's ID token;
+no token (share-link guests) or a token of someone outside the workspace is refused with close code 1008, and the
+membership is checked again every 60s, so someone removed from the workspace stops receiving it without reloading
+(a check that fails for another reason closes the socket too). Each person may hold 10 of these sockets at once, and
+since the channel only flows from server to client, a client that keeps sending (more than a burst of 10, then 1 a
+second) is disconnected. With authentication disabled the socket is open to anyone, like the rest of the API, and
+rooms of diagrams that do not exist (only reachable that way) are never shown.
+The client reconnects 2s after a drop (30s after a 1008) and shows nobody while disconnected.
 
 ## Diagram history and personal API keys
 

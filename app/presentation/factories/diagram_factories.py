@@ -5,6 +5,7 @@ from app.domain.usecases.diagram.create_diagram import CreateDiagram
 from app.domain.usecases.diagram.delete_diagram import DeleteDiagram
 from app.domain.usecases.diagram.get_diagram import GetDiagram
 from app.domain.usecases.diagram.get_diagram_by_share_token import GetDiagramByShareToken
+from app.domain.usecases.diagram.get_diagram_location import GetDiagramLocation
 from app.domain.usecases.diagram.list_diagrams import ListDiagrams
 from app.domain.usecases.diagram.share_diagram import ShareDiagram
 from app.domain.usecases.diagram.update_diagram import UpdateDiagram
@@ -47,3 +48,9 @@ async def get_diagram_by_share_token_factory(
     session: AsyncSession = Depends(get_session),
 ) -> GetDiagramByShareToken:
     return GetDiagramByShareToken(DiagramRepositoryImpl(session))
+
+
+async def get_diagram_location_factory(
+    session: AsyncSession = Depends(get_session),
+) -> GetDiagramLocation:
+    return GetDiagramLocation(DiagramRepositoryImpl(session))

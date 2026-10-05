@@ -1824,6 +1824,31 @@ button.validation-item:hover {
   box-shadow: 0 0 0 1.5px var(--accent);
 }
 
+/* Who is in each diagram (and in any diagram of a project), next to its row in the sidebar */
+.sidebar-presence {
+  flex-shrink: 0;
+  padding-left: 4px;
+}
+
+.sidebar-presence .presence-avatar {
+  width: 18px;
+  height: 18px;
+  margin-left: -4px;
+  border-width: 1.5px;
+  border-color: var(--bg-subtle);
+  font-size: 9px;
+}
+
+.sidebar-presence .presence-more {
+  font-size: 8.5px;
+  letter-spacing: -0.02em;
+}
+
+.sidebar-presence .presence-agent svg {
+  width: 10px;
+  height: 10px;
+}
+
 /* The other people's pointers, drawn over the shapes; the tip of the arrow is the pointer itself. */
 .remote-cursors {
   position: absolute;

@@ -2,6 +2,7 @@ import uuid
 
 from app.domain.contracts.agent_presence import AgentPresence
 from app.domain.entities.models.agent_identity import AgentIdentity
+from app.domain.entities.objects.diagram_location import DiagramLocation
 from app.infra.realtime.connection_manager import ConnectionManager
 
 
@@ -10,6 +11,10 @@ class RealtimeAgentPresence(AgentPresence):
         self._connections = connections
 
     async def mark_active(
-        self, diagram_id: uuid.UUID, agent: AgentIdentity, seconds: float
+        self,
+        diagram_id: uuid.UUID,
+        location: DiagramLocation,
+        agent: AgentIdentity,
+        seconds: float,
     ) -> None:
-        await self._connections.mark_agent_active(str(diagram_id), agent, seconds)
+        await self._connections.mark_agent_active(str(diagram_id), agent, seconds, location)

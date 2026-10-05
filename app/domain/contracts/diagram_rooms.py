@@ -2,14 +2,20 @@ from abc import ABC, abstractmethod
 
 from app.domain.contracts.realtime_connection import RealtimeConnection
 from app.domain.entities.objects.cursor_position import CursorPosition
+from app.domain.entities.objects.diagram_location import DiagramLocation
 from app.domain.entities.objects.participant import Participant
 
 
 # The editors connected to each diagram: who is in it, and relaying what one sends to the others.
 class DiagramRooms(ABC):
+    # A room with a location is also shown to the members of its workspace, in their sidebar.
     @abstractmethod
     async def connect(
-        self, ws: RealtimeConnection, diagram_id: str, participant: Participant
+        self,
+        ws: RealtimeConnection,
+        diagram_id: str,
+        participant: Participant,
+        location: DiagramLocation | None = None,
     ) -> None: ...
 
     @abstractmethod
