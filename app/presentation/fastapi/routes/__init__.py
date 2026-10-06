@@ -15,11 +15,12 @@ from .share_routes import public_router as public_share_router
 from .share_routes import router as share_router
 from .websocket_routes import router as websocket_router
 from .workspace_member_routes import router as workspace_member_router
+from .workspace_presence_routes import router as workspace_presence_router
 from .workspace_routes import router as workspace_router
 
-# Reachable without a signed-in user: health checks, and the WebSocket, which
-# authenticates itself from the ?token= query parameter.
-public_routers = [health_router, websocket_router, public_share_router]
+# Reachable without a signed-in user: health checks, and the WebSockets, which
+# authenticate themselves from the ?token= query parameter.
+public_routers = [health_router, websocket_router, workspace_presence_router, public_share_router]
 
 protected_routers = [
     auth_router,

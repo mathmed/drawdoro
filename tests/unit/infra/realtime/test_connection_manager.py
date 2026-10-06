@@ -2,14 +2,19 @@ import asyncio
 import json
 import uuid
 from typing import cast
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, NonCallableMagicMock
 
 import pytest
 from fastapi import WebSocket
 
 from app.domain.entities.models.agent_identity import AgentIdentity
+from app.domain.entities.objects.cursor_position import CanvasPoint, CursorPosition
+from app.domain.entities.objects.diagram_location import DiagramLocation
 from app.domain.entities.objects.participant import Participant
 from app.infra.realtime.connection_manager import ConnectionManager
+from app.infra.realtime.presence_messages import AgentEntry, PersonEntry
+from app.infra.realtime.room_presence_listener import RoomPresenceListener
+from tests.doubles import double
 
 ANA = Participant(name="Ana", user_id="user-ana")
 BRUNO = Participant(name="Bruno", user_id="user-bruno")
@@ -24,8 +29,13 @@ def sent(ws: WebSocket) -> list[dict[str, object]]:
 
 
 @pytest.fixture
-def sut() -> ConnectionManager:
-    return ConnectionManager()
+def listener() -> NonCallableMagicMock:
+    return double(RoomPresenceListener)
+
+
+@pytest.fixture
+def sut(listener: NonCallableMagicMock) -> ConnectionManager:
+    return ConnectionManager(listener)
 
 
 async def test_should_accept_and_track_connection(sut: ConnectionManager) -> None:
@@ -40,8 +50,8 @@ async def test_should_count_people_not_tabs(sut: ConnectionManager) -> None:
     await sut.connect(make_ws(), "room", Participant(name="Ana", user_id="user-ana"))
     await sut.connect(make_ws(), "room", BRUNO)
     assert sut.participants("room") == [
-        {"id": "user-ana", "name": "Ana", "kind": "person", "picture_url": None},
-        {"id": "user-bruno", "name": "Bruno", "kind": "person", "picture_url": None},
+        PersonEntry(id="user-ana", name="Ana", picture_url=None),
+        PersonEntry(id="user-bruno", name="Bruno", picture_url=None),
     ]
 
 
@@ -79,7 +89,7 @@ async def test_should_drop_sockets_that_fail_to_receive(sut: ConnectionManager) 
     await sut.connect(sender, "room", Participant(name="Carla", user_id="user-carla"))
     await sut.broadcast("hello", "room", exclude=sender)
     cast(AsyncMock, healthy.send_text).assert_awaited_once_with("hello")
-    assert [p["id"] for p in sut.participants("room")] == ["user-bruno", "user-carla"]
+    assert [p.id for p in sut.participants("room")] == ["user-bruno", "user-carla"]
 
 
 async def test_should_tell_each_connection_who_is_online_and_who_they_are(
@@ -108,6 +118,7 @@ async def test_should_announce_again_after_dropping_a_dead_socket(sut: Connectio
 
 
 CLAUDE = {"id": "agent:Claude", "name": "Claude", "kind": "agent"}
+CLAUDE_ENTRY = AgentEntry(id="agent:Claude", name="Claude")
 OWNERLESS_CLAUDE = AgentIdentity(id="agent:Claude", name="Claude")
 
 
@@ -119,8 +130,8 @@ async def test_should_list_active_agent_after_people(sut: ConnectionManager) -> 
     await sut.connect(make_ws(), "room", BRUNO)
     await sut.mark_agent_active("room", OWNERLESS_CLAUDE, seconds=60)
     assert sut.participants("room") == [
-        {"id": "user-bruno", "name": "Bruno", "kind": "person", "picture_url": None},
-        CLAUDE,
+        PersonEntry(id="user-bruno", name="Bruno", picture_url=None),
+        CLAUDE_ENTRY,
     ]
 
 
@@ -144,7 +155,7 @@ async def test_should_remove_agent_when_it_goes_quiet(sut: ConnectionManager) ->
     await sut.connect(ws, "room", ANA)
     await sut.mark_agent_active("room", OWNERLESS_CLAUDE, seconds=0.01)
     await asyncio.sleep(0.05)
-    assert CLAUDE not in sut.participants("room")
+    assert CLAUDE_ENTRY not in sut.participants("room")
     assert CLAUDE not in last_presence_users(ws)
 
 
@@ -152,7 +163,7 @@ async def test_should_keep_the_other_agents_when_one_goes_quiet(sut: ConnectionM
     await sut.mark_agent_active("room", OWNERLESS_CLAUDE, seconds=0.01)
     await sut.mark_agent_active("room", personal_agent("Ana", "laptop"), seconds=60)
     await asyncio.sleep(0.05)
-    assert [entry["id"] for entry in sut.participants("room")] == ["agent:key:Ana"]
+    assert [entry.id for entry in sut.participants("room")] == ["agent:key:Ana"]
 
 
 async def test_should_keep_agent_listed_while_it_stays_active(sut: ConnectionManager) -> None:
@@ -160,7 +171,7 @@ async def test_should_keep_agent_listed_while_it_stays_active(sut: ConnectionMan
     await asyncio.sleep(0.06)
     await sut.mark_agent_active("room", OWNERLESS_CLAUDE, seconds=0.1)
     await asyncio.sleep(0.06)
-    assert sut.participants("room") == [CLAUDE]
+    assert sut.participants("room") == [CLAUDE_ENTRY]
 
 
 async def test_should_share_profile_photo_in_presence(sut: ConnectionManager) -> None:
@@ -192,22 +203,20 @@ async def test_should_list_agents_of_different_owners_as_separate_avatars(
     await sut.mark_agent_active("room", personal_agent("Bruno", "desktop"), seconds=60)
     await sut.mark_agent_active("room", personal_agent("Ana", "laptop"), seconds=60)
     assert sut.participants("room") == [
-        {
-            "id": "agent:key:Ana",
-            "name": "Claude",
-            "kind": "agent",
-            "owner_id": str(OWNER_IDS["Ana"]),
-            "owner_name": "Ana",
-            "label": "laptop",
-        },
-        {
-            "id": "agent:key:Bruno",
-            "name": "Claude",
-            "kind": "agent",
-            "owner_id": str(OWNER_IDS["Bruno"]),
-            "owner_name": "Bruno",
-            "label": "desktop",
-        },
+        AgentEntry(
+            id="agent:key:Ana",
+            name="Claude",
+            owner_id=str(OWNER_IDS["Ana"]),
+            owner_name="Ana",
+            label="laptop",
+        ),
+        AgentEntry(
+            id="agent:key:Bruno",
+            name="Claude",
+            owner_id=str(OWNER_IDS["Bruno"]),
+            owner_name="Bruno",
+            label="desktop",
+        ),
     ]
 
 
@@ -220,3 +229,156 @@ async def test_should_announce_agent_again_when_its_identity_changes(
     await sut.mark_agent_active("room", personal_agent("Ana", "work laptop"), seconds=60)
     assert len(sent(ws)) == 2
     assert last_presence_users(ws)[-1]["label"] == "work laptop"
+
+
+ON_CANVAS = CursorPosition(point=CanvasPoint(x=12.5, y=-4.0), page_id="page:page")
+
+
+async def test_should_relay_a_cursor_under_the_sender_identity(sut: ConnectionManager) -> None:
+    sender, other = make_ws(), make_ws()
+    await sut.connect(sender, "room", ANA)
+    await sut.connect(other, "room", BRUNO)
+
+    await sut.relay_cursor(sender, "room", ON_CANVAS)
+
+    assert sent(other) == [
+        {
+            "type": "cursor",
+            "id": "user-ana",
+            "name": "Ana",
+            "point": {"x": 12.5, "y": -4.0},
+            "page": "page:page",
+        }
+    ]
+    cast(AsyncMock, sender.send_text).assert_not_awaited()
+
+
+async def test_should_relay_a_guest_cursor_under_their_connection(sut: ConnectionManager) -> None:
+    guest = Participant(name="Guest")
+    sender, other = make_ws(), make_ws()
+    await sut.connect(sender, "room", guest)
+    await sut.connect(other, "room", BRUNO)
+
+    await sut.relay_cursor(sender, "room", ON_CANVAS)
+
+    assert sent(other)[0]["id"] == guest.connection_id
+
+
+async def test_should_relay_that_the_pointer_left_the_canvas(sut: ConnectionManager) -> None:
+    sender, other = make_ws(), make_ws()
+    await sut.connect(sender, "room", ANA)
+    await sut.connect(other, "room", BRUNO)
+
+    await sut.relay_cursor(sender, "room", None)
+
+    assert sent(other) == [
+        {"type": "cursor", "id": "user-ana", "name": "Ana", "point": None, "page": None}
+    ]
+
+
+async def test_should_keep_cursors_inside_their_diagram(sut: ConnectionManager) -> None:
+    sender, same_room, other_room = make_ws(), make_ws(), make_ws()
+    await sut.connect(sender, "room", ANA)
+    await sut.connect(same_room, "room", BRUNO)
+    await sut.connect(other_room, "elsewhere", Participant(name="Carla", user_id="user-carla"))
+
+    await sut.relay_cursor(sender, "room", ON_CANVAS)
+
+    assert len(sent(same_room)) == 1
+    cast(AsyncMock, other_room.send_text).assert_not_awaited()
+
+
+async def test_should_ignore_a_cursor_from_a_connection_outside_the_room(
+    sut: ConnectionManager,
+) -> None:
+    stranger, member = make_ws(), make_ws()
+    await sut.connect(stranger, "elsewhere", ANA)
+    await sut.connect(member, "room", BRUNO)
+
+    await sut.relay_cursor(stranger, "room", ON_CANVAS)
+
+    cast(AsyncMock, member.send_text).assert_not_awaited()
+
+
+HERE = DiagramLocation(workspace_id=uuid.uuid4(), project_id=uuid.uuid4())
+ANA_ENTRY = PersonEntry(id="user-ana", name="Ana", picture_url=None)
+BRUNO_ENTRY = PersonEntry(id="user-bruno", name="Bruno", picture_url=None)
+
+
+def changes(listener: NonCallableMagicMock) -> list[tuple[object, ...]]:
+    return [call.args for call in listener.room_changed.call_args_list]
+
+
+async def test_should_tell_the_workspace_who_joined_a_located_room(
+    sut: ConnectionManager, listener: NonCallableMagicMock
+) -> None:
+    await sut.connect(make_ws(), "room", ANA, HERE)
+    await sut.connect(make_ws(), "room", BRUNO)
+    assert changes(listener) == [
+        ("room", HERE, [ANA_ENTRY]),
+        ("room", HERE, [ANA_ENTRY, BRUNO_ENTRY]),
+    ]
+
+
+async def test_should_keep_rooms_without_a_location_out_of_the_workspace(
+    sut: ConnectionManager, listener: NonCallableMagicMock
+) -> None:
+    ws = make_ws()
+    await sut.connect(ws, "room", ANA)
+    sut.disconnect(ws, "room")
+    listener.room_changed.assert_not_called()
+
+
+async def test_should_tell_the_workspace_who_left_and_forget_an_empty_room(
+    sut: ConnectionManager, listener: NonCallableMagicMock
+) -> None:
+    ana_ws, bruno_ws = make_ws(), make_ws()
+    await sut.connect(ana_ws, "room", ANA, HERE)
+    await sut.connect(bruno_ws, "room", BRUNO, HERE)
+    listener.reset_mock()
+
+    sut.disconnect(ana_ws, "room")
+    sut.disconnect(bruno_ws, "room")
+    await sut.connect(make_ws(), "room", ANA)
+
+    assert changes(listener) == [("room", HERE, [BRUNO_ENTRY]), ("room", HERE, [])]
+
+
+async def test_should_not_tell_the_workspace_about_a_socket_that_already_left(
+    sut: ConnectionManager, listener: NonCallableMagicMock
+) -> None:
+    ws = make_ws()
+    await sut.connect(ws, "room", ANA, HERE)
+    await sut.connect(make_ws(), "room", BRUNO, HERE)
+    sut.disconnect(ws, "room")
+    listener.reset_mock()
+
+    sut.disconnect(ws, "room")
+
+    listener.room_changed.assert_not_called()
+
+
+async def test_should_tell_the_workspace_when_an_agent_comes_and_goes(
+    sut: ConnectionManager, listener: NonCallableMagicMock
+) -> None:
+    await sut.mark_agent_active("room", OWNERLESS_CLAUDE, 0.01, HERE)
+    await sut.mark_agent_active("room", OWNERLESS_CLAUDE, 0.01, HERE)
+    await asyncio.sleep(0.05)
+    await sut.mark_agent_active("room", OWNERLESS_CLAUDE, 60)
+
+    assert changes(listener) == [("room", HERE, [CLAUDE_ENTRY]), ("room", HERE, [])]
+
+
+async def test_should_keep_the_location_while_an_agent_stays(
+    sut: ConnectionManager, listener: NonCallableMagicMock
+) -> None:
+    ws = make_ws()
+    await sut.connect(ws, "room", ANA, HERE)
+    await sut.mark_agent_active("room", OWNERLESS_CLAUDE, 60)
+    sut.disconnect(ws, "room")
+    await sut.connect(make_ws(), "room", BRUNO)
+
+    assert changes(listener)[-2:] == [
+        ("room", HERE, [CLAUDE_ENTRY]),
+        ("room", HERE, [BRUNO_ENTRY, CLAUDE_ENTRY]),
+    ]

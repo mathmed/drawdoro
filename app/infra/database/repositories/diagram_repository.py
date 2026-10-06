@@ -7,7 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.domain.contracts.diagram_repository import DiagramRepository
 from app.domain.entities.models.diagram import Diagram
 from app.domain.entities.models.diagram_summary import DiagramSummary
+from app.domain.entities.objects.diagram_location import DiagramLocation
 from app.infra.database.models.diagram import DiagramORM
+from app.infra.database.models.project import ProjectORM
 
 
 class DiagramRepositoryImpl(DiagramRepository):
@@ -46,6 +48,21 @@ class DiagramRepositoryImpl(DiagramRepository):
             )
         )
         return result.scalar_one_or_none() is not None
+
+    async def get_location(self, diagram_id: uuid.UUID) -> DiagramLocation | None:
+        result = await self._session.execute(
+            select(ProjectORM.workspace_id, DiagramORM.project_id)
+            .join(ProjectORM, ProjectORM.id == DiagramORM.project_id)
+            .where(
+                DiagramORM.id == diagram_id,
+                DiagramORM.deleted_at.is_(None),
+                ProjectORM.deleted_at.is_(None),
+            )
+        )
+        row = result.one_or_none()
+        if row is None:
+            return None
+        return DiagramLocation(workspace_id=row.workspace_id, project_id=row.project_id)
 
     async def get_by_share_token(self, share_token: str) -> Diagram | None:
         result = await self._session.execute(

@@ -9,12 +9,19 @@ from app.domain.contracts.diagram_repository import DiagramRepository
 from app.domain.entities.models.diagram import Diagram
 from app.domain.entities.models.revision_author import RevisionAuthor
 from app.domain.enums.revision_origin import RevisionOrigin
+from app.domain.errors.domain_errors import NotFoundError
 from app.domain.services.revision_recorder import RevisionRecorder
+from app.domain.usecases.diagram.get_diagram_location import GetDiagramLocation
 from app.domain.usecases.diagram.update_diagram import UpdateDiagram, UpdateDiagramParams
+from app.domain.usecases.presence.track_agent_activity import TrackAgentActivity
 from app.infra.realtime.connection_manager import manager
 from app.infra.realtime.realtime_diagram_update_notifier import RealtimeDiagramUpdateNotifier
 from app.main.main import app
-from app.presentation.factories.diagram_factories import update_diagram_factory
+from app.presentation.factories.diagram_factories import (
+    get_diagram_location_factory,
+    update_diagram_factory,
+)
+from app.presentation.factories.presence_factories import track_agent_activity_factory
 from tests.doubles import double
 
 
@@ -76,6 +83,9 @@ def test_should_push_saved_diagram_to_open_editors(client: TestClient, diagram: 
         RealtimeDiagramUpdateNotifier(manager),
         create_autospec(RevisionRecorder, instance=True),
     )
+    locate = AsyncMock(spec=GetDiagramLocation)
+    locate.execute.side_effect = NotFoundError("Diagram not found")
+    app.dependency_overrides[get_diagram_location_factory] = lambda: locate
     with client.websocket_connect(f"/ws/diagrams/{diagram.id}") as editor:
         assert editor.receive_json()["type"] == "presence"
         response = client.put(
@@ -94,6 +104,8 @@ def test_should_record_agent_changes_with_their_summary(
     client: TestClient, diagram: Diagram
 ) -> None:
     mock_uc = use_case_with_mocked_execute(diagram)
+    track = AsyncMock(spec=TrackAgentActivity)
+    app.dependency_overrides[track_agent_activity_factory] = lambda: track
     response = client.put(
         f"/projects/{diagram.project_id}/diagrams/{diagram.id}",
         json={"name": "Checkout", "revision_summary": "Added the payment queue"},

@@ -1824,6 +1824,70 @@ button.validation-item:hover {
   box-shadow: 0 0 0 1.5px var(--accent);
 }
 
+/* Who is in each diagram (and in any diagram of a project), next to its row in the sidebar */
+.sidebar-presence {
+  flex-shrink: 0;
+  padding-left: 4px;
+}
+
+.sidebar-presence .presence-avatar {
+  width: 18px;
+  height: 18px;
+  margin-left: -4px;
+  border-width: 1.5px;
+  border-color: var(--bg-subtle);
+  font-size: 9px;
+}
+
+.sidebar-presence .presence-more {
+  font-size: 8.5px;
+  letter-spacing: -0.02em;
+}
+
+.sidebar-presence .presence-agent svg {
+  width: 10px;
+  height: 10px;
+}
+
+/* The other people's pointers, drawn over the shapes; the tip of the arrow is the pointer itself. */
+.remote-cursors {
+  position: absolute;
+  inset: 0;
+  z-index: var(--layer-canvas-overlays);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.remote-cursor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  will-change: transform;
+}
+
+.remote-cursor-arrow {
+  display: block;
+  margin: -2px 0 0 -2px;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
+}
+
+.remote-cursor-name {
+  position: absolute;
+  top: 16px;
+  left: 12px;
+  max-width: 160px;
+  padding: 2px 6px;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-shadow: var(--shadow-sm);
+}
+
 /* An AI agent working on the diagram through the MCP server */
 .presence-agent {
   background: #d97757;

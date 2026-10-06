@@ -3,8 +3,12 @@ import { loadSnapshot, Tldraw, type Editor, type TLComponents, type TLStoreSnaps
 import 'tldraw/tldraw.css'
 
 import type { SharedDiagram } from '../../api/diagrams'
+import { useCursorBroadcast } from '../../hooks/useCursorBroadcast'
 import { useRealtime, type Presence } from '../../hooks/useRealtime'
 import { useThemeStore } from '../../store/useThemeStore'
+import { RemoteCursorStore } from '../../utils/remoteCursors'
+import RemoteCursorsLayer from '../presence/RemoteCursorsLayer'
+import { RemoteCursorsContext } from '../presence/RemoteCursorsContext'
 import CanvasLoadingScreen from '../ui/loading/CanvasLoadingScreen'
 import { shapeUtils } from './shapeUtils'
 
@@ -23,15 +27,26 @@ const components: TLComponents = {
   MainMenu: null,
   PageMenu: null,
   LoadingScreen: CanvasLoadingScreen,
+  InFrontOfTheCanvas: RemoteCursorsLayer,
 }
 
 export default function SharedCanvas({ diagram, shareToken, guestName }: SharedCanvasProps) {
   const [editor, setEditor] = useState<Editor | null>(null)
   const theme = useThemeStore((state) => state.resolved)
 
-  // Live updates from editors flow in; the read-only viewer only receives them.
+  // Live updates from editors flow in; the read-only viewer only receives them. Pointers go both
+  // ways, like the presence: editors see the guest's cursor and the guest sees theirs.
   const noop = (_: Presence): void => undefined
-  useRealtime({ diagramId: diagram.id, editor, onPresenceChange: noop, shareToken, guestName })
+  const [remoteCursors] = useState(() => new RemoteCursorStore())
+  const { sendCursor } = useRealtime({
+    diagramId: diagram.id,
+    editor,
+    onPresenceChange: noop,
+    shareToken,
+    guestName,
+    remoteCursors,
+  })
+  useCursorBroadcast(editor, sendCursor)
 
   function handleMount(mountedEditor: Editor): void {
     setEditor(mountedEditor)
@@ -45,7 +60,9 @@ export default function SharedCanvas({ diagram, shareToken, guestName }: SharedC
 
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
-      <Tldraw onMount={handleMount} components={components} shapeUtils={shapeUtils} />
+      <RemoteCursorsContext.Provider value={remoteCursors}>
+        <Tldraw onMount={handleMount} components={components} shapeUtils={shapeUtils} />
+      </RemoteCursorsContext.Provider>
     </div>
   )
 }

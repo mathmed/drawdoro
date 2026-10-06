@@ -11,6 +11,8 @@ from app.domain.entities.models.diagram import Diagram
 from app.domain.entities.objects.participant import Participant
 from app.infra.realtime.connection_manager import ConnectionManager
 from app.infra.realtime.realtime_diagram_update_notifier import RealtimeDiagramUpdateNotifier
+from app.infra.realtime.room_presence_listener import RoomPresenceListener
+from tests.doubles import double
 
 DIAGRAM = Diagram(
     project_id=uuid.uuid4(),
@@ -33,7 +35,7 @@ def sent(ws: WebSocket) -> list[dict[str, object]]:
 
 @pytest.fixture
 def connections() -> ConnectionManager:
-    return ConnectionManager()
+    return ConnectionManager(double(RoomPresenceListener))
 
 
 @pytest.fixture

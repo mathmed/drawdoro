@@ -1,9 +1,13 @@
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.settings import Settings
 from app.domain.contracts.diagram_rooms import DiagramRooms
+from app.domain.contracts.workspace_presence import WorkspacePresence
+from app.domain.usecases.auth.authenticate_user import AuthenticateUser
+from app.domain.usecases.auth.authorize_workspace_access import AuthorizeWorkspaceAccess
 from app.domain.usecases.comment.create_comment import CreateComment
 from app.domain.usecases.comment.delete_comment import DeleteComment
 from app.domain.usecases.comment.list_comments import ListComments
@@ -12,6 +16,7 @@ from app.domain.usecases.diagram.create_diagram import CreateDiagram
 from app.domain.usecases.diagram.delete_diagram import DeleteDiagram
 from app.domain.usecases.diagram.get_diagram import GetDiagram
 from app.domain.usecases.diagram.get_diagram_by_share_token import GetDiagramByShareToken
+from app.domain.usecases.diagram.get_diagram_location import GetDiagramLocation
 from app.domain.usecases.diagram.list_diagrams import ListDiagrams
 from app.domain.usecases.diagram.share_diagram import ShareDiagram
 from app.domain.usecases.diagram.update_diagram import UpdateDiagram
@@ -29,6 +34,7 @@ from app.domain.usecases.gallery.insert_gallery_item import InsertGalleryItem
 from app.domain.usecases.gallery.list_gallery_items import ListGalleryItems
 from app.domain.usecases.gallery.update_gallery_item import UpdateGalleryItem
 from app.domain.usecases.health.check_readiness import CheckReadiness
+from app.domain.usecases.presence.track_agent_activity import TrackAgentActivity
 from app.domain.usecases.project.create_project import CreateProject
 from app.domain.usecases.project.delete_project import DeleteProject
 from app.domain.usecases.project.get_project import GetProject
@@ -40,6 +46,8 @@ from app.domain.usecases.workspace.get_workspace import GetWorkspace
 from app.domain.usecases.workspace.list_workspaces import ListWorkspaces
 from app.domain.usecases.workspace.update_workspace import UpdateWorkspace
 from app.infra.realtime.connection_manager import manager
+from app.infra.realtime.workspace_presence_hub import workspace_presence_hub
+from app.presentation.factories import presence_factories
 from app.presentation.factories.comment_factories import (
     create_comment_factory,
     delete_comment_factory,
@@ -51,6 +59,7 @@ from app.presentation.factories.diagram_factories import (
     delete_diagram_factory,
     get_diagram_by_share_token_factory,
     get_diagram_factory,
+    get_diagram_location_factory,
     list_diagrams_factory,
     share_diagram_factory,
     update_diagram_factory,
@@ -75,7 +84,13 @@ from app.presentation.factories.gallery_factories import (
     update_gallery_item_factory,
 )
 from app.presentation.factories.health_factories import check_readiness_factory
-from app.presentation.factories.presence_factories import diagram_rooms_factory
+from app.presentation.factories.presence_factories import (
+    diagram_rooms_factory,
+    open_presence_access,
+    presence_access_factory,
+    track_agent_activity_factory,
+    workspace_presence_factory,
+)
 from app.presentation.factories.project_factories import (
     create_project_factory,
     delete_project_factory,
@@ -128,6 +143,7 @@ async def test_diagram_factories() -> None:
     assert isinstance(await delete_diagram_factory(session), DeleteDiagram)
     assert isinstance(await share_diagram_factory(session), ShareDiagram)
     assert isinstance(await get_diagram_by_share_token_factory(session), GetDiagramByShareToken)
+    assert isinstance(await get_diagram_location_factory(session), GetDiagramLocation)
 
 
 async def test_comment_factories() -> None:
@@ -165,3 +181,32 @@ def test_should_share_one_room_registry() -> None:
     assert isinstance(rooms, DiagramRooms)
     assert rooms is manager
     assert diagram_rooms_factory() is rooms
+
+
+def test_should_share_one_workspace_presence_hub() -> None:
+    presence = workspace_presence_factory()
+    assert isinstance(presence, WorkspacePresence)
+    assert presence is workspace_presence_hub
+
+
+async def test_should_track_agents_in_the_shared_rooms() -> None:
+    session = MagicMock(spec=AsyncSession)
+    assert isinstance(await track_agent_activity_factory(session), TrackAgentActivity)
+
+
+async def test_should_open_a_short_session_for_each_presence_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = MagicMock(spec=AsyncSession)
+    sessions = MagicMock()
+    sessions.return_value.__aenter__ = AsyncMock(return_value=session)
+    sessions.return_value.__aexit__ = AsyncMock(return_value=None)
+    monkeypatch.setattr(presence_factories, "AsyncSessionLocal", sessions)
+
+    assert presence_access_factory() is open_presence_access
+    async with open_presence_access() as access:
+        assert isinstance(access.authenticate, AuthenticateUser)
+        assert isinstance(access.authorize, AuthorizeWorkspaceAccess)
+        sessions.return_value.__aexit__.assert_not_awaited()
+
+    sessions.return_value.__aexit__.assert_awaited_once()

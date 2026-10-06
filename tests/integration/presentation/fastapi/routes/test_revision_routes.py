@@ -14,11 +14,13 @@ from app.domain.enums.revision_origin import RevisionOrigin
 from app.domain.errors.domain_errors import ForbiddenError
 from app.domain.usecases.auth.authenticate_user import AuthenticateUser
 from app.domain.usecases.auth.authorize_workspace_access import AuthorizeWorkspaceAccess
+from app.domain.usecases.presence.track_agent_activity import TrackAgentActivity
 from app.main.main import app
 from app.presentation.factories.auth_factories import (
     authenticate_user_factory,
     authorize_workspace_access_factory,
 )
+from app.presentation.factories.presence_factories import track_agent_activity_factory
 from app.presentation.factories.revision_factories import (
     get_diagram_revision_factory,
     list_diagram_revisions_factory,
@@ -75,6 +77,8 @@ def test_should_get_a_revision_with_its_snapshot(client: TestClient) -> None:
 
 def test_should_restore_a_revision_as_its_author(client: TestClient) -> None:
     mock = override(restore_diagram_revision_factory, DIAGRAM)
+    track = AsyncMock(spec=TrackAgentActivity)
+    app.dependency_overrides[track_agent_activity_factory] = lambda: track
     response = client.post(f"{BASE}/{REVISION.id}/restore", headers={"X-Agent-Name": "Claude"})
     assert response.status_code == 200
     assert response.json()["canvas_state"] == {"shapes": ["old"]}

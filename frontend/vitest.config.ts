@@ -35,13 +35,13 @@ export default defineConfig({
         branches: 10,
         functions: 6,
         lines: 10,
-        'src/{auth/session,config/branding,config/mcp,config/mcpTools,utils/agents,utils/format,utils/freshness,utils/galleryLabels,utils/revisions,utils/validateArchitecture}.ts': {
+        'src/{auth/session,config/branding,config/mcp,config/mcpTools,utils/agents,utils/cursorSender,utils/format,utils/freshness,utils/galleryLabels,utils/presenceLabel,utils/remoteCursors,utils/revisions,utils/validateArchitecture,utils/workspacePresence}.ts': {
           statements: 90,
           branches: 85,
           functions: 90,
           lines: 90,
         },
-        'src/store/{useAppStore,useThemeStore}.ts': {
+        'src/store/{useAppStore,useThemeStore,useWorkspacePresenceStore}.ts': {
           statements: 60,
           branches: 55,
           functions: 50,

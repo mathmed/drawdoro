@@ -6,22 +6,43 @@ from unittest.mock import AsyncMock
 import pytest
 from fastapi.testclient import TestClient
 
+from app.domain.contracts.diagram_repository import DiagramRepository
 from app.domain.entities.models.diagram import Diagram
+from app.domain.entities.objects.diagram_location import DiagramLocation
 from app.domain.usecases.diagram.get_diagram import GetDiagram
+from app.domain.usecases.diagram.get_diagram_location import GetDiagramLocation
 from app.domain.usecases.presence import track_agent_activity
+from app.domain.usecases.presence.track_agent_activity import TrackAgentActivity
 from app.infra.realtime.connection_manager import manager
+from app.infra.realtime.presence_messages import AgentEntry
+from app.infra.realtime.realtime_agent_presence import RealtimeAgentPresence
 from app.main.main import app
-from app.presentation.factories.diagram_factories import get_diagram_factory
+from app.presentation.factories.diagram_factories import (
+    get_diagram_factory,
+    get_diagram_location_factory,
+)
+from app.presentation.factories.presence_factories import track_agent_activity_factory
+from tests.doubles import double
 
 CLAUDE = {"id": "agent:Claude", "name": "Claude", "kind": "agent"}
+CLAUDE_ENTRY = AgentEntry(id="agent:Claude", name="Claude")
 
 
 @pytest.fixture
 def diagram() -> Iterator[Diagram]:
     diagram = Diagram(project_id=uuid.uuid4(), name="Checkout")
+    location = DiagramLocation(workspace_id=uuid.uuid4(), project_id=diagram.project_id)
     mock_uc = AsyncMock(spec=GetDiagram)
     mock_uc.execute.return_value = diagram
+    locate = AsyncMock(spec=GetDiagramLocation)
+    locate.execute.return_value = location
+    diagrams = double(DiagramRepository)
+    diagrams.get_location.return_value = location
     app.dependency_overrides[get_diagram_factory] = lambda: mock_uc
+    app.dependency_overrides[get_diagram_location_factory] = lambda: locate
+    app.dependency_overrides[track_agent_activity_factory] = lambda: TrackAgentActivity(
+        diagrams, RealtimeAgentPresence(manager)
+    )
     yield diagram
     app.dependency_overrides.clear()
 
@@ -29,7 +50,7 @@ def diagram() -> Iterator[Diagram]:
 def wait_until_gone(diagram_id: str, timeout: float = 2.0) -> bool:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        if CLAUDE not in manager.participants(diagram_id):
+        if CLAUDE_ENTRY not in manager.participants(diagram_id):
             return True
         time.sleep(0.02)
     return False
@@ -57,4 +78,4 @@ def test_should_not_show_agent_for_regular_requests(diagram: Diagram) -> None:
     path = f"/projects/{diagram.project_id}/diagrams/{diagram.id}"
     with TestClient(app) as client:
         assert client.get(path).status_code == 200
-    assert CLAUDE not in manager.participants(str(diagram.id))
+    assert CLAUDE_ENTRY not in manager.participants(str(diagram.id))
