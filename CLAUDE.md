@@ -63,6 +63,7 @@ tests/integration/ HTTP tests with TestClient
 | Project | Belongs to a Workspace; groups diagrams and folders |
 | Folder | Nestable; belongs to a Project or another Folder |
 | Diagram | canvas_state (tldraw JSON), semantic_metadata |
+| DiagramThumbnail | Preview of a Diagram in one theme (light/dark) for the listing cards, rendered by an editor's browser |
 | DocumentationPage | Markdown page linked to a Diagram (one per diagram) |
 | Comment | Anchored to a diagram element via element_id |
 | CustomShape | tldraw custom shape owned by a user or Workspace |
