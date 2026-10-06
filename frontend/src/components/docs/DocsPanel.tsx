@@ -70,12 +70,16 @@ export default function DocsPanel() {
   const [mode, setMode] = useState<'write' | 'preview'>('write')
   const debounced = useDebounce(content, 1000)
   const lastSaved = useRef(documentation?.content ?? '')
+  const [shownPage, setShownPage] = useState({ documentation, diagramId: activeDiagram?.id })
 
   // Reset the editor when switching diagrams or when the stored page changes.
+  if (shownPage.documentation !== documentation || shownPage.diagramId !== activeDiagram?.id) {
+    setShownPage({ documentation, diagramId: activeDiagram?.id })
+    setContent(documentation?.content ?? '')
+  }
+
   useEffect(() => {
-    const stored = documentation?.content ?? ''
-    setContent(stored)
-    lastSaved.current = stored
+    lastSaved.current = documentation?.content ?? ''
   }, [documentation, activeDiagram?.id])
 
   useEffect(() => {

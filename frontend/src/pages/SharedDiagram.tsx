@@ -15,40 +15,57 @@ import { useAuthStore } from '../store/useAuthStore'
 
 type LoadState = 'loading' | 'ready' | 'not-found'
 
+// The outcome of one request (token and attempt); null when the diagram could not be opened.
+interface LoadedDiagram {
+  key: string
+  diagram: SharedDiagramData | null
+}
+
+function loadStateOf(token: string | undefined, loaded: LoadedDiagram | null, requestKey: string): LoadState {
+  if (token === undefined) {
+    return 'not-found'
+  }
+  if (loaded?.key !== requestKey) {
+    return 'loading'
+  }
+  return loaded.diagram === null ? 'not-found' : 'ready'
+}
+
 export default function SharedDiagramPage() {
   const { token } = useParams<{ token: string }>()
   const status = useAuthStore((state) => state.status)
   const profile = useAuthStore((state) => state.profile)
 
-  const [state, setState] = useState<LoadState>('loading')
-  const [diagram, setDiagram] = useState<SharedDiagramData | null>(null)
+  const [loaded, setLoaded] = useState<LoadedDiagram | null>(null)
   const [guestName, setGuestName] = useState<string | null>(null)
   const [nameDraft, setNameDraft] = useState('')
   const [attempt, setAttempt] = useState(0)
+  const requestKey = `${token}:${attempt}`
 
   useEffect(() => {
     if (token === undefined) {
-      setState('not-found')
       return
     }
     let active = true
-    setState('loading')
+    const key = `${token}:${attempt}`
     void getSharedDiagram(token)
       .then((data) => {
         if (active) {
-          setDiagram(data)
-          setState('ready')
+          setLoaded({ key, diagram: data })
         }
       })
       .catch(() => {
         if (active) {
-          setState('not-found')
+          setLoaded({ key, diagram: null })
         }
       })
     return () => {
       active = false
     }
   }, [token, attempt])
+
+  const state = loadStateOf(token, loaded, requestKey)
+  const diagram = loaded?.key === requestKey ? loaded.diagram : null
 
   const isLoading = status === 'loading' || state === 'loading'
   const showLoader = useDelayedVisibility(isLoading)

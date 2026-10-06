@@ -1,6 +1,6 @@
 import { ARROW_LABEL_FONT_SIZES, FONT_SIZES, type TLShape } from 'tldraw'
 
-import { effectiveFontSize, fontSizeOf, isGeo } from './CustomGeoShapeUtil'
+import { effectiveFontSize, fontSizeOf, isGeo } from './geoStyle'
 
 // meta.fontSize (px) overrides tldraw's size preset for the text of these shapes: geo labels
 // through CustomGeoShapeUtil, plain text and arrow labels through the tldraw patch

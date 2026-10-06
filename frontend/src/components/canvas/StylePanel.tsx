@@ -9,17 +9,16 @@ import {
 } from 'lucide-react'
 import type { ReactNode } from 'react'
 
+import { getNextDefaults, setNextDefaults } from '../../shapes/CustomGeoShapeUtil'
 import {
   FONT_SIZE_PRESETS,
   edgesOf,
   fillTintsFor,
-  getNextDefaults,
   isGeo,
   isRoundable,
-  setNextDefaults,
   strokeColorOf,
   type Edges,
-} from '../../shapes/CustomGeoShapeUtil'
+} from '../../shapes/geoStyle'
 import { clampFontSize, hasFontSize, MAX_FONT_SIZE, MIN_FONT_SIZE, shapeFontSize } from '../../shapes/fontSize'
 import {
   hasDash,

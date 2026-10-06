@@ -1,7 +1,7 @@
-import { ChevronRight, FilePlus2, Folder as FolderIcon, FolderOpen, FolderPlus, Pencil, Trash2 } from 'lucide-react'
+import { ChevronRight, Folder as FolderIcon, FolderOpen, Pencil, Trash2 } from 'lucide-react'
 
 import type { Folder } from '../../api/types'
-import type { MenuEntry } from '../ui/Menu'
+import { addMenu } from './addMenu'
 import DiagramRow from './DiagramRow'
 import RowMenu, { INDENT } from './RowMenu'
 import type { TreeIndex } from './treeIndex'
@@ -13,13 +13,6 @@ export interface TreeViewProps {
   toggleFolder: (id: string) => void
   activeDiagramId: string | null
   actions: TreeActions
-}
-
-export function addMenu(actions: TreeActions, folderId?: string): MenuEntry[] {
-  return [
-    { label: 'New diagram', icon: <FilePlus2 size={15} />, onSelect: () => actions.newDiagram(folderId) },
-    { label: 'New folder', icon: <FolderPlus size={15} />, onSelect: () => void actions.createFolder(folderId) },
-  ]
 }
 
 // The folders and diagrams directly under a folder (or under the project root when null).

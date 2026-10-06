@@ -37,12 +37,17 @@ export function usePresentation(editor: Editor | null, active: boolean): UsePres
     [editor, frameIds],
   )
 
-  useEffect(() => {
-    if (!active) {
-      return
-    }
+  // A new set of frames (presentation started, or another editor) starts from the first one.
+  const [indexedFrames, setIndexedFrames] = useState(frameIds)
+  if (indexedFrames !== frameIds) {
+    setIndexedFrames(frameIds)
     setCurrentIndex(0)
-    zoomTo(0)
+  }
+
+  useEffect(() => {
+    if (active) {
+      zoomTo(0)
+    }
   }, [active, zoomTo])
 
   const goToNext = useCallback(() => {

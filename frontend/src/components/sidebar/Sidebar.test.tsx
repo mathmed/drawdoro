@@ -2,7 +2,7 @@ import { act, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { DiagramSummary, Project, Workspace } from '../../api/types'
+import type { Diagram, DiagramSummary, Folder, Project, Workspace } from '../../api/types'
 import { useWorkspacePresence } from '../../hooks/useWorkspacePresence'
 import { useAppStore } from '../../store/useAppStore'
 import { useWorkspacePresenceStore } from '../../store/useWorkspacePresenceStore'
@@ -107,5 +107,48 @@ describe('Sidebar presence', () => {
   it('should not subscribe before a workspace is chosen', () => {
     renderSut()
     expect(useWorkspacePresence).toHaveBeenLastCalledWith(null)
+  })
+})
+
+describe('Sidebar tree', () => {
+  const OUTER: Folder = { id: 'f1', project_id: 'p1', parent_folder_id: null, name: 'Services' }
+  const INNER: Folder = { id: 'f2', project_id: 'p1', parent_folder_id: 'f1', name: 'Payments API' }
+  const DEEP: DiagramSummary = { id: 'd2', project_id: 'p1', folder_id: 'f2', name: 'Ledger flow' }
+
+  beforeEach(() => {
+    useAppStore.setState({
+      isLoadingWorkspaces: false,
+      workspaces: [WORKSPACE],
+      activeWorkspace: WORKSPACE,
+      projects: [PROJECT],
+      activeProject: PROJECT,
+      folders: [OUTER, INNER],
+      diagrams: [DEEP],
+    })
+  })
+
+  it('should keep folders collapsed while no diagram inside them is open', () => {
+    renderSut()
+
+    expect(screen.getByText('Services')).toBeInTheDocument()
+    expect(screen.queryByText('Payments API')).not.toBeInTheDocument()
+  })
+
+  it('should expand every folder above the diagram it opens with', () => {
+    useAppStore.setState({ activeDiagram: { ...DEEP, canvas_state: null } as Diagram })
+    renderSut()
+
+    expect(screen.getByText('Payments API')).toBeInTheDocument()
+    expect(screen.getByText('Ledger flow')).toBeInTheDocument()
+  })
+
+  it('should expand every folder above a diagram opened later', () => {
+    renderSut()
+    expect(screen.queryByText('Payments API')).not.toBeInTheDocument()
+
+    act(() => useAppStore.setState({ activeDiagram: { ...DEEP, canvas_state: null } as Diagram }))
+
+    expect(screen.getByText('Payments API')).toBeInTheDocument()
+    expect(screen.getByText('Ledger flow')).toBeInTheDocument()
   })
 })
