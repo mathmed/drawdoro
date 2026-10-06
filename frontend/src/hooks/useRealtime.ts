@@ -73,97 +73,101 @@ export function useRealtime({
   const generation = useRef(0)
 
   const connect = useCallback(
-    async (connectionGeneration: number) => {
-      // Browsers can't send headers on a WebSocket handshake, so the ID token goes in the URL.
-      // Guests have no session; they authenticate the connection with their share token instead.
-      const token = shareToken === undefined && authConfig.enabled ? await getIdToken() : null
-      if (connectionGeneration !== generation.current) {
-        return
-      }
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-      const params = new URLSearchParams()
-      if (shareToken !== undefined) {
-        params.set('share', shareToken)
-        if (guestName !== undefined && guestName !== '') {
-          params.set('name', guestName)
-        }
-      } else if (token !== null) {
-        params.set('token', token)
-      }
-      const query = params.toString() === '' ? '' : `?${params.toString()}`
-      const ws = new WebSocket(`${protocol}//${window.location.host}/api/ws/diagrams/${diagramId}${query}`)
-
-      function applyRemoteSnapshot(snapshot: TLStoreSnapshot) {
-        if (editor === null) {
-          return
-        }
-        const wasFocused = editor.getIsFocused()
-        applyingRemote.current = true
-        editor.store.mergeRemoteChanges(() => {
-          loadSnapshot(editor.store, snapshot)
-        })
-        applyingRemote.current = false
-        // A peer's edit must not steal keyboard focus from the local user.
-        if (wasFocused && !editor.getIsFocused()) {
-          editor.focus({ focusContainer: false })
-        }
-      }
-
-      ws.onmessage = (event) => {
-        let msg: RealtimeMessage
-        try {
-          msg = JSON.parse(event.data) as RealtimeMessage
-        } catch {
-          return
-        }
-
-        if (msg.type === 'presence') {
-          const users = msg.users ?? []
-          you.current = msg.you ?? null
-          remoteCursors?.retain(new Set(users.map((user) => user.id)))
-          onPresenceChange({ users, you: you.current })
-          return
-        }
-
-        if (msg.type === 'cursor') {
-          const cursor = parseCursorMessage(msg)
-          if (cursor !== null && cursor.id !== you.current) {
-            remoteCursors?.apply(cursor, Date.now())
-          }
-          return
-        }
-
-        if (msg.type === 'update' && msg.client_id !== TAB_CLIENT_ID && msg.snapshot !== undefined) {
-          applyRemoteSnapshot(msg.snapshot)
-          return
-        }
-
-        if (msg.type === 'comments_changed') {
-          onCommentsChanged?.()
-          return
-        }
-
-        if (msg.type === 'diagram_updated' && msg.client_id !== TAB_CLIENT_ID && msg.diagram !== undefined) {
-          const isNewest = onDiagramPushed?.(msg.diagram) ?? true
-          // Editor tabs already sent their canvas over the socket; only saves made outside an
-          // editor (the API, the MCP server) still have to be drawn here.
-          if (isNewest && msg.client_id === null && msg.diagram.canvas_state !== null) {
-            applyRemoteSnapshot(msg.diagram.canvas_state as unknown as TLStoreSnapshot)
-          }
-        }
-      }
-
-      ws.onclose = () => {
+    (connectionGeneration: number) => {
+      async function open(): Promise<void> {
+        // Browsers can't send headers on a WebSocket handshake, so the ID token goes in the URL.
+        // Guests have no session; they authenticate the connection with their share token instead.
+        const token = shareToken === undefined && authConfig.enabled ? await getIdToken() : null
         if (connectionGeneration !== generation.current) {
           return
         }
-        // Without the socket nobody's moves arrive, so their cursors would freeze in place.
-        remoteCursors?.clear()
-        // Dropped unexpectedly (server restart, network): try again shortly.
-        reconnectTimer.current = setTimeout(() => void connect(connectionGeneration), RECONNECT_DELAY_MS)
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+        const params = new URLSearchParams()
+        if (shareToken !== undefined) {
+          params.set('share', shareToken)
+          if (guestName !== undefined && guestName !== '') {
+            params.set('name', guestName)
+          }
+        } else if (token !== null) {
+          params.set('token', token)
+        }
+        const query = params.toString() === '' ? '' : `?${params.toString()}`
+        const ws = new WebSocket(`${protocol}//${window.location.host}/api/ws/diagrams/${diagramId}${query}`)
+
+        function applyRemoteSnapshot(snapshot: TLStoreSnapshot) {
+          if (editor === null) {
+            return
+          }
+          const wasFocused = editor.getIsFocused()
+          applyingRemote.current = true
+          editor.store.mergeRemoteChanges(() => {
+            loadSnapshot(editor.store, snapshot)
+          })
+          applyingRemote.current = false
+          // A peer's edit must not steal keyboard focus from the local user.
+          if (wasFocused && !editor.getIsFocused()) {
+            editor.focus({ focusContainer: false })
+          }
+        }
+
+        ws.onmessage = (event) => {
+          let msg: RealtimeMessage
+          try {
+            msg = JSON.parse(event.data) as RealtimeMessage
+          } catch {
+            return
+          }
+
+          if (msg.type === 'presence') {
+            const users = msg.users ?? []
+            you.current = msg.you ?? null
+            remoteCursors?.retain(new Set(users.map((user) => user.id)))
+            onPresenceChange({ users, you: you.current })
+            return
+          }
+
+          if (msg.type === 'cursor') {
+            const cursor = parseCursorMessage(msg)
+            if (cursor !== null && cursor.id !== you.current) {
+              remoteCursors?.apply(cursor, Date.now())
+            }
+            return
+          }
+
+          if (msg.type === 'update' && msg.client_id !== TAB_CLIENT_ID && msg.snapshot !== undefined) {
+            applyRemoteSnapshot(msg.snapshot)
+            return
+          }
+
+          if (msg.type === 'comments_changed') {
+            onCommentsChanged?.()
+            return
+          }
+
+          if (msg.type === 'diagram_updated' && msg.client_id !== TAB_CLIENT_ID && msg.diagram !== undefined) {
+            const isNewest = onDiagramPushed?.(msg.diagram) ?? true
+            // Editor tabs already sent their canvas over the socket; only saves made outside an
+            // editor (the API, the MCP server) still have to be drawn here.
+            if (isNewest && msg.client_id === null && msg.diagram.canvas_state !== null) {
+              applyRemoteSnapshot(msg.diagram.canvas_state as unknown as TLStoreSnapshot)
+            }
+          }
+        }
+
+        ws.onclose = () => {
+          if (connectionGeneration !== generation.current) {
+            return
+          }
+          // Without the socket nobody's moves arrive, so their cursors would freeze in place.
+          remoteCursors?.clear()
+          // Dropped unexpectedly (server restart, network): try again shortly.
+          reconnectTimer.current = setTimeout(() => void open(), RECONNECT_DELAY_MS)
+        }
+
+        wsRef.current = ws
       }
 
-      wsRef.current = ws
+      return open()
     },
     [diagramId, editor, onPresenceChange, onDiagramPushed, onCommentsChanged, shareToken, guestName, remoteCursors],
   )

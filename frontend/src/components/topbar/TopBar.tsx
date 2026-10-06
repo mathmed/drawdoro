@@ -13,7 +13,7 @@ import {
   ShieldCheck,
   Sparkles,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import type { Folder } from '../../api/types'
@@ -69,10 +69,12 @@ function DiagramTitle() {
   const activeDiagram = useAppStore((state) => state.activeDiagram)
   const renameDiagram = useAppStore((state) => state.renameDiagram)
   const [name, setName] = useState(activeDiagram?.name ?? '')
+  const [shownDiagram, setShownDiagram] = useState({ id: activeDiagram?.id, name: activeDiagram?.name })
 
-  useEffect(() => {
+  if (shownDiagram.id !== activeDiagram?.id || shownDiagram.name !== activeDiagram?.name) {
+    setShownDiagram({ id: activeDiagram?.id, name: activeDiagram?.name })
     setName(activeDiagram?.name ?? '')
-  }, [activeDiagram?.id, activeDiagram?.name])
+  }
 
   function commit(): void {
     const trimmed = name.trim()

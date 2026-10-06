@@ -1,7 +1,7 @@
 import { Box, loadSnapshot, Tldraw, type Editor, type TLShapeId, type TLStoreSnapshot } from 'tldraw'
 import 'tldraw/tldraw.css'
 
-import { textOptions } from '../components/canvas/RichTextToolbar'
+import { textOptions } from '../components/canvas/textOptions'
 import { shapeUtils } from '../components/canvas/shapeUtils'
 
 interface RenderRegion {

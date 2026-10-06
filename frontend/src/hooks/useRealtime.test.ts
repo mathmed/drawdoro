@@ -53,6 +53,25 @@ describe('useRealtime', () => {
     expect(onPresenceChange).not.toHaveBeenCalled()
   })
 
+  it('should reconnect shortly after the connection drops, and not after the canvas closes', async () => {
+    const hook = renderHook(() => useRealtime({ diagramId: 'd1', editor: null, onPresenceChange: vi.fn() }))
+    await vi.waitFor(() => expect(FakeSocket.last).not.toBeNull())
+    const dropped = FakeSocket.last!
+    vi.useFakeTimers()
+
+    dropped.onclose?.()
+    await vi.advanceTimersByTimeAsync(2000)
+    const reconnected = FakeSocket.last!
+    expect(reconnected).not.toBe(dropped)
+    expect(reconnected.url).toContain('/api/ws/diagrams/d1')
+
+    hook.unmount()
+    reconnected.onclose?.()
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(FakeSocket.last).toBe(reconnected)
+    vi.useRealTimers()
+  })
+
   describe('cursors', () => {
     const presence = { type: 'presence', users: [{ id: 'me', name: 'Me' }, { id: 'ana', name: 'Ana' }], you: 'me' }
     const anaCursor = { type: 'cursor', id: 'ana', name: 'Ana', point: { x: 5, y: 6 }, page: 'page:page' }

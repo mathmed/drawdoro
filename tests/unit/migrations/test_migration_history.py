@@ -36,4 +36,12 @@ def test_should_add_gallery_tags_on_top_of_comment_resolution(sut: ScriptDirecto
     revision = sut.get_revision("0008")
     assert revision is not None
     assert revision.down_revision == "0007"
-    assert sut.get_current_head() == "0008"
+
+
+def test_should_make_the_share_token_index_unique_on_top_of_gallery_tags(
+    sut: ScriptDirectory,
+) -> None:
+    revision = sut.get_revision("0009")
+    assert revision is not None
+    assert revision.down_revision == "0008"
+    assert sut.get_current_head() == "0009"

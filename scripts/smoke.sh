@@ -16,7 +16,8 @@
 #                         (CI passes its service container). It must be clean: migrations run on it.
 #   SMOKE_POSTGRES_IMAGE  image of the throwaway container (default: the one in docker-compose.yaml)
 #   SMOKE_TIMEOUT         seconds to wait for each process to become ready (default: 60)
-#   SMOKE_STRICT_SCHEMA   1 makes `alembic check` (models vs migrations drift) fail the smoke
+#   SMOKE_STRICT_SCHEMA   0 turns `alembic check` drift (models vs migrations) into a warning; by default
+#                         (1) it fails the smoke
 #   SMOKE_SKIP_MCP        1 skips the MCP smoke
 set -euo pipefail
 
@@ -194,11 +195,11 @@ migrate() {
     log "alembic check (SQLAlchemy models vs migrations)"
     if DATABASE_URL="$DATABASE_URL" uv run --locked alembic check > "$WORK/check.log" 2>&1; then
         echo "   ok  models match the migrations"
-    elif [[ "${SMOKE_STRICT_SCHEMA:-0}" == "1" ]]; then
+    elif [[ "${SMOKE_STRICT_SCHEMA:-1}" != "0" ]]; then
         cat "$WORK/check.log" >&2
         fail "models and migrations drifted (alembic check)"
     else
-        echo "   WARNING: models and migrations drifted (set SMOKE_STRICT_SCHEMA=1 to fail):"
+        echo "   WARNING: models and migrations drifted (SMOKE_STRICT_SCHEMA=0 keeps the smoke going):"
         grep -E 'Detected|FAILED' "$WORK/check.log" | sed 's/^/     /' || true
     fi
 }

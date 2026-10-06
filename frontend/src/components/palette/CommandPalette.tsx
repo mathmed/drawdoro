@@ -194,10 +194,6 @@ export default function CommandPalette() {
   const filtered = commands.filter((command) => matches(query, command.label))
 
   useEffect(() => {
-    setSelected(0)
-  }, [query])
-
-  useEffect(() => {
     listRef.current?.querySelector('[data-selected="true"]')?.scrollIntoView({ block: 'nearest' })
   }, [selected])
 
@@ -237,7 +233,10 @@ export default function CommandPalette() {
             autoFocus
             placeholder="Search diagrams and actions…"
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              setQuery(event.target.value)
+              setSelected(0)
+            }}
             onKeyDown={handleKeyDown}
           />
         </div>

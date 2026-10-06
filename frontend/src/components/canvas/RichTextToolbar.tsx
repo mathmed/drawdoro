@@ -1,35 +1,14 @@
-import Color from '@tiptap/extension-color'
-import Highlight from '@tiptap/extension-highlight'
 import type {} from '@tiptap/extension-link'
-import TextStyle from '@tiptap/extension-text-style'
 import { ArrowLeft, Ban, Check, Highlighter, Unlink } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import {
   DefaultRichTextToolbar,
   DefaultRichTextToolbarContent,
-  defaultAddFontsFromNode,
-  tipTapDefaultExtensions,
   TldrawUiToolbarButton,
   useEditor,
   useValue,
-  type TLTextOptions,
   type TiptapEditor,
 } from 'tldraw'
-
-// tldraw's highlight is a single yellow mark; multicolor lets each highlight carry its own
-// colour, and TextStyle + Color add a text colour mark. Both render as inline styles, so they
-// survive saving, realtime sync and SVG/PNG export.
-export const textOptions: TLTextOptions = {
-  tipTapConfig: {
-    extensions: [
-      ...tipTapDefaultExtensions.filter((extension) => extension.name !== 'highlight'),
-      Highlight.configure({ multicolor: true }),
-      TextStyle,
-      Color,
-    ],
-  },
-  addFontsFromNode: defaultAddFontsFromNode,
-}
 
 const TEXT_COLORS = ['#1e1e1e', '#868e96', '#e03131', '#f08c00', '#2f9e44', '#1971c2', '#6741d9', '#c2255c']
 const HIGHLIGHT_COLORS = ['#fff3bf', '#ffe8cc', '#ffe3e3', '#f3d9fa', '#d0ebff', '#d3f9d8', '#e9ecef']

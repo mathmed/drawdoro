@@ -1,8 +1,8 @@
 import { House, PanelLeftClose, Plus, Search } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-import type { Project } from '../../api/types'
+import type { Folder, Project } from '../../api/types'
 import { useWorkspacePresence } from '../../hooks/useWorkspacePresence'
 import { useAppStore } from '../../store/useAppStore'
 import { modKey } from '../../utils/format'
@@ -14,6 +14,13 @@ import { ProjectListSkeleton } from './TreeSkeleton'
 import { buildTreeIndex, folderAncestors } from './treeIndex'
 import { useTreeActions } from './useTreeActions'
 import WorkspaceSwitcher from './WorkspaceSwitcher'
+
+// The tree position whose folders were last revealed: a new one expands its ancestors again.
+interface RevealedFor {
+  activeDiagramId: string | null
+  activeFolderId: string | null
+  folders: Folder[]
+}
 
 export default function Sidebar() {
   const navigate = useNavigate()
@@ -62,15 +69,19 @@ export default function Sidebar() {
   const index = useMemo(() => buildTreeIndex(folders, diagrams), [folders, diagrams])
 
   // Reveal the active diagram in the tree by expanding every folder above it.
-  useEffect(() => {
+  const [revealed, setRevealed] = useState<RevealedFor | null>(null)
+  if (
+    revealed === null ||
+    revealed.activeDiagramId !== activeDiagramId ||
+    revealed.activeFolderId !== activeFolderId ||
+    revealed.folders !== folders
+  ) {
+    setRevealed({ activeDiagramId, activeFolderId, folders })
     const ancestors = folderAncestors(folders, activeFolderId)
-    if (ancestors.length === 0) {
-      return
+    if (ancestors.length > 0 && !ancestors.every((id) => expandedFolders.has(id))) {
+      setExpandedFolders(new Set([...expandedFolders, ...ancestors]))
     }
-    setExpandedFolders((current) =>
-      ancestors.every((id) => current.has(id)) ? current : new Set([...current, ...ancestors]),
-    )
-  }, [activeDiagramId, activeFolderId, folders])
+  }
 
   async function handleSelectProject(project: Project): Promise<void> {
     if (activeProject?.id === project.id) {

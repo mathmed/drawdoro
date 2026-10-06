@@ -29,9 +29,11 @@ import CanvasLoadingScreen from '../ui/loading/CanvasLoadingScreen'
 import AppContextMenuItems from './AppContextMenuItems'
 import ConnectHandles from './ConnectHandles'
 import StylePanel, { MenuPanelWithStyles } from './StylePanel'
-import RichTextToolbar, { textOptions } from './RichTextToolbar'
+import RichTextToolbar from './RichTextToolbar'
+import { textOptions } from './textOptions'
 import { shapeUtils } from './shapeUtils'
-import Toolbar, { toolOverrides } from './Toolbar'
+import Toolbar from './Toolbar'
+import { toolOverrides } from './toolOverrides'
 
 interface DrawingCanvasProps {
   diagram: Diagram

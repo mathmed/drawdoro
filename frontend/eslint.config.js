@@ -16,11 +16,6 @@ export default defineConfig([
     },
     rules: {
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
-      // Existing code predates these React Compiler rules; fixing it changes runtime behaviour, so they
-      // are reported without failing the build until that code is revisited.
-      'react-hooks/set-state-in-effect': 'warn',
-      'react-hooks/immutability': 'warn',
-      'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
     },
   },
   {

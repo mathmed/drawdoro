@@ -9,19 +9,20 @@ import { useAppStore } from '../store/useAppStore'
 export default function DiagramPage() {
   const { id } = useParams<{ id: string }>()
   const loadDiagram = useAppStore((state) => state.loadDiagram)
-  const [notFound, setNotFound] = useState(false)
   // Bumped by "Try again"; the store only applies the latest attempt.
   const [attempt, setAttempt] = useState(0)
   const retry = useCallback(() => setAttempt((count) => count + 1), [])
   // The attempt whose load has finished; until then the stage shows the opening loader.
   const [settledAttempt, setSettledAttempt] = useState<string | null>(null)
   const attemptKey = `${id}:${attempt}`
+  // The attempt that found no diagram; a new one (navigation or "Try again") clears it.
+  const [missingAttempt, setMissingAttempt] = useState<string | null>(null)
+  const notFound = missingAttempt === attemptKey
 
   useEffect(() => {
     if (id === undefined) {
       return
     }
-    setNotFound(false)
     // A later navigation supersedes this load; its outcome must not mark the new diagram missing.
     let isCurrent = true
     void loadDiagram(id).then(() => {
@@ -30,7 +31,7 @@ export default function DiagramPage() {
       }
       setSettledAttempt(`${id}:${attempt}`)
       if (useAppStore.getState().activeDiagram?.id !== id) {
-        setNotFound(true)
+        setMissingAttempt(`${id}:${attempt}`)
       }
     })
     return () => {
