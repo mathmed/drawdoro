@@ -3,6 +3,7 @@ from app.infra.database.models.comment import CommentORM
 from app.infra.database.models.custom_shape import CustomShapeORM
 from app.infra.database.models.diagram import DiagramORM
 from app.infra.database.models.diagram_revision import DiagramRevisionORM
+from app.infra.database.models.diagram_thumbnail import DiagramThumbnailORM
 from app.infra.database.models.documentation_page import DocumentationPageORM
 from app.infra.database.models.folder import FolderORM
 from app.infra.database.models.gallery_item import GalleryItemORM
@@ -25,4 +26,5 @@ __all__ = [
     "GalleryItemORM",
     "ApiKeyORM",
     "DiagramRevisionORM",
+    "DiagramThumbnailORM",
 ]
