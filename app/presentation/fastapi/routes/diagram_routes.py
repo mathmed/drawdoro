@@ -1,18 +1,29 @@
 import uuid
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, Query
 
 from app.domain.entities.models.revision_author import RevisionAuthor
+from app.domain.enums.thumbnail_theme import ThumbnailTheme
 from app.domain.usecases.diagram.create_diagram import CreateDiagram, CreateDiagramParams
 from app.domain.usecases.diagram.delete_diagram import DeleteDiagram, DeleteDiagramParams
 from app.domain.usecases.diagram.get_diagram import GetDiagram, GetDiagramParams
+from app.domain.usecases.diagram.list_diagram_thumbnails import (
+    ListDiagramThumbnails,
+    ListDiagramThumbnailsParams,
+)
 from app.domain.usecases.diagram.list_diagrams import ListDiagrams, ListDiagramsParams
+from app.domain.usecases.diagram.save_diagram_thumbnail import (
+    SaveDiagramThumbnail,
+    SaveDiagramThumbnailParams,
+)
 from app.domain.usecases.diagram.update_diagram import UpdateDiagram, UpdateDiagramParams
 from app.presentation.factories.diagram_factories import (
     create_diagram_factory,
     delete_diagram_factory,
     get_diagram_factory,
+    list_diagram_thumbnails_factory,
     list_diagrams_factory,
+    save_diagram_thumbnail_factory,
     update_diagram_factory,
 )
 from app.presentation.fastapi.dependencies.agent_presence import track_agent_activity
@@ -22,6 +33,8 @@ from app.presentation.fastapi.schemas.diagram_schemas import (
     CreateDiagramRequest,
     DiagramResponse,
     DiagramSummaryResponse,
+    DiagramThumbnailResponse,
+    SaveDiagramThumbnailRequest,
     UpdateDiagramRequest,
 )
 
@@ -49,6 +62,20 @@ async def list_diagrams(
 ) -> list[DiagramSummaryResponse]:
     diagrams = await use_case.execute(ListDiagramsParams(project_id=project_id))
     return [DiagramSummaryResponse.model_validate(d) for d in diagrams]
+
+
+# Declared before /{diagram_id} so "thumbnails" is not read as a diagram id. All the project's
+# previews in one response, for the listing cards.
+@router.get("/thumbnails", response_model=list[DiagramThumbnailResponse])
+async def list_diagram_thumbnails(
+    project_id: uuid.UUID,
+    theme: ThumbnailTheme = Query(default=ThumbnailTheme.LIGHT),
+    use_case: ListDiagramThumbnails = Depends(list_diagram_thumbnails_factory),
+) -> list[DiagramThumbnailResponse]:
+    thumbnails = await use_case.execute(
+        ListDiagramThumbnailsParams(project_id=project_id, theme=theme)
+    )
+    return [DiagramThumbnailResponse.model_validate(t) for t in thumbnails]
 
 
 @router.post("", response_model=DiagramResponse, status_code=201)
@@ -130,3 +157,20 @@ async def get_diagram_by_id(
 ) -> DiagramResponse:
     diagram = await use_case.execute(GetDiagramParams(diagram_id=diagram_id))
     return DiagramResponse.model_validate(diagram)
+
+
+# A write, so workspace access requires the editor role: viewers never store previews.
+@diagram_by_id_router.put("/{diagram_id}/thumbnail", status_code=204)
+async def save_diagram_thumbnail(
+    diagram_id: uuid.UUID,
+    body: SaveDiagramThumbnailRequest,
+    use_case: SaveDiagramThumbnail = Depends(save_diagram_thumbnail_factory),
+) -> None:
+    await use_case.execute(
+        SaveDiagramThumbnailParams(
+            diagram_id=diagram_id,
+            version=body.version,
+            light=body.light_base64,
+            dark=body.dark_base64,
+        )
+    )

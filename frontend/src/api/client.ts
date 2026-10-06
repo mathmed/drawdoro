@@ -10,6 +10,13 @@ import { toast } from '../store/useToastStore'
 // keeping the browser same-origin. Override with VITE_API_URL when needed.
 const baseURL = import.meta.env.VITE_API_URL ?? '/api'
 
+declare module 'axios' {
+  interface AxiosRequestConfig {
+    // Background requests the user did not ask for (e.g. diagram previews) fail without a toast.
+    silent?: boolean
+  }
+}
+
 const apiClient = axios.create({
   baseURL,
   headers: {
@@ -50,7 +57,8 @@ apiClient.interceptors.response.use(undefined, (error: unknown) => {
   // A 404 on a read is an expected "not found yet" answer handled by the caller.
   const isExpectedMiss =
     axios.isAxiosError(error) && error.config?.method === 'get' && error.response?.status === 404
-  if (!isExpectedMiss) {
+  const isSilent = axios.isAxiosError(error) && error.config?.silent === true
+  if (!isExpectedMiss && !isSilent) {
     toast(describeError(error), 'error')
   }
   return Promise.reject(error)

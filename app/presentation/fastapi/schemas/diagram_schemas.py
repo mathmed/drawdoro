@@ -2,9 +2,11 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Base64Bytes, BaseModel, ConfigDict, Field
 
 from app.domain.constants.revisions import REVISION_SUMMARY_MAX_LENGTH
+from app.domain.enums.image_mime_type import ImageMimeType
+from app.presentation.fastapi.schemas.gallery_schemas import EncodedBytes
 
 
 class CreateDiagramRequest(BaseModel):
@@ -44,6 +46,23 @@ class DiagramSummaryResponse(BaseModel):
     name: str
     created_at: datetime
     updated_at: datetime
+
+
+# Previews rendered by an editor; a theme sent as null has nothing to show (an empty diagram).
+class SaveDiagramThumbnailRequest(BaseModel):
+    # The diagram's updated_at the images were rendered from, as the API returned it.
+    version: datetime
+    light_base64: Base64Bytes | None = None
+    dark_base64: Base64Bytes | None = None
+
+
+class DiagramThumbnailResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    diagram_id: uuid.UUID
+    version: datetime
+    mime_type: ImageMimeType
+    image_base64: EncodedBytes = Field(validation_alias="image")
 
 
 class ShareDiagramResponse(BaseModel):

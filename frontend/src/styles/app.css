@@ -477,6 +477,17 @@ button.breadcrumb:hover {
   color: var(--text-subtle);
 }
 
+/* The preview is transparent, so the dotted canvas background shows through in either theme. */
+.diagram-card-preview-image img {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: 10px 14px;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
+
 .diagram-card-body {
   display: flex;
   flex-direction: column;

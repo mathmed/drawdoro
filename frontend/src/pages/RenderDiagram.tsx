@@ -3,6 +3,7 @@ import 'tldraw/tldraw.css'
 
 import { textOptions } from '../components/canvas/textOptions'
 import { shapeUtils } from '../components/canvas/shapeUtils'
+import { blobToBase64 } from '../utils/blob'
 
 interface RenderRegion {
   x: number
@@ -22,15 +23,6 @@ declare global {
     // Called by the MCP server's headless browser (render_diagram); resolves to a base64 PNG.
     renderDiagram?: (snapshot: TLStoreSnapshot, request: RenderRequest) => Promise<string>
   }
-}
-
-function blobToBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '')
-    reader.onerror = () => reject(reader.error ?? new Error('Could not read the rendered image'))
-    reader.readAsDataURL(blob)
-  })
 }
 
 function exportBounds(editor: Editor, ids: TLShapeId[], region: RenderRegion | null): Box | null {

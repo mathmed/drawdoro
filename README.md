@@ -263,6 +263,8 @@ scripts/                  Validation tooling: boot smoke (API and MCP), mutation
 | GET | /projects/{id}/tree | Folders and diagram summaries of a project in one response (the sidebar tree) |
 | GET/POST | /projects/{id}/diagrams | List diagram summaries (no canvas or metadata) / create a diagram |
 | GET | /diagrams/{id} | Get a diagram by its id alone, as in the editor link `/diagrams/<id>` (used by the MCP server's `open_link`) |
+| GET | /projects/{id}/diagrams/thumbnails | The previews of the project's diagrams in one theme (`?theme=light`, the default, or `dark`), in one query, for the listing cards: `diagram_id`, `version`, `mime_type` and `image_base64`. Diagrams without a preview are left out. See [Diagram previews](#diagram-previews) |
+| PUT | /diagrams/{id}/thumbnail | Store the light and dark previews of a diagram (editor): `version` (the diagram's `updated_at` they were rendered from), `light_base64` and `dark_base64` (PNG or WebP, up to 64 KiB each; `null` when there is nothing to show). An older version never replaces a newer one. `204` |
 | GET/PUT/DELETE | /projects/{id}/diagrams/{id} | Get / update / delete diagram. Every saved update is pushed to open editors as `diagram_updated`; editor tabs send `X-Client-Id` so they skip the echo of their own saves |
 | GET/PUT | /diagrams/{id}/documentation | Get / update documentation page |
 | GET/POST | /diagrams/{id}/comments | List comments (`?status=open`, `resolved` or `all`, the default) / create one (editor). Plain text up to 5000 characters; `element_id` is optional (omitted for a comment on the whole diagram) |
@@ -331,6 +333,31 @@ since the channel only flows from server to client, a client that keeps sending 
 second) is disconnected. With authentication disabled the socket is open to anyone, like the rest of the API, and
 rooms of diagrams that do not exist (only reachable that way) are never shown.
 The client reconnects 2s after a drop (30s after a 1008) and shows nobody while disconnected.
+
+## Diagram previews
+
+The diagram cards of a project's overview show a preview of each diagram instead of a generic icon. Previews are
+rendered by the editor in the browser, never by the server, and stored apart from the diagram:
+
+- **Rendering.** While someone who can edit has a diagram open, the editor renders its current page with tldraw's
+  `toImage` after each saved version (theirs, another editor's or an agent's) and once on open when the stored
+  preview is missing or older than the diagram. It waits until 2s have passed without a new version or a local edit,
+  so a burst of changes renders once and never mid-gesture. Each render makes a light and a dark
+  image with a transparent background, so the card's own background shows in either theme. Images are WebP (PNG in
+  browsers that can't encode it), scaled down to fit twice the card size (big diagrams shrink, small ones are never
+  enlarged); a render over 64 KiB is retried at half the scale once and otherwise left out. An empty page clears the
+  preview. Rendering and uploading run in the background: a failure shows no toast and the card keeps what it had.
+- **Storage.** `PUT /diagrams/{id}/thumbnail` writes both themes to `diagram_thumbnails` (one row per diagram and
+  theme) in one atomic upsert that only replaces an older `version`, so late, retried or concurrent uploads never
+  bring back an older image. The table is separate from `diagrams`, so storing a preview never changes the diagram's
+  `updated_at` ("Edited ..." on the card) and opening or listing diagrams never reads the images.
+- **Listing.** The overview fetches `GET /projects/{id}/diagrams/thumbnails?theme=` once per visit and theme, next
+  to the project tree (which stays lean for the sidebar and the MCP server). Cards show an empty preview area while it
+  loads and the placeholder icon for diagrams without a preview (empty, or never opened by an editor since previews
+  exist: the first editor who opens one renders it).
+- **Permissions.** Reading previews needs workspace membership, like the listing; storing one needs the editor role,
+  and the editor only renders for owners and editors (nobody while the role is still loading). Viewers, share-link
+  guests and the public `/share/{token}` payload are unchanged: they never write previews nor receive them.
 
 ## Diagram history and personal API keys
 

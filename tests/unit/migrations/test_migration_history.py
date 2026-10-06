@@ -44,4 +44,12 @@ def test_should_make_the_share_token_index_unique_on_top_of_gallery_tags(
     revision = sut.get_revision("0009")
     assert revision is not None
     assert revision.down_revision == "0008"
-    assert sut.get_current_head() == "0009"
+
+
+def test_should_add_diagram_thumbnails_on_top_of_the_unique_share_token_index(
+    sut: ScriptDirectory,
+) -> None:
+    revision = sut.get_revision("0010")
+    assert revision is not None
+    assert revision.down_revision == "0009"
+    assert sut.get_current_head() == "0010"
