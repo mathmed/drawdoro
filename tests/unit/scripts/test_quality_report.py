@@ -133,7 +133,7 @@ SMOKE_FAILED = """
    applied  -> 0001, initial schema
 
 >> alembic check (SQLAlchemy models vs migrations)
-   WARNING: models and migrations drifted (set SMOKE_STRICT_SCHEMA=1 to fail):
+   WARNING: models and migrations drifted (SMOKE_STRICT_SCHEMA=0 keeps the smoke going):
 
 >> Mode auth-enabled: ENV=production, AUTH_ENABLED=true
    ok  API (auth-enabled) ready in 2.2s
@@ -375,6 +375,19 @@ class TestSmokeAnalyzer:
 
         assert finding.status == Status.WARNING
         assert finding.summary.endswith("⚠️ models and migrations drifted")
+
+    def test_should_fail_the_migrations_step_when_drift_is_strict(self) -> None:
+        output = (
+            ">> alembic upgrade head (clean database)\n   applied  -> 0001, initial schema\n\n"
+            ">> alembic check (SQLAlchemy models vs migrations)\n"
+            "!! SMOKE FAILED: models and migrations drifted (alembic check)\n"
+        )
+
+        finding = analyze_smoke(fragment(Analysis.SMOKE, output, 1))
+
+        assert finding.status == Status.FAILED
+        assert "models and migrations drifted (alembic check)" in finding.summary
+        assert "| `migrations` | ❌ |" in finding.details
 
     def test_should_report_an_api_that_did_not_start(self) -> None:
         output = (

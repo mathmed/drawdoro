@@ -35,7 +35,7 @@ The frontend needs Node.js 22 or newer. From `frontend/`:
 
 | Command | Description |
 |---|---|
-| `npm run lint` | ESLint (`eslint.config.js`): TypeScript, React Hooks and React Refresh rules |
+| `npm run lint` | ESLint (`eslint.config.js`): TypeScript, React Hooks and React Refresh rules; fails on any warning (`--max-warnings 0`) |
 | `npm run typecheck` | `tsc --noEmit` over `src/`, tests included |
 | `npm test` | Vitest + React Testing Library on jsdom, once |
 | `npm run test:watch` | Vitest in watch mode |
@@ -377,8 +377,8 @@ volume, so it is always empty), migrates it up to the previous revision, seeds a
 | auth-disabled | `ENV=development`, `AUTH_ENABLED=false` | the same probes and CRUD walk; gallery tags, search and an insertion next to a shape; then the MCP smoke on the gallery tools |
 | database-down | database URL pointing to a closed port | `/health` stays `200`, `/ready` answers `503` |
 
-It also runs `alembic check` (models versus migrations) and prints a warning on drift; set
-`SMOKE_STRICT_SCHEMA=1` to make drift fail. On any failure it prints the API and Postgres logs, and it
+It also runs `alembic check` (models versus migrations) and fails on drift; set `SMOKE_STRICT_SCHEMA=0`
+to only print a warning while working on a migration. On any failure it prints the API and Postgres logs, and it
 always removes the container and stops the processes.
 
 `scripts/smoke_mcp.sh` (`make smoke-mcp`) starts `mcp/server.py` in streamable-http mode and checks
@@ -392,7 +392,7 @@ gallery items and reads the diagram and its history back.
 | `SMOKE_DATABASE_URL` | - | Use this **empty** database instead of starting a container (no docker needed) |
 | `SMOKE_POSTGRES_IMAGE` | image of `db` in `docker-compose.yaml` | Postgres image of the throwaway container |
 | `SMOKE_TIMEOUT` | `60` | Seconds to wait for Postgres, the API and the MCP server |
-| `SMOKE_STRICT_SCHEMA` | `0` | `1` fails the smoke when `alembic check` finds drift |
+| `SMOKE_STRICT_SCHEMA` | `1` | `0` turns `alembic check` drift into a warning instead of failing the smoke |
 | `SMOKE_SKIP_MCP` | `0` | `1` skips the MCP smoke inside `make smoke` |
 
 ### Static analysis thresholds (`make hooks`, CI jobs `lint` and `quality`)
@@ -483,7 +483,8 @@ Every PR gets **one** comment titled *Quality Report* (found and updated through
 - each section below has the summary and, in a collapsed `<details>`, the evidence: least covered files,
   broken contracts with the violating import, smoke scenarios with their boot time, surviving mutants with
   their diffs, lint problems, failures;
-- ✅ passed, ⚠️ warning (ESLint warnings, models/migrations drift), ❌ failed,
+- ✅ passed, ⚠️ warning (ESLint warnings or models/migrations drift reported without failing, as with
+  `SMOKE_STRICT_SCHEMA=0`; in CI both fail the job), ❌ failed,
   ⏭️ not run (job cancelled or skipped, or nothing to mutate). A job that failed before producing its result
   shows as ❌ with the job result, so the report never breaks.
 
