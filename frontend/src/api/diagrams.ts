@@ -1,6 +1,13 @@
 import apiClient from './client'
 import { TAB_CLIENT_ID } from './tabClientId'
-import type { CanvasState, Diagram, DiagramSummary, SemanticMetadata } from './types'
+import type {
+  CanvasState,
+  Diagram,
+  DiagramSummary,
+  DiagramThumbnail,
+  SemanticMetadata,
+  ThumbnailTheme,
+} from './types'
 
 export interface UpdateDiagramInput {
   name: string
@@ -45,6 +52,27 @@ export async function updateDiagram(
     { headers: { 'X-Client-Id': TAB_CLIENT_ID } },
   )
   return data
+}
+
+// Every preview of the project in one request; diagrams without one are left out.
+export async function listDiagramThumbnails(projectId: string, theme: ThumbnailTheme): Promise<DiagramThumbnail[]> {
+  const { data } = await apiClient.get<DiagramThumbnail[]>(`/projects/${projectId}/diagrams/thumbnails`, {
+    params: { theme },
+    silent: true,
+  })
+  return data
+}
+
+// Base64 images per theme; null means there is nothing to show (an empty diagram).
+export interface SaveDiagramThumbnailInput {
+  version: string
+  light_base64: string | null
+  dark_base64: string | null
+}
+
+// Needs the editor role. Runs in the background, so a failure never shows a toast.
+export async function saveDiagramThumbnail(diagramId: string, input: SaveDiagramThumbnailInput): Promise<void> {
+  await apiClient.put(`/diagrams/${diagramId}/thumbnail`, input, { silent: true })
 }
 
 export async function deleteDiagram(projectId: string, diagramId: string): Promise<void> {

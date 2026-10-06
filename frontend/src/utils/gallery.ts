@@ -4,21 +4,13 @@ import type { GalleryItem } from '../api/types'
 import { promptDialog } from '../store/useDialogStore'
 import { useGalleryStore } from '../store/useGalleryStore'
 import { toast } from '../store/useToastStore'
+import { blobToBase64 } from './blob'
 
 // dataTransfer type used when dragging a gallery tile onto the canvas.
 export const GALLERY_DRAG_TYPE = 'application/x-gallery-item'
 export const GALLERY_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
 
 const THUMBNAIL_SIZE = 256
-
-function blobToBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result).split(',', 2)[1] ?? '')
-    reader.onerror = () => reject(reader.error ?? new Error('Could not read the file'))
-    reader.readAsDataURL(blob)
-  })
-}
 
 function base64ToBlob(base64: string, type: string): Blob {
   const binary = atob(base64)

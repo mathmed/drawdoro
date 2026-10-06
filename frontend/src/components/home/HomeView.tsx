@@ -11,18 +11,22 @@ import {
   Users,
   Workflow,
 } from 'lucide-react'
+import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import type { DiagramSummary } from '../../api/types'
 import { branding } from '../../config/branding'
 import { useAppStore } from '../../store/useAppStore'
 import { confirmDialog, promptDialog } from '../../store/useDialogStore'
+import { useThemeStore } from '../../store/useThemeStore'
+import { useThumbnailStore } from '../../store/useThumbnailStore'
 import { slugify, timeAgo } from '../../utils/format'
 import EmptyState from '../ui/EmptyState'
 import LoadingGate from '../ui/loading/LoadingGate'
 import { Skeleton } from '../ui/loading/Skeleton'
 import Logo from '../ui/Logo'
 import Menu from '../ui/Menu'
+import DiagramCardPreview from './DiagramCardPreview'
 import HomeSkeleton, { DiagramGridSkeleton } from './HomeSkeleton'
 
 const FEATURES = [
@@ -145,9 +149,7 @@ function DiagramCard({ diagram, folderName }: { diagram: DiagramSummary; folderN
         }
       }}
     >
-      <div className="diagram-card-preview">
-        <Workflow size={30} strokeWidth={1.5} />
-      </div>
+      <DiagramCardPreview projectId={diagram.project_id} diagramId={diagram.id} />
       <div className="diagram-card-body">
         <span className="diagram-card-name">{diagram.name}</span>
         <span className="diagram-card-meta">
@@ -230,6 +232,16 @@ function ProjectOverview() {
   const openNewDiagram = useAppStore((state) => state.openNewDiagram)
   const createFolder = useAppStore((state) => state.createFolder)
   const canEdit = useAppStore((state) => state.myRole !== 'viewer')
+  const theme = useThemeStore((state) => state.resolved)
+  const loadThumbnails = useThumbnailStore((state) => state.load)
+  const activeProjectId = activeProject?.id
+
+  // Every card's preview in one request, refreshed on each visit and when the theme changes.
+  useEffect(() => {
+    if (activeProjectId !== undefined) {
+      void loadThumbnails(activeProjectId, theme)
+    }
+  }, [activeProjectId, theme, loadThumbnails])
 
   if (activeProject === null) {
     return null

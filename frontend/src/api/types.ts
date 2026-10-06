@@ -42,6 +42,17 @@ export interface Diagram extends DiagramSummary {
   semantic_metadata?: SemanticMetadata | null
 }
 
+export type ThumbnailTheme = 'light' | 'dark'
+
+// A diagram preview for the listing cards, rendered by an editor in one theme.
+export interface DiagramThumbnail {
+  diagram_id: string
+  // The diagram's updated_at the image was rendered from.
+  version: string
+  mime_type: string
+  image_base64: string
+}
+
 export interface ProjectTree {
   folders: Folder[]
   diagrams: DiagramSummary[]

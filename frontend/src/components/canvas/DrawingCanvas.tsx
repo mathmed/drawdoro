@@ -14,6 +14,7 @@ import 'tldraw/tldraw.css'
 
 import type { CanvasState, Diagram } from '../../api/types'
 import { useCursorBroadcast } from '../../hooks/useCursorBroadcast'
+import { useDiagramThumbnail } from '../../hooks/useDiagramThumbnail'
 import { useRealtime } from '../../hooks/useRealtime'
 import { useSelectionShortcuts } from '../../hooks/useSelectionShortcuts'
 import { useAppStore } from '../../store/useAppStore'
@@ -68,6 +69,7 @@ export default function DrawingCanvas({ diagram }: DrawingCanvasProps) {
   const theme = useThemeStore((state) => state.resolved)
 
   useSelectionShortcuts(editor)
+  useDiagramThumbnail(editor)
 
   useEffect(() => {
     editor?.user.updateUserPreferences({ colorScheme: theme })
