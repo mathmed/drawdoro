@@ -172,14 +172,42 @@ PY
 # The gallery migration (0008) runs over an item saved before tags existed: the item must keep
 # working, without tags and with its size filled in, and the migration must be reversible.
 LEGACY_ITEM_ID="00000000-0000-4000-8000-000000000008"
+# Migration 0011 turns the naive deleted_at columns into timestamptz: a workspace soft-deleted before it
+# must keep the same instant, read as UTC, also after its downgrade and upgrade. The smoke database runs
+# outside UTC, like a server in another time zone, so a conversion in the session time zone would fail.
+SMOKE_TIMEZONE="America/Sao_Paulo"
+LEGACY_DELETED_WORKSPACE_ID="00000000-0000-4000-8000-000000000011"
+LEGACY_DELETED_AT="2026-01-02 03:04:05"
+
+legacy_deleted_at_kept() {
+    local deleted_at
+    deleted_at="$(sql "SELECT to_char(deleted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')
+                       FROM workspaces WHERE id = '$LEGACY_DELETED_WORKSPACE_ID'")"
+    [[ "$deleted_at" == "$LEGACY_DELETED_AT" ]] \
+        || fail "the soft-deleted workspace changed its deleted_at: '$deleted_at'"
+}
 
 migrate() {
-    log "alembic upgrade 0007 (clean database), then a gallery item saved before tags existed"
+    log "Database time zone set to $SMOKE_TIMEZONE (not UTC)"
+    sql "DO \$\$ BEGIN
+           EXECUTE format('ALTER DATABASE %I SET timezone = %L', current_database(), '$SMOKE_TIMEZONE');
+         END \$\$" > /dev/null \
+        || fail "could not set the database time zone"
+    local timezone
+    timezone="$(sql "SHOW timezone")"
+    [[ "$timezone" == "$SMOKE_TIMEZONE" ]] || fail "the database time zone is '$timezone', not $SMOKE_TIMEZONE"
+    echo "   ok  new sessions run in $timezone"
+
+    log "alembic upgrade 0007 (clean database), then a gallery item saved before tags existed and a soft-deleted workspace"
     alembic_run upgrade 0007
     sql "INSERT INTO gallery_items (id, owner_id, name, kind, content)
          VALUES ('$LEGACY_ITEM_ID', NULL, 'Legacy item', 'shapes',
                  '{\"shapes\": [{\"id\": \"shape:legacy\"}]}') RETURNING id" > /dev/null \
         || fail "could not seed the legacy gallery item"
+    sql "INSERT INTO workspaces (id, name, slug, deleted_at)
+         VALUES ('$LEGACY_DELETED_WORKSPACE_ID', 'Legacy deleted', 'smoke-legacy-deleted',
+                 '$LEGACY_DELETED_AT') RETURNING id" > /dev/null \
+        || fail "could not seed the soft-deleted workspace"
 
     log "alembic upgrade head (over existing data)"
     alembic_run upgrade head
@@ -187,10 +215,14 @@ migrate() {
     legacy="$(sql "SELECT CAST(tags AS text) || ' ' || size_bytes FROM gallery_items WHERE id = '$LEGACY_ITEM_ID'")"
     [[ "$legacy" =~ ^\[\]\ [0-9]+$ ]] || fail "the legacy gallery item was not migrated: '$legacy'"
     echo "   ok  existing gallery item kept, without tags, size filled in"
+    legacy_deleted_at_kept
+    echo "   ok  existing soft-deleted workspace kept its deleted_at as UTC"
 
     log "alembic downgrade -1 and upgrade head again (the newest migration is reversible)"
     alembic_run downgrade -1
     alembic_run upgrade head
+    legacy_deleted_at_kept
+    echo "   ok  soft-deleted workspace kept its deleted_at through the round trip"
 
     log "alembic check (SQLAlchemy models vs migrations)"
     if DATABASE_URL="$DATABASE_URL" uv run --locked alembic check > "$WORK/check.log" 2>&1; then
@@ -263,6 +295,44 @@ check_crud() {
     request GET "$API_URL/projects/$project_id/tree" 200 "" "$@"
     request GET "$API_URL/projects/$project_id/diagrams" 200 "" "$@"
     request GET "$API_URL/workspaces" 200 "" "$@"
+    check_soft_delete "$slug" "$@"
+}
+
+# deleted_at_is_recent TABLE ID: the row was soft-deleted with the current UTC instant.
+deleted_at_is_recent() {
+    local found
+    found="$(sql "SELECT count(*) FROM $1 WHERE id = '$2'
+                  AND deleted_at BETWEEN now() - interval '5 minutes' AND now() + interval '5 minutes'")"
+    [[ "$found" == "1" ]] || fail "$1 $2 was not soft-deleted at the current UTC instant"
+}
+
+# Soft-deletes a diagram, a folder, a project and a workspace on a throwaway tree: each answers 204,
+# disappears from the API and keeps its row with deleted_at set to now.
+check_soft_delete() {
+    local slug="$1"
+    shift
+    request POST "$API_URL/workspaces" 201 "{\"name\": \"Smoke delete $slug\", \"slug\": \"smoke-delete-$slug\"}" "$@"
+    local workspace_id project_id folder_id diagram_id
+    workspace_id="$(json_field "$BODY" id)"
+    request POST "$API_URL/workspaces/$workspace_id/projects" 201 '{"name": "Smoke delete"}' "$@"
+    project_id="$(json_field "$BODY" id)"
+    request POST "$API_URL/projects/$project_id/folders" 201 '{"name": "Smoke delete"}' "$@"
+    folder_id="$(json_field "$BODY" id)"
+    request POST "$API_URL/projects/$project_id/diagrams" 201 '{"name": "Smoke delete"}' "$@"
+    diagram_id="$(json_field "$BODY" id)"
+
+    request DELETE "$API_URL/projects/$project_id/diagrams/$diagram_id" 204 "" "$@"
+    request GET "$API_URL/projects/$project_id/diagrams/$diagram_id" 404 "" "$@"
+    deleted_at_is_recent diagrams "$diagram_id"
+    request DELETE "$API_URL/projects/$project_id/folders/$folder_id" 204 "" "$@"
+    request GET "$API_URL/projects/$project_id/folders/$folder_id" 404 "" "$@"
+    deleted_at_is_recent folders "$folder_id"
+    request DELETE "$API_URL/workspaces/$workspace_id/projects/$project_id" 204 "" "$@"
+    request GET "$API_URL/workspaces/$workspace_id/projects/$project_id" 404 "" "$@"
+    deleted_at_is_recent projects "$project_id"
+    request DELETE "$API_URL/workspaces/$workspace_id" 204 "" "$@"
+    request GET "$API_URL/workspaces/$workspace_id" 404 "" "$@"
+    deleted_at_is_recent workspaces "$workspace_id"
 }
 
 # Writes the payloads of the gallery checks to $WORK: a canvas as the editor saves it (tldraw 3.15

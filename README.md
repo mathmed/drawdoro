@@ -393,14 +393,15 @@ in a single [Quality Report](#quality-report) comment on the PR.
 ### Boot smoke (`make smoke`, CI job `smoke`)
 
 `scripts/smoke.sh` starts a throwaway Postgres container (same image as `docker-compose.yaml`, no
-volume, so it is always empty), migrates it up to the previous revision, seeds a gallery item, runs
-`alembic upgrade head` over it (then downgrades and upgrades the newest migration again) and starts the real API with
+volume, so it is always empty), sets its time zone to `America/Sao_Paulo` (not UTC, like a server in another time
+zone), migrates it up to revision `0007`, seeds a gallery item and a soft-deleted workspace, runs
+`alembic upgrade head` over it (then downgrades and upgrades the newest migration again; the soft-deleted workspace keeps its `deleted_at` as UTC throughout) and starts the real API with
 `.env.example` plus these modes:
 
 | Mode | Settings | Checks |
 |---|---|---|
 | production-guard | `ENV=production`, `AUTH_ENABLED=false` | the API refuses to start |
-| auth-enabled | `ENV=production`, `AUTH_ENABLED=true`, a random `SERVICE_API_KEY` | `/health`, `/ready`, `/openapi.json`; `401` without credentials; workspace → project → diagram → revision with the service key; the service key gets `403` on the gallery; then the MCP smoke against this API |
+| auth-enabled | `ENV=production`, `AUTH_ENABLED=true`, a random `SERVICE_API_KEY` | `/health`, `/ready`, `/openapi.json`; `401` without credentials; workspace → project → diagram → revision with the service key, then soft-deletes a diagram, folder, project and workspace (`204`, gone from the API, `deleted_at` set to now in UTC); the service key gets `403` on the gallery; then the MCP smoke against this API |
 | auth-disabled | `ENV=development`, `AUTH_ENABLED=false` | the same probes and CRUD walk; gallery tags, search and an insertion next to a shape; then the MCP smoke on the gallery tools |
 | database-down | database URL pointing to a closed port | `/health` stays `200`, `/ready` answers `503` |
 
