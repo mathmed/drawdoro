@@ -167,16 +167,16 @@
 | app/infra/database/models/workspace\_member.py                           |       12 |        0 |        0 |        0 |    100% |           |
 | app/infra/database/repositories/api\_key\_repository.py                  |       35 |       18 |        0 |        0 |     49% |17-28, 31-36, 39-43, 46-54, 57-60, 63-66, 70 |
 | app/infra/database/repositories/comment\_repository.py                   |       62 |        0 |       12 |        0 |    100% |           |
-| app/infra/database/repositories/diagram\_repository.py                   |       66 |       33 |        2 |        0 |     51% |20-31, 34-41, 68-75, 78-88, 108-114, 117-130, 133-141, 145 |
+| app/infra/database/repositories/diagram\_repository.py                   |       66 |       29 |        2 |        0 |     57% |20-31, 34-41, 68-75, 78-88, 108-114, 117-130, 145 |
 | app/infra/database/repositories/diagram\_revision\_repository.py         |       62 |       39 |        8 |        0 |     33% |23-44, 47-57, 60-67, 70-77, 80-90, 95-115, 118-121, 125-134 |
 | app/infra/database/repositories/diagram\_thumbnail\_repository.py        |       27 |        0 |        4 |        0 |    100% |           |
 | app/infra/database/repositories/documentation\_page\_repository.py       |       25 |        0 |        2 |        0 |    100% |           |
-| app/infra/database/repositories/folder\_repository.py                    |       38 |       22 |        0 |        0 |     42% |17-26, 29-36, 39-45, 48-59, 62-70, 74 |
+| app/infra/database/repositories/folder\_repository.py                    |       38 |       18 |        0 |        0 |     53% |17-26, 29-36, 39-45, 48-59, 74 |
 | app/infra/database/repositories/gallery\_item\_repository.py             |       46 |        0 |        0 |        0 |    100% |           |
-| app/infra/database/repositories/project\_repository.py                   |       38 |       19 |        0 |        0 |     50% |25-26, 29-36, 39-45, 48-59, 62-70, 74 |
+| app/infra/database/repositories/project\_repository.py                   |       38 |       15 |        0 |        0 |     61% |25-26, 29-36, 39-45, 48-59, 74 |
 | app/infra/database/repositories/user\_repository.py                      |       33 |        0 |        0 |        0 |    100% |           |
 | app/infra/database/repositories/workspace\_member\_repository.py         |       40 |       21 |        0 |        0 |     48% |19-26, 29-35, 43-52, 55-62, 65-68, 71-77, 81 |
-| app/infra/database/repositories/workspace\_repository.py                 |       46 |       27 |        0 |        0 |     41% |18-26, 29-36, 39-42, 45-50, 53-59, 62-73, 76-84, 88 |
+| app/infra/database/repositories/workspace\_repository.py                 |       46 |       23 |        0 |        0 |     50% |18-26, 29-36, 39-42, 45-50, 53-59, 62-73, 88 |
 | app/infra/database/session.py                                            |        9 |        0 |        0 |        0 |    100% |           |
 | app/infra/realtime/connection\_manager.py                                |       99 |        0 |       24 |        0 |    100% |           |
 | app/infra/realtime/cursor\_message.py                                    |        5 |        0 |        0 |        0 |    100% |           |
@@ -239,7 +239,7 @@
 | app/presentation/fastapi/schemas/user\_schemas.py                        |        5 |        0 |        0 |        0 |    100% |           |
 | app/presentation/fastapi/schemas/workspace\_member\_schemas.py           |        8 |        0 |        0 |        0 |    100% |           |
 | app/presentation/fastapi/schemas/workspace\_schemas.py                   |        7 |        0 |        0 |        0 |    100% |           |
-| **TOTAL**                                                                | **4500** |  **184** |  **538** |    **1** | **96%** |           |
+| **TOTAL**                                                                | **4500** |  **168** |  **538** |    **1** | **96%** |           |
 
 
 ## Setup coverage badge
