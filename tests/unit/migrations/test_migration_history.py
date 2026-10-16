@@ -52,4 +52,12 @@ def test_should_add_diagram_thumbnails_on_top_of_the_unique_share_token_index(
     revision = sut.get_revision("0010")
     assert revision is not None
     assert revision.down_revision == "0009"
-    assert sut.get_current_head() == "0010"
+
+
+def test_should_make_soft_delete_timestamps_timezone_aware_on_top_of_diagram_thumbnails(
+    sut: ScriptDirectory,
+) -> None:
+    revision = sut.get_revision("0011")
+    assert revision is not None
+    assert revision.down_revision == "0010"
+    assert sut.get_current_head() == "0011"
