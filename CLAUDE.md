@@ -17,6 +17,8 @@ Guidance for AI coding agents in this repository. `AGENTS.md` is a symlink.
 frontend/          React+Vite+TypeScript frontend
 mcp/               Python MCP server
 docker/            Dockerfile and docker-compose
+docs/              Architecture, configuration, API, MCP and development guides
+media/             Repository artwork (README logo)
 ```
 
 ## Commands
@@ -52,7 +54,7 @@ tests/integration/ HTTP tests with TestClient
 - Use cases extend `Usecase[Params, Response]`, one public method `execute`.
 - Business failures raise errors from `app/domain/errors/`. Never `HTTPException` outside presentation.
 - New routes in `presentation/fastapi/routes/` registered in `routes/__init__.py`.
-- New env vars in `app/common/settings.py`, `.env.example` and README table.
+- New env vars in `app/common/settings.py`, `.env.example` and the table in `docs/CONFIGURATION.md`.
 - Every change comes with tests.
 
 ## Domain entities
@@ -77,7 +79,7 @@ tests/integration/ HTTP tests with TestClient
 2. New environment variables have a default or an entry in `.env.example`.
 3. `make hooks`, `make test`, `make lint-imports` and `make smoke` pass. A PR with failing checks is not a PR.
 4. Existing routes are not removed or renamed unless the task asks for it.
-5. The README is updated if the change affects setup, commands, routes, env vars or architecture.
+5. The README or the matching file in `docs/` is updated if the change affects setup, commands, routes, env vars or architecture.
 
 ## Validation of agent-generated code
 
@@ -96,7 +98,7 @@ tests/integration/ HTTP tests with TestClient
   `scripts/quality_report.py run <analysis> -- <command>` (keeps the exit code: the job stays the gate) and
   uploads `quality-fragment-<job>`; the `quality-report` job builds the single PR comment. A new analysis
   needs an `Analysis` value, an analyzer, a `Check` in `SECTIONS`, the wrapper and artifact in its job, the
-  job in the `needs` of `quality-report`, and tests (README, "Quality Report").
+  job in the `needs` of `quality-report`, and tests (`docs/DEVELOPMENT.md`, "Quality Report").
 
 ## Workflow
 

@@ -19,12 +19,12 @@ findings. Never edit files, commit or push.
      they belong and not `HTTPException` outside `presentation`.
    - **Tests**: new behaviour is covered by unit tests and, for routes, integration tests; external
      dependencies are mocked.
-   - **Configuration**: new env vars are in `app/common/settings.py`, `.env.example` and the README.
+   - **Configuration**: new env vars are in `app/common/settings.py`, `.env.example` and `docs/CONFIGURATION.md`.
    - **Routes**: new routes are registered in `routes/__init__.py`; existing routes were not removed or
      renamed without reason.
    - **Security**: secrets in code, missing input validation, unsafe CORS or logging of sensitive data.
    - **Preferences**: the personal preferences section of `CLAUDE.md`.
-   - **Docs**: README updated when the change affects setup, commands, routes, env vars or architecture.
+   - **Docs**: README or the matching file in `docs/` updated when the change affects setup, commands, routes, env vars or architecture.
 
 ## Report
 
