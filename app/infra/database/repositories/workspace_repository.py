@@ -1,7 +1,6 @@
 import uuid
 from datetime import UTC, datetime
 
-from asyncpg.exceptions import UniqueViolationError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,8 +11,8 @@ from app.domain.errors.domain_errors import ConflictError
 from app.infra.database.models.workspace import WorkspaceORM
 from app.infra.database.models.workspace_member import WorkspaceMemberORM
 
-# Postgres' name for the UNIQUE (slug) of the initial migration. It covers deleted workspaces too.
-SLUG_CONSTRAINT = "workspaces_slug_key"
+# SQLSTATE Postgres reports for a unique violation.
+UNIQUE_VIOLATION = "23505"
 
 
 class WorkspaceRepositoryImpl(WorkspaceRepository):
@@ -107,9 +106,15 @@ class WorkspaceRepositoryImpl(WorkspaceRepository):
             raise
 
 
+# The constraint's name depends on how the database was created, and Postgres names the table but
+# not the column of a unique violation. Besides the generated id, the slug is the only unique column
+# of workspaces (a test keeps it so).
 def _is_slug_taken(error: IntegrityError) -> bool:
     cause = error.driver_exception
-    return isinstance(cause, UniqueViolationError) and cause.constraint_name == SLUG_CONSTRAINT
+    return (
+        getattr(cause, "sqlstate", None) == UNIQUE_VIOLATION
+        and getattr(cause, "table_name", None) == WorkspaceORM.__tablename__
+    )
 
 
 def _to_domain(orm: WorkspaceORM) -> Workspace:
