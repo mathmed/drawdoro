@@ -172,6 +172,9 @@ frontend/.env.*.local
 
 # mutmut
 mutants/
+# Schemathesis and Hypothesis caches (scripts/contract.sh runs in a temporary directory, but a manual
+# `schemathesis run` from the root writes them here)
+.schemathesis/
 # Quality Report fragments and output (scripts/quality_report.py)
 quality-fragments/
 quality-report.md

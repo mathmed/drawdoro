@@ -1,6 +1,6 @@
 .PHONY: setup dev dev-build run build test test-unit test-mcp test-frontend hooks check-code format-code frontend db \
 	smoke smoke-mcp lint-imports mutation mutation-report mutation-changed mcp-manifest \
-	suppressions suppressions-update
+	suppressions suppressions-update contract contract-prune
 
 # Install uv (if missing), project dependencies and git hooks
 setup:
@@ -67,6 +67,18 @@ mcp-manifest:
 # off, /health and /ready, then the MCP server against it. Needs docker or SMOKE_DATABASE_URL.
 smoke:
 	./scripts/smoke.sh
+
+# API contract: clean Postgres + migrations + the real API (auth on, a seeded personal API key) and a
+# bounded, deterministic Schemathesis pass against /openapi.json. Fails on any failure that is not in
+# contract-baseline.json and on baseline entries that no longer happen. Needs docker or SMOKE_DATABASE_URL.
+contract:
+	./scripts/contract.sh
+
+# Drop the entries of contract-baseline.json that no longer happen (after a fix); commit the result.
+# It never adds an entry: accepting a new failure (`./scripts/contract.sh --baseline-update`) needs the
+# owner's approval.
+contract-prune:
+	./scripts/contract.sh --baseline-prune
 
 # MCP smoke only: streamable-http server, /health, initialize and tools/list
 smoke-mcp:

@@ -111,6 +111,29 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # Boots the API like the smoke (clean Postgres, migrations, auth on) with a seeded personal API key
+  # and runs a bounded, deterministic Schemathesis pass against /openapi.json. Failures recorded in
+  # contract-baseline.json are reported but do not fail; new ones and entries that no longer happen do.
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      - name: API contract (Schemathesis)
+        run: uv run --locked python scripts/quality_report.py run schemathesis -- ./scripts/contract.sh
+
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: quality-fragment-contract
+          path: quality-fragments/
+          if-no-files-found: ignore
+          retention-days: 7
+
   frontend:
     runs-on: ubuntu-latest
     defaults:
@@ -258,7 +281,7 @@ jobs:
 
   quality-report:
     if: always() && github.event_name == 'pull_request'
-    needs: [lint, mcp, smoke, frontend, quality, mutation]
+    needs: [lint, mcp, smoke, contract, frontend, quality, mutation]
     runs-on: ubuntu-latest
     permissions:
       contents: read

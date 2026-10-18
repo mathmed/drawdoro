@@ -49,6 +49,8 @@ Health checks: `curl http://localhost:8000/health` (liveness, never touches the 
 | `make format-code` | Fix lint issues and format the code |
 | `make smoke` | Boot smoke: clean Postgres, `alembic upgrade head`, real API (auth on and off), `/health`, `/ready` and the MCP server. See [Boot smoke](#boot-smoke) |
 | `make smoke-mcp` | MCP smoke only: streamable-http server, `/health`, `initialize` and `tools/list` |
+| `make contract` | API contract: clean Postgres, migrations, the real API with auth on and a bounded, deterministic Schemathesis pass against `/openapi.json`. See [API contract](#api-contract-schemathesis) |
+| `make contract-prune` | Drop the entries of `contract-baseline.json` that no longer happen, after a fix (never adds one) |
 | `make lint-imports` | Check the architecture contracts (import-linter) of the API and the MCP server |
 | `make mutation` | Mutation testing (mutmut) of the use cases and domain services; report in `mutants/report.md` |
 | `make mcp-manifest` | Regenerate `frontend/src/config/mcpTools.json` (the *Available tools* list in *Connect Claude*) from the tools the MCP server registers. The MCP tests and a pre-commit hook fail while it is out of date |
@@ -107,9 +109,10 @@ loaders are branded through configuration, see [White-label](WHITE_LABEL.md).
 
 ## Validation of agent-generated code
 
-Three deterministic checks catch what unit tests with mocks miss: the boot smoke, the architecture contracts and
-mutation testing. Agents run `make smoke` and `make lint-imports` before opening a PR (see `CLAUDE.md`). Their
-results, with every other CI analysis, land in a single [Quality Report](#quality-report) comment on the PR.
+Deterministic checks catch what unit tests with mocks miss: the boot smoke, the API contract, the architecture
+contracts, the suppression ratchet and mutation testing. Agents run `make smoke`, `make contract` and
+`make lint-imports` before opening a PR (see `CLAUDE.md`). Their results, with every other CI analysis, land in a
+single [Quality Report](#quality-report) comment on the PR.
 
 ### Boot smoke
 
@@ -143,6 +146,50 @@ gallery items and reads the diagram and its history back.
 | `SMOKE_TIMEOUT` | `60` | Seconds to wait for Postgres, the API and the MCP server |
 | `SMOKE_STRICT_SCHEMA` | `1` | `0` turns `alembic check` drift into a warning instead of failing the smoke |
 | `SMOKE_SKIP_MCP` | `0` | `1` skips the MCP smoke inside `make smoke` |
+
+The boot itself (throwaway Postgres, alembic, uvicorn, cleanup and logs on failure) lives in
+`scripts/api_server.sh`, which `scripts/smoke.sh` and `scripts/contract.sh` source.
+
+### API contract (Schemathesis)
+
+`make contract`, CI job `contract`. `scripts/contract.sh` boots the API like the smoke (throwaway Postgres,
+`alembic upgrade head`, `.env.example`), seeds a user with a personal API key and starts the API the way
+production runs it (`ENV=production`, `AUTH_ENABLED=true`). Then [Schemathesis](https://schemathesis.readthedocs.io/)
+reads `/openapi.json` and runs every check (`--checks all`) on every HTTP operation, as that user (`X-API-Key`):
+documented status codes, content types, headers and response schemas, invalid input rejected, valid input
+accepted, no 5xx, and the stateful phase that chains operations through the links it infers.
+
+It is **bounded and deterministic**: one worker, a fixed seed (`CONTRACT_SEED`, default 1), up to
+`CONTRACT_MAX_EXAMPLES` (default 25) generated cases per operation and phase, no example database, every example
+run even after a failure, a 5 s request timeout (`CONTRACT_REQUEST_TIMEOUT`) and always a clean database, so the
+same code sends the same requests and a CI failure reproduces locally. It takes about a minute and a half.
+
+What it leaves out, on purpose:
+
+- the WebSockets (`/ws/diagrams/{id}`, `/ws/workspaces/{id}/presence`): they are not part of the OpenAPI schema;
+- the identity provider: no Cognito token is involved. The seeded personal key is the identity agents use, so
+  the user's own gallery and workspace roles apply; managing personal keys (`/me/api-keys`) only works from a
+  browser session, so there it only sees the `403`;
+- the `ignored_auth` check: agents send the key in the `X-API-Key` header, which the schema declares as a parameter
+  rather than a security scheme, so Schemathesis would take every accepted request for "authentication ignored".
+  The smoke checks the `401` without credentials and with a wrong key.
+
+**Known failures** live in `contract-baseline.json`, Schemathesis' own
+[baseline](https://schemathesis.readthedocs.io/): each entry is an operation, a check and the signature of the
+failure (for example `POST /workspaces`, `not_a_server_error`, `500`). They are still exercised and listed as known,
+but only a failure that is not in the file fails the run. The first run recorded the API as it was: undocumented
+status codes (mostly `404`), naive timestamps that are not RFC 3339 `date-time`, domain `422` errors whose `detail`
+is a string instead of the documented list, missing `Allow` headers on `405`, and `500`s on unknown parents, a
+duplicate workspace slug or NUL bytes in text. It works as a ratchet:
+
+- a **new failure** fails the job: fix the route or document the response (`responses=` on the route). Accepting
+  it (`./scripts/contract.sh --baseline-update`) needs the owner's explicit approval;
+- an entry that **no longer happens** fails it too, so a fix locks itself in: run `make contract-prune` and commit
+  the smaller baseline in the same PR.
+
+Extra arguments of `scripts/contract.sh` go to `schemathesis run` (for example `--include-path /workspaces` while
+fixing one route). On a merge conflict in `contract-baseline.json`, take either side and rerun `make contract`:
+it says what is new and what to prune.
 
 ### Static analysis thresholds
 
@@ -245,10 +292,11 @@ Every PR gets **one** comment titled *Quality Report* (found and updated through
 - the top line is the verdict (❌ failed, ⚠️ passed with warnings, ✅ all good) and the table has one row per
   analysis: backend lint/format, types (API and MCP), security, dead code, complexity, tests and coverage
   (API and MCP), architecture contracts (API and MCP), boot smoke, mutation testing, the frontend lint,
-  types, tests with coverage and build, and the suppression ratchet of the whole repository;
+  types, tests with coverage and build, the API contract, and the suppression ratchet of the whole
+  repository;
 - each section below has the summary and, in a collapsed `<details>`, the evidence: least covered files,
-  broken contracts with the violating import, smoke scenarios with their boot time, surviving mutants with
-  their diffs, lint problems, failures;
+  broken contracts with the violating import, smoke scenarios with their boot time, new contract failures,
+  surviving mutants with their diffs, lint problems, failures;
 - ✅ passed, ⚠️ warning (ESLint warnings or models/migrations drift reported without failing, as with
   `SMOKE_STRICT_SCHEMA=0`; in CI both fail the job), ❌ failed,
   ⏭️ not run (job cancelled or skipped, or nothing to mutate). A job that failed before producing its result

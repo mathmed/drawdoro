@@ -35,6 +35,8 @@ Always use `uv run` for the backend. The MCP server is a separate uv project in 
    - `make test` (line and branch coverage, fails under 95%);
    - `make lint-imports` (architecture contracts of the API and the MCP server);
    - `make smoke` (clean Postgres, migrations, the real API with auth on and off, and the MCP server);
+   - `make contract` (Schemathesis against the real API; new failures fail, see
+     [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md#api-contract-schemathesis));
    - `make mutation-changed` when you touch `app/domain/usecases/` or `app/domain/services/`;
    - `make test-mcp` for `mcp/`, and `make test-frontend` plus `npm run build` for `frontend/`.
 5. Commit with [Conventional Commits](https://www.conventionalcommits.org/) in English (`feat`, `fix`,

@@ -53,6 +53,7 @@ class Analysis(StrEnum):
     VITEST = "vitest"
     FRONTEND_BUILD = "frontend-build"
     SUPPRESSIONS = "suppressions"
+    SCHEMATHESIS = "schemathesis"
 
 
 class Status(StrEnum):
@@ -177,6 +178,9 @@ SECTIONS = [
         ),
     ),
     Section(Area.BACKEND, "Boot smoke (API and MCP)", (Check(Analysis.SMOKE, "smoke"),)),
+    Section(
+        Area.BACKEND, "API contract (Schemathesis)", (Check(Analysis.SCHEMATHESIS, "contract"),)
+    ),
     Section(Area.BACKEND, "Mutation testing (mutmut)", (Check(Analysis.MUTATION, "mutation"),)),
     Section(Area.FRONTEND, "Lint (ESLint)", (Check(Analysis.ESLINT, "frontend"),)),
     Section(Area.FRONTEND, "Types (tsc)", (Check(Analysis.TSC, "frontend"),)),
@@ -708,6 +712,73 @@ def analyze_mutation(fragment: Fragment) -> Finding:
     )
 
 
+SCHEMATHESIS_VERDICT = re.compile(r"^=+ (?P<verdict>.+?) in [\d.]+s =+$", re.MULTILINE)
+SCHEMATHESIS_FAILURE = re.compile(r"^\s*❌ (?P<check>[^:\n]+): (?P<count>\d+)$", re.MULTILINE)
+# Printed by scripts/contract.sh (RUN_LABEL=contract in scripts/api_server.sh)
+CONTRACT_FAILURE = re.compile(r"^!! CONTRACT FAILED: (?P<reason>.+)$", re.MULTILINE)
+
+
+def between(text: str, start: str, end: str) -> str:
+    begin = text.find(start)
+    if begin < 0:
+        return ""
+    finish = text.find(end, begin)
+    return text[begin + len(start) : finish if finish >= 0 else None].strip("= \n")
+
+
+def schemathesis_scope(output: str) -> str:
+    cases = first_int(r"(\d+) generated", output)
+    operations = first_int(r"Operations:\s+\d+ selected / (\d+) total", output)
+    known = first_int(r"Known failures: (\d+)", output)
+    seed = re.search(r"^Seed: (\S+)$", output, re.MULTILINE)
+    parts = [
+        f"{plural(cases, 'test case', 'test cases')} on "
+        f"{plural(operations, 'operation', 'operations')}",
+        f"{plural(known, 'known failure', 'known failures')} in the baseline",
+    ]
+    return " · ".join(parts + ([f"seed {seed[1]}"] if seed else []))
+
+
+def new_contract_failures_finding(output: str) -> Finding:
+    checks = "; ".join(
+        f"{match['check']} ({match['count']})" for match in SCHEMATHESIS_FAILURE.finditer(output)
+    )
+    unique = first_int(r"found (\d+) unique failure", output)
+    return Finding(
+        Status.FAILED,
+        f"{plural(unique, 'new failure', 'new failures')}: {checks} · {schemathesis_scope(output)}",
+        tail(between(output, " FAILURES ", " SUMMARY ")),
+        "New failures (reproduce with `make contract`)",
+    )
+
+
+def stale_contract_baseline_finding(output: str, unobserved: int) -> Finding:
+    return Finding(
+        Status.FAILED,
+        f"{plural(unobserved, 'baseline entry', 'baseline entries')} no longer "
+        f"{'happens' if unobserved == 1 else 'happen'}: run `make contract-prune` · "
+        f"{schemathesis_scope(output)}",
+    )
+
+
+def contract_not_run_finding(output: str) -> Finding:
+    reasons = CONTRACT_FAILURE.findall(output)
+    cause = f": {reasons[-1]}" if reasons else ""
+    return Finding(Status.FAILED, f"Contract test did not run{cause}", tail(output))
+
+
+def analyze_schemathesis(fragment: Fragment) -> Finding:
+    output = clean(fragment.output)
+    if fragment.passed:
+        return Finding(Status.OK, f"No new contract violations · {schemathesis_scope(output)}")
+    if SCHEMATHESIS_FAILURE.search(output):
+        return new_contract_failures_finding(output)
+    unobserved = first_int(r"Unobserved entries: (\d+)", output)
+    if unobserved and SCHEMATHESIS_VERDICT.search(output):
+        return stale_contract_baseline_finding(output, unobserved)
+    return contract_not_run_finding(output)
+
+
 ESLINT_PROBLEMS = re.compile(r"(\d+) problems? \((\d+) errors?, (\d+) warnings?\)")
 ESLINT_ISSUE = re.compile(r"^\s+\d+:\d+\s+(?:warning|error)\s+")
 ESLINT_FILE = re.compile(r"^\S+\.(?:[cm]?[jt]sx?)$")
@@ -952,6 +1023,7 @@ ANALYZERS: dict[Analysis, Callable[[Fragment], Finding]] = {
     Analysis.VITEST: analyze_vitest,
     Analysis.FRONTEND_BUILD: analyze_frontend_build,
     Analysis.SUPPRESSIONS: analyze_suppressions,
+    Analysis.SCHEMATHESIS: analyze_schemathesis,
 }
 
 

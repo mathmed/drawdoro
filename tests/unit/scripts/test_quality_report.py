@@ -23,6 +23,7 @@ from scripts.quality_report import (
     analyze_pytest,
     analyze_ruff_check,
     analyze_ruff_format,
+    analyze_schemathesis,
     analyze_smoke,
     analyze_suppressions,
     analyze_tsc,
@@ -436,6 +437,140 @@ class TestMutationAnalyzer:
         assert finding.summary == "mutmut failed before producing a score"
 
 
+CONTRACT_HEADER = """>> Schemathesis against /openapi.json (seed 1, up to 25 examples per operation and phase)
+Schemathesis v4.31.1
+━━━━━━━━━━━━━━━━━━━━
+
+ ✅  Loaded specification from http://127.0.0.1:37723/openapi.json (in 1.64s)
+
+     Base URL:         http://127.0.0.1:37723/
+     Specification:    Open API 3.1.0
+     Operations:       51 selected / 51 total
+"""
+CONTRACT_OK = (
+    CONTRACT_HEADER
+    + """
+=================================== SUMMARY ====================================
+
+Baseline:
+  Known failures: 162
+
+Test cases:
+  3007 generated, 3007 passed
+
+Seed: 1
+
+============================= 3 warnings in 70.33s =============================
+
+>> Contract passed
+"""
+)
+CONTRACT_NEW_FAILURES = (
+    CONTRACT_HEADER
+    + """
+=================================== FAILURES ===================================
+________________________________ Stateful tests ________________________________
+1. Test Case ID: 2g4NaS
+
+- Response violates schema
+
+    "The dark thumbnail must be a PNG or WebP image" is not of type "array"
+
+=================================== SUMMARY ====================================
+
+Failures:
+  ❌ Response violates schema: 5
+  ❌ API accepted schema-violating request: 1
+
+Baseline:
+  Known failures: 170
+
+Test cases:
+  5571 generated, 4 found 6 unique failures
+
+Seed: 1
+
+====================== 6 failures, 3 warnings in 177.43s =======================
+
+!! CONTRACT FAILED: schemathesis found failures that are not in contract-baseline.json
+"""
+)
+CONTRACT_STALE = (
+    CONTRACT_HEADER
+    + """
+=================================== SUMMARY ====================================
+
+Baseline:
+  Known failures: 162
+  Unobserved entries: 2
+
+Test cases:
+  3007 generated, 3007 passed
+
+Seed: 1
+
+============================= 3 warnings in 73.10s =============================
+
+!! CONTRACT FAILED: contract-baseline.json lists failures that no longer happen
+"""
+)
+
+
+class TestSchemathesisAnalyzer:
+    def test_should_pass_with_the_scope_known_failures_and_seed(self) -> None:
+        finding = analyze_schemathesis(fragment(Analysis.SCHEMATHESIS, CONTRACT_OK))
+
+        assert finding.status == Status.OK
+        assert finding.summary == (
+            "No new contract violations · 3007 test cases on 51 operations · "
+            "162 known failures in the baseline · seed 1"
+        )
+
+    def test_should_list_the_new_failures_by_check_with_their_details(self) -> None:
+        finding = analyze_schemathesis(fragment(Analysis.SCHEMATHESIS, CONTRACT_NEW_FAILURES, 1))
+
+        assert finding.status == Status.FAILED
+        assert finding.summary == (
+            "6 new failures: Response violates schema (5); "
+            "API accepted schema-violating request (1) · 5571 test cases on 51 operations · "
+            "170 known failures in the baseline · seed 1"
+        )
+        assert "Stateful tests" in finding.details
+        assert "is not of type" in finding.details
+        assert "Known failures" not in finding.details
+
+    def test_should_ask_to_prune_entries_that_no_longer_happen(self) -> None:
+        finding = analyze_schemathesis(fragment(Analysis.SCHEMATHESIS, CONTRACT_STALE, 1))
+
+        assert finding.status == Status.FAILED
+        assert finding.summary.startswith(
+            "2 baseline entries no longer happen: run `make contract-prune` · 3007 test cases"
+        )
+
+    def test_should_use_the_singular_for_one_stale_entry(self) -> None:
+        output = CONTRACT_STALE.replace("Unobserved entries: 2", "Unobserved entries: 1")
+
+        finding = analyze_schemathesis(fragment(Analysis.SCHEMATHESIS, output, 1))
+
+        assert finding.summary.startswith("1 baseline entry no longer happens")
+
+    def test_should_say_why_the_contract_test_did_not_run(self) -> None:
+        output = (
+            ">> Starting a throwaway postgres:17\n!! CONTRACT FAILED: could not start Postgres\n"
+        )
+
+        finding = analyze_schemathesis(fragment(Analysis.SCHEMATHESIS, output, 1))
+
+        assert finding.status == Status.FAILED
+        assert finding.summary == "Contract test did not run: could not start Postgres"
+        assert "could not start Postgres" in finding.details
+
+    def test_should_fail_without_a_reason_when_the_script_crashed(self) -> None:
+        finding = analyze_schemathesis(fragment(Analysis.SCHEMATHESIS, "Killed", 137))
+
+        assert finding.summary == "Contract test did not run"
+
+
 def suppressions_output(changes: list[dict[str, object]], total: int = 6) -> str:
     payload = {
         "total": total,
@@ -675,7 +810,7 @@ class TestRender:
 
         report = render(fragments, {})
 
-        assert "✅ **All good** (13 sections not run)" in report
+        assert "✅ **All good** (14 sections not run)" in report
 
     def test_should_trim_details_to_fit_in_a_comment(self) -> None:
         huge = "E" * 5000 + "\n"
