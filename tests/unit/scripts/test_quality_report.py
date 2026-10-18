@@ -19,6 +19,7 @@ from scripts.quality_report import (
     analyze_import_linter,
     analyze_mutation,
     analyze_mypy,
+    analyze_oasdiff,
     analyze_pip_audit,
     analyze_pytest,
     analyze_ruff_check,
@@ -571,6 +572,78 @@ class TestSchemathesisAnalyzer:
         assert finding.summary == "Contract test did not run"
 
 
+OASDIFF_BREAKING = """Comparing the OpenAPI schema of HEAD with origin/main (merge base 668d8063901a)
+3 changes: 1 error, 1 warning, 1 info
+error\t[response-required-property-removed] at head.openapi.json
+\tin API GET /workspaces
+\t\tremoved the required property `items/slug` from the response with the `200` status
+
+warning\t[request-parameter-pattern-added] at head.openapi.json
+\tin API GET /gallery
+\t\tadded the pattern `^[a-z]+$` to the `query` request parameter `tag`
+
+info\t[response-optional-property-added] at head.openapi.json
+\tin API GET /workspaces
+\t\tadded the optional property `items/nickname` to the response with the `200` status
+"""
+
+
+def oasdiff_output(errors: int, warnings: int, infos: int) -> str:
+    total = errors + warnings + infos
+    return OASDIFF_BREAKING.replace(
+        "3 changes: 1 error, 1 warning, 1 info",
+        f"{total} changes: {errors} error, {warnings} warning, {infos} info",
+    )
+
+
+class TestOasdiffAnalyzer:
+    def test_should_pass_when_nothing_changed(self) -> None:
+        output = "Comparing the OpenAPI schema of HEAD with origin/main\nNo changes detected\n"
+
+        finding = analyze_oasdiff(fragment(Analysis.OASDIFF, output))
+
+        assert (finding.status, finding.summary) == (Status.OK, "No API changes")
+
+    def test_should_fail_on_breaking_changes_and_list_every_change(self) -> None:
+        finding = analyze_oasdiff(fragment(Analysis.OASDIFF, OASDIFF_BREAKING, 1))
+
+        assert finding.status == Status.FAILED
+        assert finding.summary == "1 breaking change out of 3"
+        assert finding.details.splitlines() == [
+            "error   API GET /workspaces: removed the required property `items/slug` from the "
+            "response with the `200` status [response-required-property-removed]",
+            "warning API GET /gallery: added the pattern `^[a-z]+$` to the `query` request "
+            "parameter `tag` [request-parameter-pattern-added]",
+            "info    API GET /workspaces: added the optional property `items/nickname` to the "
+            "response with the `200` status [response-optional-property-added]",
+        ]
+
+    def test_should_warn_about_possible_breaking_changes(self) -> None:
+        finding = analyze_oasdiff(fragment(Analysis.OASDIFF, oasdiff_output(0, 2, 1)))
+
+        assert finding.status == Status.WARNING
+        assert finding.summary == "2 possible breaking changes (warning) out of 3"
+
+    def test_should_pass_additive_changes(self) -> None:
+        finding = analyze_oasdiff(fragment(Analysis.OASDIFF, oasdiff_output(0, 0, 1)))
+
+        assert (finding.status, finding.summary) == (Status.OK, "1 API change, none breaking")
+
+    def test_should_fail_when_oasdiff_fails_without_breaking_changes(self) -> None:
+        finding = analyze_oasdiff(fragment(Analysis.OASDIFF, oasdiff_output(0, 0, 1), 2))
+
+        assert finding.summary == "OpenAPI diff failed after comparing"
+
+    def test_should_fail_when_the_schemas_could_not_be_compared(self) -> None:
+        output = "fatal: Not a valid object name origin/main\nIs origin/main fetched?"
+
+        finding = analyze_oasdiff(fragment(Analysis.OASDIFF, output, 1))
+
+        assert finding.status == Status.FAILED
+        assert finding.summary == "OpenAPI diff failed before comparing"
+        assert finding.details == output
+
+
 def suppressions_output(changes: list[dict[str, object]], total: int = 6) -> str:
     payload = {
         "total": total,
@@ -810,7 +883,7 @@ class TestRender:
 
         report = render(fragments, {})
 
-        assert "✅ **All good** (14 sections not run)" in report
+        assert "✅ **All good** (15 sections not run)" in report
 
     def test_should_trim_details_to_fit_in_a_comment(self) -> None:
         huge = "E" * 5000 + "\n"

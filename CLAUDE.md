@@ -33,6 +33,7 @@ make format-code  fix lint issues and format with ruff
 make smoke        boot smoke: clean Postgres + migrations + real API (auth on/off) + MCP
 make contract     API contract: real API (auth on) + bounded, deterministic Schemathesis against /openapi.json
 make contract-prune  drop contract-baseline.json entries that no longer happen (never adds one)
+make openapi-diff fail on breaking OpenAPI changes vs BASE (default origin/main); needs oasdiff
 make lint-imports architecture contracts (import-linter) for app/ and mcp/
 make suppressions suppression ratchet: fails when noqa/type: ignore/nosec/eslint-disable/@ts-ignore/skip/only... differ from the baseline
 make suppressions-update  lower suppressions-baseline.json after removing suppressions (never raises it)
@@ -81,8 +82,8 @@ tests/integration/ HTTP tests with TestClient
 
 1. The app imports: `uv run python -c "import app.main.main"`.
 2. New environment variables have a default or an entry in `.env.example`.
-3. `make hooks`, `make test`, `make lint-imports`, `make smoke` and `make contract` pass. A PR with failing checks
-   is not a PR.
+3. `make hooks`, `make test`, `make lint-imports`, `make smoke` and `make contract` pass, and so does
+   `make openapi-diff` when `oasdiff` is installed (CI always runs it). A PR with failing checks is not a PR.
 4. Existing routes are not removed or renamed unless the task asks for it.
 5. The README or the matching file in `docs/` is updated if the change affects setup, commands, routes, env vars or architecture.
 
@@ -96,6 +97,10 @@ tests/integration/ HTTP tests with TestClient
   so fix the route or document the response (`responses=`); never accept it (`--baseline-update`) without the
   owner's approval. When a fix makes entries disappear, run `make contract-prune` and commit the smaller baseline
   in the same PR. Never exclude a check or an operation to get it green.
+- `make openapi-diff` exports the OpenAPI schema of HEAD and of the merge base with the base branch and runs
+  `oasdiff changelog --fail-on ERR`: removing or renaming a route or a response field, or making a parameter
+  required, fails the PR. A deliberate breaking change needs the owner's explicit approval and is called out in
+  the PR.
 - `make suppressions` (pre-commit and CI) compares every suppression in `app/`, `alembic/`, `mcp/`, `scripts/`,
   `tests/` and `frontend/` (`# noqa`, `# type: ignore`, `# nosec`, `# pragma: no cover`, tool directives,
   skipped/xfail tests, `eslint-disable`, `@ts-ignore`, `@ts-expect-error`, `@ts-nocheck`, coverage ignores,

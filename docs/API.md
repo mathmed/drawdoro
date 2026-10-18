@@ -55,3 +55,7 @@ All routes except `/health` and `/ready` return `501 Not Implemented` until infr
 the documented status codes and schemas. The deviations found when it was introduced are recorded in
 `contract-baseline.json` and only new ones fail; see [API contract](DEVELOPMENT.md#api-contract-schemathesis).
 When a route answers a status it does not declare yet, document it with `responses=` on the route.
+
+`make openapi-diff` (CI job `openapi-diff`) compares the schema of a pull request with the one of its base and
+fails on breaking changes: routes and response fields are only added, never removed or renamed; see
+[Breaking API changes](DEVELOPMENT.md#breaking-api-changes-oasdiff).

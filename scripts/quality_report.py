@@ -54,6 +54,7 @@ class Analysis(StrEnum):
     FRONTEND_BUILD = "frontend-build"
     SUPPRESSIONS = "suppressions"
     SCHEMATHESIS = "schemathesis"
+    OASDIFF = "oasdiff"
 
 
 class Status(StrEnum):
@@ -180,6 +181,9 @@ SECTIONS = [
     Section(Area.BACKEND, "Boot smoke (API and MCP)", (Check(Analysis.SMOKE, "smoke"),)),
     Section(
         Area.BACKEND, "API contract (Schemathesis)", (Check(Analysis.SCHEMATHESIS, "contract"),)
+    ),
+    Section(
+        Area.BACKEND, "Breaking API changes (oasdiff)", (Check(Analysis.OASDIFF, "openapi-diff"),)
     ),
     Section(Area.BACKEND, "Mutation testing (mutmut)", (Check(Analysis.MUTATION, "mutation"),)),
     Section(Area.FRONTEND, "Lint (ESLint)", (Check(Analysis.ESLINT, "frontend"),)),
@@ -779,6 +783,51 @@ def analyze_schemathesis(fragment: Fragment) -> Finding:
     return contract_not_run_finding(output)
 
 
+OASDIFF_COUNTS = re.compile(
+    r"^(?P<total>\d+) changes?: (?P<errors>\d+) error, (?P<warnings>\d+) warning, \d+ info$",
+    re.MULTILINE,
+)
+OASDIFF_ENTRY = re.compile(
+    r"^(?P<level>error|warning|info)\t\[(?P<rule>[^\]]+)\][^\n]*\n\tin (?P<where>[^\n]+)\n"
+    r"\t\t(?P<text>[^\n]+)",
+    re.MULTILINE,
+)
+
+
+def oasdiff_listing(output: str) -> str:
+    return "\n".join(
+        f"{match['level']:7} {match['where']}: {match['text']} [{match['rule']}]"
+        for match in OASDIFF_ENTRY.finditer(output)
+    )
+
+
+def oasdiff_changes_finding(passed: bool, counts: re.Match[str], output: str) -> Finding:
+    total, errors, warnings = (int(counts[name]) for name in ("total", "errors", "warnings"))
+    listing = tail(oasdiff_listing(output))
+    if errors:
+        summary = f"{plural(errors, 'breaking change', 'breaking changes')} out of {total}"
+        return Finding(Status.FAILED, summary, listing, "API changes")
+    if not passed:
+        return Finding(Status.FAILED, "OpenAPI diff failed after comparing", tail(output))
+    if warnings:
+        summary = f"{plural(warnings, 'possible breaking change', 'possible breaking changes')}"
+        return Finding(
+            Status.WARNING, f"{summary} (warning) out of {total}", listing, "API changes"
+        )
+    summary = f"{plural(total, 'API change', 'API changes')}, none breaking"
+    return Finding(Status.OK, summary, listing, "API changes")
+
+
+def analyze_oasdiff(fragment: Fragment) -> Finding:
+    output = clean(fragment.output)
+    if fragment.passed and "No changes detected" in output:
+        return Finding(Status.OK, "No API changes")
+    counts = OASDIFF_COUNTS.search(output)
+    if counts is None:
+        return Finding(Status.FAILED, "OpenAPI diff failed before comparing", tail(output))
+    return oasdiff_changes_finding(fragment.passed, counts, output)
+
+
 ESLINT_PROBLEMS = re.compile(r"(\d+) problems? \((\d+) errors?, (\d+) warnings?\)")
 ESLINT_ISSUE = re.compile(r"^\s+\d+:\d+\s+(?:warning|error)\s+")
 ESLINT_FILE = re.compile(r"^\S+\.(?:[cm]?[jt]sx?)$")
@@ -1024,6 +1073,7 @@ ANALYZERS: dict[Analysis, Callable[[Fragment], Finding]] = {
     Analysis.FRONTEND_BUILD: analyze_frontend_build,
     Analysis.SUPPRESSIONS: analyze_suppressions,
     Analysis.SCHEMATHESIS: analyze_schemathesis,
+    Analysis.OASDIFF: analyze_oasdiff,
 }
 
 

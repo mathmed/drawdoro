@@ -1,6 +1,6 @@
 .PHONY: setup dev dev-build run build test test-unit test-mcp test-frontend hooks check-code format-code frontend db \
 	smoke smoke-mcp lint-imports mutation mutation-report mutation-changed mcp-manifest \
-	suppressions suppressions-update contract contract-prune
+	suppressions suppressions-update contract contract-prune openapi-diff
 
 # Install uv (if missing), project dependencies and git hooks
 setup:
@@ -100,9 +100,16 @@ mutation-report:
 	@sed -n '1,4p' mutants/report.md
 	@echo ">> full report: mutants/report.md | inspect a mutant: uv run mutmut show <name>"
 
+# Base branch of mutation-changed and openapi-diff
+BASE ?= origin/main
+
+# Fail on breaking changes between the OpenAPI schema of HEAD (working tree) and of its merge base with
+# BASE: oasdiff changelog --fail-on ERR. Needs oasdiff on PATH (see docs/DEVELOPMENT.md).
+openapi-diff:
+	uv run python scripts/openapi.py diff --base $(BASE)
+
 # What the PR job runs: mutates only the use cases and domain services changed against BASE, down
 # to the changed functions, and fails below MUTATION_MIN_SCORE (default 95, the ratchet).
-BASE ?= origin/main
 mutation-changed:
 	uv run python scripts/mutation.py changed --base $(BASE)
 

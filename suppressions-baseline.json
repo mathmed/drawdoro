@@ -2,6 +2,9 @@
   "scripts/mutation.py": {
     "nosec": 3
   },
+  "scripts/openapi.py": {
+    "nosec": 2
+  },
   "scripts/quality_report.py": {
     "nosec": 2
   },

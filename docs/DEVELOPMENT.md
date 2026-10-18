@@ -51,6 +51,7 @@ Health checks: `curl http://localhost:8000/health` (liveness, never touches the 
 | `make smoke-mcp` | MCP smoke only: streamable-http server, `/health`, `initialize` and `tools/list` |
 | `make contract` | API contract: clean Postgres, migrations, the real API with auth on and a bounded, deterministic Schemathesis pass against `/openapi.json`. See [API contract](#api-contract-schemathesis) |
 | `make contract-prune` | Drop the entries of `contract-baseline.json` that no longer happen, after a fix (never adds one) |
+| `make openapi-diff` | Fail on breaking changes between the OpenAPI schema of the working tree and of its merge base with `BASE` (default `origin/main`). Needs `oasdiff`, see [Breaking API changes](#breaking-api-changes-oasdiff) |
 | `make lint-imports` | Check the architecture contracts (import-linter) of the API and the MCP server |
 | `make mutation` | Mutation testing (mutmut) of the use cases and domain services; report in `mutants/report.md` |
 | `make mcp-manifest` | Regenerate `frontend/src/config/mcpTools.json` (the *Available tools* list in *Connect Claude*) from the tools the MCP server registers. The MCP tests and a pre-commit hook fail while it is out of date |
@@ -191,6 +192,23 @@ Extra arguments of `scripts/contract.sh` go to `schemathesis run` (for example `
 fixing one route). On a merge conflict in `contract-baseline.json`, take either side and rerun `make contract`:
 it says what is new and what to prune.
 
+### Breaking API changes (oasdiff)
+
+`make openapi-diff`, CI job `openapi-diff` (pull requests only). `scripts/openapi.py diff` exports the OpenAPI
+schema of the working tree and of its merge base with the base branch (checked out in a temporary `git worktree`,
+with its own environment of production dependencies) and runs
+[oasdiff](https://github.com/oasdiff/oasdiff) `changelog --fail-on ERR`: removing or renaming a route, removing a
+response field, making a parameter required or narrowing a type fails the PR. Warnings (possible breaking changes)
+show as ⚠️ in the Quality Report without failing; additive changes are listed as information. Both exports run
+from a temporary directory, so a local `.env` never makes the two schemas differ.
+
+Public contracts only grow additively (`CLAUDE.md`): a deliberate breaking change needs the owner's explicit
+approval and is called out in the PR. Locally, install the same version CI pins in `ci.yml` (`OASDIFF_VERSION`):
+`go install github.com/oasdiff/oasdiff@v1.33.0`, or the `oasdiff_<version>_linux_amd64.tar.gz` /
+`darwin_all.tar.gz` binary of its [release](https://github.com/oasdiff/oasdiff/releases) on your `PATH`. CI
+downloads it and checks its sha256; Dependabot does not track it, so bump `OASDIFF_VERSION` and `OASDIFF_SHA256`
+together.
+
 ### Static analysis thresholds
 
 `make hooks`, CI jobs `lint` and `quality`. The backend holds the strictest setting of every tool, with no
@@ -199,8 +217,9 @@ per-file ignore or vulture allowlist. A regression fails pre-commit and CI.
 The few line-scoped suppressions left are counted by the [suppression ratchet](#suppression-ratchet) and listed in
 `suppressions-baseline.json`. Most are `# nosec` in `scripts/`, where running a process is the job: `B404`
 (importing `subprocess`) and `B603` (a process started without a shell) in `quality_report.py`
-(`run <analysis> -- <command>` runs the CI analysis commands) and `mutation.py` (`git` and `mutmut`, resolved
-to absolute paths with `shutil.which`). Bandit flags every `subprocess` call at low severity whatever its
+(`run <analysis> -- <command>` runs the CI analysis commands), `mutation.py` (`git` and `mutmut`) and
+`openapi.py` (`git`, `uv` and `oasdiff`), the last two resolving the executables to absolute paths with
+`shutil.which`. Bandit flags every `subprocess` call at low severity whatever its
 input, so these are reviewed call sites, not tolerated findings; nothing else may be suppressed without the
 owner's approval.
 
@@ -292,8 +311,8 @@ Every PR gets **one** comment titled *Quality Report* (found and updated through
 - the top line is the verdict (❌ failed, ⚠️ passed with warnings, ✅ all good) and the table has one row per
   analysis: backend lint/format, types (API and MCP), security, dead code, complexity, tests and coverage
   (API and MCP), architecture contracts (API and MCP), boot smoke, mutation testing, the frontend lint,
-  types, tests with coverage and build, the API contract, and the suppression ratchet of the whole
-  repository;
+  types, tests with coverage and build, the API contract, breaking API changes, and the suppression ratchet of
+  the whole repository;
 - each section below has the summary and, in a collapsed `<details>`, the evidence: least covered files,
   broken contracts with the violating import, smoke scenarios with their boot time, new contract failures,
   surviving mutants with their diffs, lint problems, failures;
