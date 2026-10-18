@@ -7,21 +7,24 @@ from pydantic import Base64Bytes, BaseModel, ConfigDict, Field
 from app.domain.constants.revisions import REVISION_SUMMARY_MAX_LENGTH
 from app.domain.enums.image_mime_type import ImageMimeType
 from app.presentation.fastapi.schemas.gallery_schemas import EncodedBytes
+from app.presentation.fastapi.schemas.text_schemas import NulFreeStr
 
 
 class CreateDiagramRequest(BaseModel):
-    name: str
+    name: NulFreeStr
     folder_id: uuid.UUID | None = None
     canvas_state: dict[str, Any] | None = None
 
 
 class UpdateDiagramRequest(BaseModel):
-    name: str
+    name: NulFreeStr
     folder_id: uuid.UUID | None = None
     canvas_state: dict[str, Any] | None = None
     semantic_metadata: dict[str, Any] | None = None
     # Shown in the diagram's history next to the change; agents describe what they did.
-    revision_summary: str | None = Field(default=None, max_length=REVISION_SUMMARY_MAX_LENGTH)
+    revision_summary: NulFreeStr | None = Field(
+        default=None, max_length=REVISION_SUMMARY_MAX_LENGTH
+    )
 
 
 class DiagramResponse(BaseModel):

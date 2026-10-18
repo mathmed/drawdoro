@@ -16,6 +16,7 @@ from app.presentation.fastapi.schemas.diagram_schemas import (
     SharedDiagramResponse,
     ShareDiagramResponse,
 )
+from app.presentation.fastapi.schemas.text_schemas import NulFreeStr
 
 # Generating the link needs an editor session, so it stays behind workspace access.
 router = APIRouter(
@@ -40,7 +41,7 @@ public_router = APIRouter(prefix="/share", tags=["share"])
 
 @public_router.get("/{share_token}", response_model=SharedDiagramResponse)
 async def get_shared_diagram(
-    share_token: str,
+    share_token: NulFreeStr,
     use_case: GetDiagramByShareToken = Depends(get_diagram_by_share_token_factory),
 ) -> SharedDiagramResponse:
     diagram = await use_case.execute(GetDiagramByShareTokenParams(share_token=share_token))

@@ -4,11 +4,12 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.domain.enums.revision_origin import RevisionOrigin
+from app.presentation.fastapi.schemas.text_schemas import NulFreeStr
 
 
 class CreateCommentRequest(BaseModel):
     # Omitted or empty for a comment on the whole diagram.
-    element_id: str | None = None
+    element_id: NulFreeStr | None = None
     # Plain text; the use case trims it and enforces the length limit.
     content: str
     author_id: uuid.UUID | None = None
