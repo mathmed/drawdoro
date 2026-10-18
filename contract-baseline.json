@@ -885,15 +885,6 @@
       "last_seen": "2026-10-18"
     },
     {
-      "id": "6dccb2",
-      "operation": "POST /projects/{project_id}/diagrams",
-      "check": "not_a_server_error",
-      "failure": "ServerError",
-      "signature": "500",
-      "first_seen": "2026-10-18",
-      "last_seen": "2026-10-18"
-    },
-    {
       "id": "074b4b",
       "operation": "POST /projects/{project_id}/diagrams",
       "check": "response_schema_conformance",
@@ -921,38 +912,11 @@
       "last_seen": "2026-10-18"
     },
     {
-      "id": "850ca7",
-      "operation": "POST /projects/{project_id}/diagrams",
-      "check": "status_code_conformance",
-      "failure": "UndefinedStatusCode",
-      "signature": "404",
-      "first_seen": "2026-10-18",
-      "last_seen": "2026-10-18"
-    },
-    {
-      "id": "1fa678",
-      "operation": "POST /projects/{project_id}/diagrams",
-      "check": "status_code_conformance",
-      "failure": "UndefinedStatusCode",
-      "signature": "500",
-      "first_seen": "2026-10-18",
-      "last_seen": "2026-10-18"
-    },
-    {
       "id": "971a53",
       "operation": "POST /projects/{project_id}/folders",
       "check": "allow_header_conformance",
       "failure": "AllowHeaderMismatch",
       "signature": "POST|",
-      "first_seen": "2026-10-18",
-      "last_seen": "2026-10-18"
-    },
-    {
-      "id": "7950fe",
-      "operation": "POST /projects/{project_id}/folders",
-      "check": "not_a_server_error",
-      "failure": "ServerError",
-      "signature": "500",
       "first_seen": "2026-10-18",
       "last_seen": "2026-10-18"
     },
@@ -971,24 +935,6 @@
       "check": "response_schema_conformance",
       "failure": "JsonSchemaError",
       "signature": "properties/updated_at/format",
-      "first_seen": "2026-10-18",
-      "last_seen": "2026-10-18"
-    },
-    {
-      "id": "156d31",
-      "operation": "POST /projects/{project_id}/folders",
-      "check": "status_code_conformance",
-      "failure": "UndefinedStatusCode",
-      "signature": "404",
-      "first_seen": "2026-10-18",
-      "last_seen": "2026-10-18"
-    },
-    {
-      "id": "3c18e3",
-      "operation": "POST /projects/{project_id}/folders",
-      "check": "status_code_conformance",
-      "failure": "UndefinedStatusCode",
-      "signature": "500",
       "first_seen": "2026-10-18",
       "last_seen": "2026-10-18"
     },
@@ -1020,15 +966,6 @@
       "last_seen": "2026-10-18"
     },
     {
-      "id": "834dfb",
-      "operation": "POST /workspaces",
-      "check": "not_a_server_error",
-      "failure": "ServerError",
-      "signature": "500",
-      "first_seen": "2026-10-18",
-      "last_seen": "2026-10-18"
-    },
-    {
       "id": "3e32ae",
       "operation": "POST /workspaces",
       "check": "response_schema_conformance",
@@ -1043,15 +980,6 @@
       "check": "response_schema_conformance",
       "failure": "JsonSchemaError",
       "signature": "properties/updated_at/format",
-      "first_seen": "2026-10-18",
-      "last_seen": "2026-10-18"
-    },
-    {
-      "id": "501f72",
-      "operation": "POST /workspaces",
-      "check": "status_code_conformance",
-      "failure": "UndefinedStatusCode",
-      "signature": "500",
       "first_seen": "2026-10-18",
       "last_seen": "2026-10-18"
     },
@@ -1191,15 +1119,6 @@
       "last_seen": "2026-10-18"
     },
     {
-      "id": "25ca3d",
-      "operation": "PUT /projects/{project_id}/diagrams/{diagram_id}",
-      "check": "not_a_server_error",
-      "failure": "ServerError",
-      "signature": "500",
-      "first_seen": "2026-10-18",
-      "last_seen": "2026-10-18"
-    },
-    {
       "id": "15636f",
       "operation": "PUT /projects/{project_id}/diagrams/{diagram_id}",
       "check": "response_schema_conformance",
@@ -1214,24 +1133,6 @@
       "check": "response_schema_conformance",
       "failure": "JsonSchemaError",
       "signature": "properties/updated_at/format",
-      "first_seen": "2026-10-18",
-      "last_seen": "2026-10-18"
-    },
-    {
-      "id": "56c7bc",
-      "operation": "PUT /projects/{project_id}/diagrams/{diagram_id}",
-      "check": "status_code_conformance",
-      "failure": "UndefinedStatusCode",
-      "signature": "404",
-      "first_seen": "2026-10-18",
-      "last_seen": "2026-10-18"
-    },
-    {
-      "id": "f094c9",
-      "operation": "PUT /projects/{project_id}/diagrams/{diagram_id}",
-      "check": "status_code_conformance",
-      "failure": "UndefinedStatusCode",
-      "signature": "500",
       "first_seen": "2026-10-18",
       "last_seen": "2026-10-18"
     },
@@ -1254,15 +1155,6 @@
       "last_seen": "2026-10-18"
     },
     {
-      "id": "aefe85",
-      "operation": "PUT /projects/{project_id}/folders/{folder_id}",
-      "check": "not_a_server_error",
-      "failure": "ServerError",
-      "signature": "500",
-      "first_seen": "2026-10-18",
-      "last_seen": "2026-10-18"
-    },
-    {
       "id": "7a730c",
       "operation": "PUT /projects/{project_id}/folders/{folder_id}",
       "check": "response_schema_conformance",
@@ -1277,24 +1169,6 @@
       "check": "response_schema_conformance",
       "failure": "JsonSchemaError",
       "signature": "properties/updated_at/format",
-      "first_seen": "2026-10-18",
-      "last_seen": "2026-10-18"
-    },
-    {
-      "id": "bdd85b",
-      "operation": "PUT /projects/{project_id}/folders/{folder_id}",
-      "check": "status_code_conformance",
-      "failure": "UndefinedStatusCode",
-      "signature": "404",
-      "first_seen": "2026-10-18",
-      "last_seen": "2026-10-18"
-    },
-    {
-      "id": "37e8a2",
-      "operation": "PUT /projects/{project_id}/folders/{folder_id}",
-      "check": "status_code_conformance",
-      "failure": "UndefinedStatusCode",
-      "signature": "500",
       "first_seen": "2026-10-18",
       "last_seen": "2026-10-18"
     },
@@ -1326,15 +1200,6 @@
       "last_seen": "2026-10-18"
     },
     {
-      "id": "6ba8a5",
-      "operation": "PUT /workspaces/{workspace_id}",
-      "check": "not_a_server_error",
-      "failure": "ServerError",
-      "signature": "500",
-      "first_seen": "2026-10-18",
-      "last_seen": "2026-10-18"
-    },
-    {
       "id": "fa68ad",
       "operation": "PUT /workspaces/{workspace_id}",
       "check": "response_schema_conformance",
@@ -1358,15 +1223,6 @@
       "check": "status_code_conformance",
       "failure": "UndefinedStatusCode",
       "signature": "404",
-      "first_seen": "2026-10-18",
-      "last_seen": "2026-10-18"
-    },
-    {
-      "id": "af910b",
-      "operation": "PUT /workspaces/{workspace_id}",
-      "check": "status_code_conformance",
-      "failure": "UndefinedStatusCode",
-      "signature": "500",
       "first_seen": "2026-10-18",
       "last_seen": "2026-10-18"
     },
