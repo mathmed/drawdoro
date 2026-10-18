@@ -15,6 +15,7 @@ from app.presentation.factories.project_factories import (
     update_project_factory,
 )
 from app.presentation.fastapi.dependencies.workspace_access import require_workspace_access
+from app.presentation.fastapi.schemas.error_schemas import error_response
 from app.presentation.fastapi.schemas.project_schemas import (
     CreateProjectRequest,
     ProjectResponse,
@@ -27,6 +28,8 @@ router = APIRouter(
     dependencies=[Depends(require_workspace_access)],
 )
 
+MISSING_WORKSPACE = error_response(404, "The workspace doesn't exist")
+
 
 @router.get("", response_model=list[ProjectResponse])
 async def list_projects(
@@ -37,7 +40,7 @@ async def list_projects(
     return [ProjectResponse.model_validate(p) for p in projects]
 
 
-@router.post("", response_model=ProjectResponse, status_code=201)
+@router.post("", response_model=ProjectResponse, status_code=201, responses=MISSING_WORKSPACE)
 async def create_project(
     workspace_id: uuid.UUID,
     body: CreateProjectRequest,

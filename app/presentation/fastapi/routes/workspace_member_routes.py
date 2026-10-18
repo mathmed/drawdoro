@@ -30,6 +30,7 @@ from app.presentation.fastapi.dependencies.workspace_access import (
     require_workspace_member,
     require_workspace_owner,
 )
+from app.presentation.fastapi.schemas.error_schemas import error_response
 from app.presentation.fastapi.schemas.workspace_member_schemas import (
     AddWorkspaceMemberRequest,
     UpdateWorkspaceMemberRoleRequest,
@@ -37,6 +38,10 @@ from app.presentation.fastapi.schemas.workspace_member_schemas import (
 )
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/members", tags=["workspace members"])
+
+MISSING_WORKSPACE_OR_USER = error_response(
+    404, "The workspace doesn't exist, or nobody with that e-mail has signed in yet"
+)
 
 
 @router.get(
@@ -57,6 +62,7 @@ async def list_members(
     response_model=WorkspaceMemberResponse,
     status_code=201,
     dependencies=[Depends(require_workspace_owner)],
+    responses=MISSING_WORKSPACE_OR_USER,
 )
 async def add_member(
     workspace_id: uuid.UUID,

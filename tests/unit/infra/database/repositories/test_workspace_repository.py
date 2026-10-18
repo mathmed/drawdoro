@@ -105,3 +105,18 @@ async def test_should_roll_back_and_propagate_other_integrity_errors(
     with pytest.raises(IntegrityError):
         await sut.create(Workspace(name="Acme", slug="acme"))
     session.rollback.assert_awaited_once()
+
+
+@pytest.mark.parametrize(("found", "expected"), [(uuid.uuid4(), True), (None, False)])
+async def test_should_check_existence_including_deleted_workspaces(
+    sut: WorkspaceRepositoryImpl, session: AsyncMock, found: uuid.UUID | None, expected: bool
+) -> None:
+    workspace_id = uuid.uuid4()
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = found
+    session.execute.return_value = result
+    assert await sut.exists_including_deleted(workspace_id) is expected
+    statement = session.execute.await_args.args[0]
+    assert [column.name for column in statement.selected_columns] == ["id"]
+    assert list(statement.compile().params.values()) == [workspace_id]
+    assert "deleted_at" not in str(statement)

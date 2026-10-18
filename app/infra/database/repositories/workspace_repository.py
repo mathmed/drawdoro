@@ -41,6 +41,12 @@ class WorkspaceRepositoryImpl(WorkspaceRepository):
         orm = result.scalar_one_or_none()
         return _to_domain(orm) if orm else None
 
+    async def exists_including_deleted(self, workspace_id: uuid.UUID) -> bool:
+        result = await self._session.execute(
+            select(WorkspaceORM.id).where(WorkspaceORM.id == workspace_id)
+        )
+        return result.scalar_one_or_none() is not None
+
     async def list_all(self) -> list[Workspace]:
         result = await self._session.execute(
             select(WorkspaceORM).where(WorkspaceORM.deleted_at.is_(None))

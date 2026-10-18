@@ -11,6 +11,7 @@ from app.domain.usecases.project.update_project import UpdateProject
 from app.infra.database.repositories.diagram_repository import DiagramRepositoryImpl
 from app.infra.database.repositories.folder_repository import FolderRepositoryImpl
 from app.infra.database.repositories.project_repository import ProjectRepositoryImpl
+from app.infra.database.repositories.workspace_repository import WorkspaceRepositoryImpl
 from app.infra.database.session import get_session
 
 
@@ -19,7 +20,7 @@ def build_project_placement(session: AsyncSession) -> ProjectPlacement:
 
 
 async def create_project_factory(session: AsyncSession = Depends(get_session)) -> CreateProject:
-    return CreateProject(ProjectRepositoryImpl(session))
+    return CreateProject(ProjectRepositoryImpl(session), WorkspaceRepositoryImpl(session))
 
 
 async def get_project_factory(session: AsyncSession = Depends(get_session)) -> GetProject:

@@ -14,6 +14,9 @@ class WorkspaceRepository(ABC):
     async def get_by_id(self, workspace_id: uuid.UUID) -> Workspace | None: ...
 
     @abstractmethod
+    async def exists_including_deleted(self, workspace_id: uuid.UUID) -> bool: ...
+
+    @abstractmethod
     async def list_all(self) -> list[Workspace]: ...
 
     @abstractmethod

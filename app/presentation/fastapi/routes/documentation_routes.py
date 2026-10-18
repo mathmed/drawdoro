@@ -19,12 +19,15 @@ from app.presentation.fastapi.schemas.documentation_schemas import (
     DocumentationPageResponse,
     UpsertDocumentationPageRequest,
 )
+from app.presentation.fastapi.schemas.error_schemas import error_response
 
 router = APIRouter(
     prefix="/diagrams/{diagram_id}/documentation",
     tags=["documentation"],
     dependencies=[Depends(require_workspace_access)],
 )
+
+MISSING_DIAGRAM = error_response(404, "The diagram doesn't exist")
 
 
 @router.get("", response_model=DocumentationPageResponse)
@@ -36,7 +39,7 @@ async def get_documentation_page(
     return DocumentationPageResponse.model_validate(page)
 
 
-@router.put("", response_model=DocumentationPageResponse)
+@router.put("", response_model=DocumentationPageResponse, responses=MISSING_DIAGRAM)
 async def upsert_documentation_page(
     diagram_id: uuid.UUID,
     body: UpsertDocumentationPageRequest,
