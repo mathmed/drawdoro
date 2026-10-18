@@ -58,6 +58,8 @@ Health checks: `curl http://localhost:8000/health` (liveness, never touches the 
 | `make suppressions` | Suppression ratchet: fails when the suppressions of the repository differ from `suppressions-baseline.json`. See [Suppression ratchet](#suppression-ratchet) |
 | `make suppressions-update` | Lower `suppressions-baseline.json` after removing suppressions (never raises it) |
 | `make mutation-changed` | What the PR job runs: mutation testing of only the use cases and domain services changed against `BASE` (default `origin/main`) |
+| `make risk-floor` | Minimum risk level of the commits of `REF` (default `HEAD`) against `BASE`, from `.github/risk-floors.yaml`. See [Pull requests and risk](#pull-requests-and-risk) |
+| `make risk-labels` | Create or update the four `risk:<level>` labels on the GitHub repository (idempotent, needs `gh`) |
 | `make migrate` | Apply database migrations (requires running DB) |
 | `make migration msg="desc"` | Generate a new Alembic migration |
 
@@ -302,6 +304,32 @@ Reading the result (`mutants/report.md` locally, job summary and `mutation-repor
 
 Results are cached in `mutants/` (git-ignored): the next run only re-tests what changed. Delete it for a
 clean run; `uv run mutmut browse` explores the results interactively.
+
+### Pull requests and risk
+
+Every pull request description follows [`.github/pull_request_template.md`](../.github/pull_request_template.md):
+
+| Section | What goes in it |
+|---|---|
+| **Risk** | `low`, `medium`, `high` or `critical` and one line of why |
+| **Summary** | One sentence: what changes in behavior, and why |
+| **Behavior** | Up to five changes, most critical first, as *before → after*, in plain words for someone who has not read the code: no backticks, paths, file, function or test names |
+| **Unchanged** | What a reviewer might fear broke, or "behavior-preserving refactor" |
+| **Look here** | The only place for file, function and test references: the evidence (test or code) of every Behavior item, pipeline or check changes, departures from the task and what deserves a human look |
+| **Deploy steps** | Always present: env vars, secrets, migration order, flags, external configuration, rollback; or "None: normal merge and deploy." |
+| **Not verified** | What the author could not check, or "nothing"; plus **Mismatch** when the diff contradicts the author's handoff notes |
+
+The risk level has floors by file, in [`.github/risk-floors.yaml`](../.github/risk-floors.yaml): pipeline config
+(dependency manifests and locks, pre-commit, `Makefile`, baselines, `scripts/`, `.github/`, `.claude/`,
+`CLAUDE.md`, `docker/`, the frontend's build, lint, test and TypeScript configuration), database migrations (and
+the SQLAlchemy models) and auth (sign-in, API keys, share tokens, workspace roles, the dependencies that decide who
+may do what, the settings) are never below **high**, and any deploy step other than "None" makes it at least
+**medium**. `make risk-floor` prints the floor of the current branch and the files that set it.
+
+The *Risk label* workflow (`.github/workflows/risk-label.yml`, outside `ci.yml` so a label change does not rerun
+every analysis) requires exactly one `risk:<level>` label on the PR and fails when it is below the file floor
+(`scripts/risk.py`). It reruns when labels change. Dependabot PRs get `risk:high`, since they change
+pipeline config. Create the labels once with `make risk-labels`.
 
 ### Quality Report
 

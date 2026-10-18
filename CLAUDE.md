@@ -34,6 +34,8 @@ make smoke        boot smoke: clean Postgres + migrations + real API (auth on/of
 make contract     API contract: real API (auth on) + bounded, deterministic Schemathesis against /openapi.json
 make contract-prune  drop contract-baseline.json entries that no longer happen (never adds one)
 make openapi-diff fail on breaking OpenAPI changes vs BASE (default origin/main); needs oasdiff
+make risk-floor   minimum risk level of the branch vs BASE (REF=origin/<branch> from another branch), from .github/risk-floors.yaml
+make risk-labels  create/update the risk:<level> labels on GitHub
 make lint-imports architecture contracts (import-linter) for app/ and mcp/
 make suppressions suppression ratchet: fails when noqa/type: ignore/nosec/eslint-disable/@ts-ignore/skip/only... differ from the baseline
 make suppressions-update  lower suppressions-baseline.json after removing suppressions (never raises it)
@@ -107,6 +109,10 @@ tests/integration/ HTTP tests with TestClient
   `.skip`/`.only`/`.fails` tests) with `suppressions-baseline.json`. Fix the cause instead of suppressing it. Never
   raise the baseline (`update --allow-increase`) without the owner's explicit approval. When you remove
   suppressions, run `make suppressions-update` and commit the lower baseline in the same PR.
+- Pipeline and agent files (dependency manifests and locks, `.pre-commit-config.yaml`, `Makefile`, the baselines,
+  `scripts/`, `.github/`, `.claude/`, `CLAUDE.md`, `docker/`, the frontend build/lint/test config), migrations and
+  auth (sign-in, API keys, share tokens, roles) put the PR at the `high` risk floor (`.github/risk-floors.yaml`).
+  Do not change pipeline files unless the task asks for it, and call the change out in the PR. Never lower a floor.
 - Never relax an import-linter contract (`[tool.importlinter]` in `pyproject.toml` or `mcp/pyproject.toml`)
   nor add `ignore_imports` without the owner's approval: fix the import instead.
 - Never remove or rename `/health` (liveness) or `/ready` (readiness): deploy probes depend on them.
