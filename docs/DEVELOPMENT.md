@@ -45,14 +45,21 @@ Health checks: `curl http://localhost:8000/health` (liveness, never touches the 
 | `make test-unit` | Run only the unit tests |
 | `make test-mcp` | Run the MCP server tests and type check |
 | `make test-frontend` | Run the frontend lint, type check and tests with coverage |
-| `make hooks` | Run all quality checks (ruff, mypy, bandit, vulture, xenon, pip-audit) |
+| `make hooks` | Run all quality checks (ruff, mypy, import-linter, MCP manifest, suppression ratchet, bandit, vulture, xenon, pip-audit) |
 | `make format-code` | Fix lint issues and format the code |
 | `make smoke` | Boot smoke: clean Postgres, `alembic upgrade head`, real API (auth on and off), `/health`, `/ready` and the MCP server. See [Boot smoke](#boot-smoke) |
 | `make smoke-mcp` | MCP smoke only: streamable-http server, `/health`, `initialize` and `tools/list` |
+| `make contract` | API contract: clean Postgres, migrations, the real API with auth on and a bounded, deterministic Schemathesis pass against `/openapi.json`. See [API contract](#api-contract-schemathesis) |
+| `make contract-prune` | Drop the entries of `contract-baseline.json` that no longer happen, after a fix (never adds one) |
+| `make openapi-diff` | Fail on breaking changes between the OpenAPI schema of the working tree and of its merge base with `BASE` (default `origin/main`). Needs `oasdiff`, see [Breaking API changes](#breaking-api-changes-oasdiff) |
 | `make lint-imports` | Check the architecture contracts (import-linter) of the API and the MCP server |
 | `make mutation` | Mutation testing (mutmut) of the use cases and domain services; report in `mutants/report.md` |
 | `make mcp-manifest` | Regenerate `frontend/src/config/mcpTools.json` (the *Available tools* list in *Connect Claude*) from the tools the MCP server registers. The MCP tests and a pre-commit hook fail while it is out of date |
+| `make suppressions` | Suppression ratchet: fails when the suppressions of the repository differ from `suppressions-baseline.json`. See [Suppression ratchet](#suppression-ratchet) |
+| `make suppressions-update` | Lower `suppressions-baseline.json` after removing suppressions (never raises it) |
 | `make mutation-changed` | What the PR job runs: mutation testing of only the use cases and domain services changed against `BASE` (default `origin/main`) |
+| `make risk-floor` | Minimum risk level of the commits of `REF` (default `HEAD`) against `BASE`, from `.github/risk-floors.yaml`. See [Pull requests and risk](#pull-requests-and-risk) |
+| `make risk-labels` | Create or update the four `risk:<level>` labels on the GitHub repository (idempotent, needs `gh`) |
 | `make migrate` | Apply database migrations (requires running DB) |
 | `make migration msg="desc"` | Generate a new Alembic migration |
 
@@ -105,9 +112,10 @@ loaders are branded through configuration, see [White-label](WHITE_LABEL.md).
 
 ## Validation of agent-generated code
 
-Three deterministic checks catch what unit tests with mocks miss: the boot smoke, the architecture contracts and
-mutation testing. Agents run `make smoke` and `make lint-imports` before opening a PR (see `CLAUDE.md`). Their
-results, with every other CI analysis, land in a single [Quality Report](#quality-report) comment on the PR.
+Deterministic checks catch what unit tests with mocks miss: the boot smoke, the API contract, the architecture
+contracts, the suppression ratchet and mutation testing. Agents run `make smoke`, `make contract` and
+`make lint-imports` before opening a PR (see `CLAUDE.md`). Their results, with every other CI analysis, land in a
+single [Quality Report](#quality-report) comment on the PR.
 
 ### Boot smoke
 
@@ -142,16 +150,80 @@ gallery items and reads the diagram and its history back.
 | `SMOKE_STRICT_SCHEMA` | `1` | `0` turns `alembic check` drift into a warning instead of failing the smoke |
 | `SMOKE_SKIP_MCP` | `0` | `1` skips the MCP smoke inside `make smoke` |
 
+The boot itself (throwaway Postgres, alembic, uvicorn, cleanup and logs on failure) lives in
+`scripts/api_server.sh`, which `scripts/smoke.sh` and `scripts/contract.sh` source.
+
+### API contract (Schemathesis)
+
+`make contract`, CI job `contract`. `scripts/contract.sh` boots the API like the smoke (throwaway Postgres,
+`alembic upgrade head`, `.env.example`), seeds a user with a personal API key and starts the API the way
+production runs it (`ENV=production`, `AUTH_ENABLED=true`). Then [Schemathesis](https://schemathesis.readthedocs.io/)
+reads `/openapi.json` and runs every check (`--checks all`) on every HTTP operation, as that user (`X-API-Key`):
+documented status codes, content types, headers and response schemas, invalid input rejected, valid input
+accepted, no 5xx, and the stateful phase that chains operations through the links it infers.
+
+It is **bounded and deterministic**: one worker, a fixed seed (`CONTRACT_SEED`, default 1), up to
+`CONTRACT_MAX_EXAMPLES` (default 25) generated cases per operation and phase, no example database, every example
+run even after a failure, a 5 s request timeout (`CONTRACT_REQUEST_TIMEOUT`) and always a clean database, so the
+same code sends the same requests and a CI failure reproduces locally. It takes about a minute and a half.
+
+What it leaves out, on purpose:
+
+- the WebSockets (`/ws/diagrams/{id}`, `/ws/workspaces/{id}/presence`): they are not part of the OpenAPI schema;
+- the identity provider: no Cognito token is involved. The seeded personal key is the identity agents use, so
+  the user's own gallery and workspace roles apply; managing personal keys (`/me/api-keys`) only works from a
+  browser session, so there it only sees the `403`;
+- the `ignored_auth` check: agents send the key in the `X-API-Key` header, which the schema declares as a parameter
+  rather than a security scheme, so Schemathesis would take every accepted request for "authentication ignored".
+  The smoke checks the `401` without credentials and with a wrong key.
+
+**Known failures** live in `contract-baseline.json`, Schemathesis' own
+[baseline](https://schemathesis.readthedocs.io/): each entry is an operation, a check and the signature of the
+failure (for example `POST /workspaces`, `not_a_server_error`, `500`). They are still exercised and listed as known,
+but only a failure that is not in the file fails the run. The first run recorded the API as it was: undocumented
+status codes (mostly `404`), naive timestamps that are not RFC 3339 `date-time`, domain `422` errors whose `detail`
+is a string instead of the documented list, missing `Allow` headers on `405`, and `500`s on unknown parents, a
+duplicate workspace slug or NUL bytes in text. It works as a ratchet:
+
+- a **new failure** fails the job: fix the route or document the response (`responses=` on the route). Accepting
+  it (`./scripts/contract.sh --baseline-update`) needs the owner's explicit approval;
+- an entry that **no longer happens** fails it too, so a fix locks itself in: run `make contract-prune` and commit
+  the smaller baseline in the same PR.
+
+Extra arguments of `scripts/contract.sh` go to `schemathesis run` (for example `--include-path /workspaces` while
+fixing one route). On a merge conflict in `contract-baseline.json`, take either side and rerun `make contract`:
+it says what is new and what to prune.
+
+### Breaking API changes (oasdiff)
+
+`make openapi-diff`, CI job `openapi-diff` (pull requests only). `scripts/openapi.py diff` exports the OpenAPI
+schema of the working tree and of its merge base with the base branch (checked out in a temporary `git worktree`,
+with its own environment of production dependencies) and runs
+[oasdiff](https://github.com/oasdiff/oasdiff) `changelog --fail-on ERR`: removing or renaming a route, removing a
+response field, making a parameter required or narrowing a type fails the PR. Warnings (possible breaking changes)
+show as ⚠️ in the Quality Report without failing; additive changes are listed as information. Both exports run
+from a temporary directory, so a local `.env` never makes the two schemas differ.
+
+Public contracts only grow additively (`CLAUDE.md`): a deliberate breaking change needs the owner's explicit
+approval and is called out in the PR. Locally, install the same version CI pins in `ci.yml` (`OASDIFF_VERSION`):
+`go install github.com/oasdiff/oasdiff@v1.33.0`, or the `oasdiff_<version>_linux_amd64.tar.gz` /
+`darwin_all.tar.gz` binary of its [release](https://github.com/oasdiff/oasdiff/releases) on your `PATH`. CI
+downloads it and checks its sha256; Dependabot does not track it, so bump `OASDIFF_VERSION` and `OASDIFF_SHA256`
+together.
+
 ### Static analysis thresholds
 
 `make hooks`, CI jobs `lint` and `quality`. The backend holds the strictest setting of every tool, with no
-baseline, per-file ignore, `# noqa`, `# type: ignore` or vulture allowlist. A regression fails pre-commit and CI.
+per-file ignore or vulture allowlist. A regression fails pre-commit and CI.
 
-The only suppressions are five line-scoped `# nosec` in `scripts/`, where running a process is the job:
-`B404` (importing `subprocess`) and `B603` (a process started without a shell) in `quality_report.py`
-(`run <analysis> -- <command>` runs the CI analysis commands) and `mutation.py` (`git` and `mutmut`, resolved
-to absolute paths with `shutil.which`). Bandit flags every `subprocess` call at low severity whatever its
-input, so these are reviewed call sites, not tolerated findings; nothing else may be suppressed.
+The few line-scoped suppressions left are counted by the [suppression ratchet](#suppression-ratchet) and listed in
+`suppressions-baseline.json`. Most are `# nosec` in `scripts/`, where running a process is the job: `B404`
+(importing `subprocess`) and `B603` (a process started without a shell) in `quality_report.py`
+(`run <analysis> -- <command>` runs the CI analysis commands), `mutation.py` (`git` and `mutmut`) and
+`openapi.py` (`git`, `uv` and `oasdiff`), the last two resolving the executables to absolute paths with
+`shutil.which`. Bandit flags every `subprocess` call at low severity whatever its
+input, so these are reviewed call sites, not tolerated findings; nothing else may be suppressed without the
+owner's approval.
 
 | Tool | Scope | Threshold |
 |---|---|---|
@@ -165,6 +237,32 @@ input, so these are reviewed call sites, not tolerated findings; nothing else ma
 | mutmut | use cases and domain services | `MUTATION_MIN_SCORE` ratchet, see below |
 
 Thresholds are ratchets: raise them when the code allows it, never lower them to get a PR green.
+
+### Suppression ratchet
+
+`make suppressions`, pre-commit hook `suppressions` and a step of the CI job `lint`. `scripts/suppressions.py`
+counts, per file and per kind, every suppression in `app/`, `alembic/`, `mcp/`, `scripts/`, `tests/` and
+`frontend/` (skipping hidden directories such as `.venv`, `node_modules`, `dist`, `coverage` and caches) and
+compares the counts with the committed `suppressions-baseline.json`:
+
+| Language | What counts |
+|---|---|
+| Python | `# noqa`, `# type: ignore`, `# nosec`, `# pragma: no cover` / `no branch`, `# pylint: disable`, `# mypy:`, `# pyright:`, `# fmt: off` / `skip` (and `isort`/`yapf`), `pytest.mark.skip` / `skipif` / `xfail`, `pytest.skip()` / `xfail()` / `importorskip()`, `unittest.skip*` / `expectedFailure`, `self.skipTest()` |
+| TypeScript / JavaScript | `eslint-disable` (also `-line`, `-next-line` and inline rule configuration such as `/* eslint no-console: "off" */`), `@ts-ignore`, `@ts-expect-error`, `@ts-nocheck`, `istanbul` / `v8` / `c8 ignore`, `prettier-ignore`, skipped tests (`it` / `test` / `describe` / `suite` `.skip`, `.skipIf`, `.runIf`, `.todo`, `xit`, `xdescribe`, `ctx.skip()`), focused tests (`.only`, `fit`, `fdescribe`) and expected failures (`.fails`) |
+
+Python comments are read with the tokenizer and test markers with the AST, so the same words inside strings do
+not count. In TypeScript a directive only counts right after a comment opener (`//`, `/*`).
+
+Any difference fails, in both directions:
+
+- **more** suppressions in a file than in the baseline: remove them and fix the cause. Raising the baseline
+  (`uv run python scripts/suppressions.py update --allow-increase`) needs the owner's explicit approval and is
+  called out in the PR;
+- **fewer**: lock the improvement in with `make suppressions-update` and commit the lower baseline in the same
+  PR. The target refuses to raise any count.
+
+Moving a suppression to another file counts as one more there and one less in the old file. The Quality Report
+shows the totals by kind, or the files and lines that changed.
 
 ### Architecture contracts
 
@@ -207,6 +305,32 @@ Reading the result (`mutants/report.md` locally, job summary and `mutation-repor
 Results are cached in `mutants/` (git-ignored): the next run only re-tests what changed. Delete it for a
 clean run; `uv run mutmut browse` explores the results interactively.
 
+### Pull requests and risk
+
+Every pull request description follows [`.github/pull_request_template.md`](../.github/pull_request_template.md):
+
+| Section | What goes in it |
+|---|---|
+| **Risk** | `low`, `medium`, `high` or `critical` and one line of why |
+| **Summary** | One sentence: what changes in behavior, and why |
+| **Behavior** | Up to five changes, most critical first, as *before → after*, in plain words for someone who has not read the code: no backticks, paths, file, function or test names |
+| **Unchanged** | What a reviewer might fear broke, or "behavior-preserving refactor" |
+| **Look here** | The only place for file, function and test references: the evidence (test or code) of every Behavior item, pipeline or check changes, departures from the task and what deserves a human look |
+| **Deploy steps** | Always present: env vars, secrets, migration order, flags, external configuration, rollback; or "None: normal merge and deploy." |
+| **Not verified** | What the author could not check, or "nothing"; plus **Mismatch** when the diff contradicts the author's handoff notes |
+
+The risk level has floors by file, in [`.github/risk-floors.yaml`](../.github/risk-floors.yaml): pipeline config
+(dependency manifests and locks, pre-commit, `Makefile`, baselines, `scripts/`, `.github/`, `.claude/`,
+`CLAUDE.md`, `docker/`, the frontend's build, lint, test and TypeScript configuration), database migrations (and
+the SQLAlchemy models) and auth (sign-in, API keys, share tokens, workspace roles, the dependencies that decide who
+may do what, the settings) are never below **high**, and any deploy step other than "None" makes it at least
+**medium**. `make risk-floor` prints the floor of the current branch and the files that set it.
+
+The *Risk label* workflow (`.github/workflows/risk-label.yml`, outside `ci.yml` so a label change does not rerun
+every analysis) requires exactly one `risk:<level>` label on the PR and fails when it is below the file floor
+(`scripts/risk.py`). It reruns when labels change. Dependabot PRs get `risk:high`, since they change
+pipeline config. Create the labels once with `make risk-labels`.
+
 ### Quality Report
 
 Every PR gets **one** comment titled *Quality Report* (found and updated through the
@@ -214,11 +338,12 @@ Every PR gets **one** comment titled *Quality Report* (found and updated through
 
 - the top line is the verdict (❌ failed, ⚠️ passed with warnings, ✅ all good) and the table has one row per
   analysis: backend lint/format, types (API and MCP), security, dead code, complexity, tests and coverage
-  (API and MCP), architecture contracts (API and MCP), boot smoke, mutation testing, and the frontend lint,
-  types, tests with coverage and build;
+  (API and MCP), architecture contracts (API and MCP), boot smoke, mutation testing, the frontend lint,
+  types, tests with coverage and build, the API contract, breaking API changes, and the suppression ratchet of
+  the whole repository;
 - each section below has the summary and, in a collapsed `<details>`, the evidence: least covered files,
-  broken contracts with the violating import, smoke scenarios with their boot time, surviving mutants with
-  their diffs, lint problems, failures;
+  broken contracts with the violating import, smoke scenarios with their boot time, new contract failures,
+  surviving mutants with their diffs, lint problems, failures;
 - ✅ passed, ⚠️ warning (ESLint warnings or models/migrations drift reported without failing, as with
   `SMOKE_STRICT_SCHEMA=0`; in CI both fail the job), ❌ failed,
   ⏭️ not run (job cancelled or skipped, or nothing to mutate). A job that failed before producing its result

@@ -48,3 +48,14 @@ both: never remove or rename them.
 | WS | /ws/workspaces/{id}/presence | Who is in each diagram of the workspace, for the sidebar: a snapshot on connect, then batched deltas (see [Sidebar presence](REALTIME.md#sidebar-presence)). Signed-in members only (`?token=<ID token>`); share-link guests are refused. Nothing is stored |
 
 All routes except `/health` and `/ready` return `501 Not Implemented` until infra is wired.
+
+## Contract tests
+
+`make contract` (CI job `contract`) runs Schemathesis against `/openapi.json` on the real API: responses must match
+the documented status codes and schemas. The deviations found when it was introduced are recorded in
+`contract-baseline.json` and only new ones fail; see [API contract](DEVELOPMENT.md#api-contract-schemathesis).
+When a route answers a status it does not declare yet, document it with `responses=` on the route.
+
+`make openapi-diff` (CI job `openapi-diff`) compares the schema of a pull request with the one of its base and
+fails on breaking changes: routes and response fields are only added, never removed or renamed; see
+[Breaking API changes](DEVELOPMENT.md#breaking-api-changes-oasdiff).

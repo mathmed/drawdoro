@@ -19,11 +19,14 @@ from scripts.quality_report import (
     analyze_import_linter,
     analyze_mutation,
     analyze_mypy,
+    analyze_oasdiff,
     analyze_pip_audit,
     analyze_pytest,
     analyze_ruff_check,
     analyze_ruff_format,
+    analyze_schemathesis,
     analyze_smoke,
+    analyze_suppressions,
     analyze_tsc,
     analyze_vitest,
     analyze_vulture,
@@ -435,6 +438,285 @@ class TestMutationAnalyzer:
         assert finding.summary == "mutmut failed before producing a score"
 
 
+CONTRACT_HEADER = """>> Schemathesis against /openapi.json (seed 1, up to 25 examples per operation and phase)
+Schemathesis v4.31.1
+━━━━━━━━━━━━━━━━━━━━
+
+ ✅  Loaded specification from http://127.0.0.1:37723/openapi.json (in 1.64s)
+
+     Base URL:         http://127.0.0.1:37723/
+     Specification:    Open API 3.1.0
+     Operations:       51 selected / 51 total
+"""
+CONTRACT_OK = (
+    CONTRACT_HEADER
+    + """
+=================================== SUMMARY ====================================
+
+Baseline:
+  Known failures: 162
+
+Test cases:
+  3007 generated, 3007 passed
+
+Seed: 1
+
+============================= 3 warnings in 70.33s =============================
+
+>> Contract passed
+"""
+)
+CONTRACT_NEW_FAILURES = (
+    CONTRACT_HEADER
+    + """
+=================================== FAILURES ===================================
+________________________________ Stateful tests ________________________________
+1. Test Case ID: 2g4NaS
+
+- Response violates schema
+
+    "The dark thumbnail must be a PNG or WebP image" is not of type "array"
+
+=================================== SUMMARY ====================================
+
+Failures:
+  ❌ Response violates schema: 5
+  ❌ API accepted schema-violating request: 1
+
+Baseline:
+  Known failures: 170
+
+Test cases:
+  5571 generated, 4 found 6 unique failures
+
+Seed: 1
+
+====================== 6 failures, 3 warnings in 177.43s =======================
+
+!! CONTRACT FAILED: schemathesis found failures that are not in contract-baseline.json
+"""
+)
+CONTRACT_STALE = (
+    CONTRACT_HEADER
+    + """
+=================================== SUMMARY ====================================
+
+Baseline:
+  Known failures: 162
+  Unobserved entries: 2
+
+Test cases:
+  3007 generated, 3007 passed
+
+Seed: 1
+
+============================= 3 warnings in 73.10s =============================
+
+!! CONTRACT FAILED: contract-baseline.json lists failures that no longer happen
+"""
+)
+
+
+class TestSchemathesisAnalyzer:
+    def test_should_pass_with_the_scope_known_failures_and_seed(self) -> None:
+        finding = analyze_schemathesis(fragment(Analysis.SCHEMATHESIS, CONTRACT_OK))
+
+        assert finding.status == Status.OK
+        assert finding.summary == (
+            "No new contract violations · 3007 test cases on 51 operations · "
+            "162 known failures in the baseline · seed 1"
+        )
+
+    def test_should_list_the_new_failures_by_check_with_their_details(self) -> None:
+        finding = analyze_schemathesis(fragment(Analysis.SCHEMATHESIS, CONTRACT_NEW_FAILURES, 1))
+
+        assert finding.status == Status.FAILED
+        assert finding.summary == (
+            "6 new failures: Response violates schema (5); "
+            "API accepted schema-violating request (1) · 5571 test cases on 51 operations · "
+            "170 known failures in the baseline · seed 1"
+        )
+        assert "Stateful tests" in finding.details
+        assert "is not of type" in finding.details
+        assert "Known failures" not in finding.details
+
+    def test_should_ask_to_prune_entries_that_no_longer_happen(self) -> None:
+        finding = analyze_schemathesis(fragment(Analysis.SCHEMATHESIS, CONTRACT_STALE, 1))
+
+        assert finding.status == Status.FAILED
+        assert finding.summary.startswith(
+            "2 baseline entries no longer happen: run `make contract-prune` · 3007 test cases"
+        )
+
+    def test_should_use_the_singular_for_one_stale_entry(self) -> None:
+        output = CONTRACT_STALE.replace("Unobserved entries: 2", "Unobserved entries: 1")
+
+        finding = analyze_schemathesis(fragment(Analysis.SCHEMATHESIS, output, 1))
+
+        assert finding.summary.startswith("1 baseline entry no longer happens")
+
+    def test_should_say_why_the_contract_test_did_not_run(self) -> None:
+        output = (
+            ">> Starting a throwaway postgres:17\n!! CONTRACT FAILED: could not start Postgres\n"
+        )
+
+        finding = analyze_schemathesis(fragment(Analysis.SCHEMATHESIS, output, 1))
+
+        assert finding.status == Status.FAILED
+        assert finding.summary == "Contract test did not run: could not start Postgres"
+        assert "could not start Postgres" in finding.details
+
+    def test_should_fail_without_a_reason_when_the_script_crashed(self) -> None:
+        finding = analyze_schemathesis(fragment(Analysis.SCHEMATHESIS, "Killed", 137))
+
+        assert finding.summary == "Contract test did not run"
+
+
+OASDIFF_BREAKING = """Comparing the OpenAPI schema of HEAD with origin/main (merge base 668d8063901a)
+3 changes: 1 error, 1 warning, 1 info
+error\t[response-required-property-removed] at head.openapi.json
+\tin API GET /workspaces
+\t\tremoved the required property `items/slug` from the response with the `200` status
+
+warning\t[request-parameter-pattern-added] at head.openapi.json
+\tin API GET /gallery
+\t\tadded the pattern `^[a-z]+$` to the `query` request parameter `tag`
+
+info\t[response-optional-property-added] at head.openapi.json
+\tin API GET /workspaces
+\t\tadded the optional property `items/nickname` to the response with the `200` status
+"""
+
+
+def oasdiff_output(errors: int, warnings: int, infos: int) -> str:
+    total = errors + warnings + infos
+    return OASDIFF_BREAKING.replace(
+        "3 changes: 1 error, 1 warning, 1 info",
+        f"{total} changes: {errors} error, {warnings} warning, {infos} info",
+    )
+
+
+class TestOasdiffAnalyzer:
+    def test_should_pass_when_nothing_changed(self) -> None:
+        output = "Comparing the OpenAPI schema of HEAD with origin/main\nNo changes detected\n"
+
+        finding = analyze_oasdiff(fragment(Analysis.OASDIFF, output))
+
+        assert (finding.status, finding.summary) == (Status.OK, "No API changes")
+
+    def test_should_fail_on_breaking_changes_and_list_every_change(self) -> None:
+        finding = analyze_oasdiff(fragment(Analysis.OASDIFF, OASDIFF_BREAKING, 1))
+
+        assert finding.status == Status.FAILED
+        assert finding.summary == "1 breaking change out of 3"
+        assert finding.details.splitlines() == [
+            "error   API GET /workspaces: removed the required property `items/slug` from the "
+            "response with the `200` status [response-required-property-removed]",
+            "warning API GET /gallery: added the pattern `^[a-z]+$` to the `query` request "
+            "parameter `tag` [request-parameter-pattern-added]",
+            "info    API GET /workspaces: added the optional property `items/nickname` to the "
+            "response with the `200` status [response-optional-property-added]",
+        ]
+
+    def test_should_warn_about_possible_breaking_changes(self) -> None:
+        finding = analyze_oasdiff(fragment(Analysis.OASDIFF, oasdiff_output(0, 2, 1)))
+
+        assert finding.status == Status.WARNING
+        assert finding.summary == "2 possible breaking changes (warning) out of 3"
+
+    def test_should_pass_additive_changes(self) -> None:
+        finding = analyze_oasdiff(fragment(Analysis.OASDIFF, oasdiff_output(0, 0, 1)))
+
+        assert (finding.status, finding.summary) == (Status.OK, "1 API change, none breaking")
+
+    def test_should_fail_when_oasdiff_fails_without_breaking_changes(self) -> None:
+        finding = analyze_oasdiff(fragment(Analysis.OASDIFF, oasdiff_output(0, 0, 1), 2))
+
+        assert finding.summary == "OpenAPI diff failed after comparing"
+
+    def test_should_fail_when_the_schemas_could_not_be_compared(self) -> None:
+        output = "fatal: Not a valid object name origin/main\nIs origin/main fetched?"
+
+        finding = analyze_oasdiff(fragment(Analysis.OASDIFF, output, 1))
+
+        assert finding.status == Status.FAILED
+        assert finding.summary == "OpenAPI diff failed before comparing"
+        assert finding.details == output
+
+
+def suppressions_output(changes: list[dict[str, object]], total: int = 6) -> str:
+    payload = {
+        "total": total,
+        "baseline_total": 6,
+        "totals": {"type-ignore": 1, "nosec": 5},
+        "changes": changes,
+    }
+    return "Suppressions: 6 (baseline 6)\nSUPPRESSIONS_RESULT: " + json.dumps(payload)
+
+
+def suppression_change(path: str, baseline: int, current: int) -> dict[str, object]:
+    return {
+        "path": path,
+        "kind": "nosec",
+        "baseline": baseline,
+        "current": current,
+        "lines": list(range(1, current + 1)),
+    }
+
+
+class TestSuppressionsAnalyzer:
+    def test_should_pass_and_list_the_totals_by_kind_when_matching_the_baseline(self) -> None:
+        finding = analyze_suppressions(fragment(Analysis.SUPPRESSIONS, suppressions_output([])))
+
+        assert finding.status == Status.OK
+        assert finding.summary == "6 suppressions, matching the baseline"
+        assert finding.details == "type-ignore: 1\nnosec: 5"
+
+    def test_should_fail_and_list_only_the_new_suppressions(self) -> None:
+        output = suppressions_output(
+            [suppression_change("app/a.py", 1, 3), suppression_change("app/b.py", 2, 0)], 7
+        )
+
+        finding = analyze_suppressions(fragment(Analysis.SUPPRESSIONS, output, 1))
+
+        assert finding.status == Status.FAILED
+        assert finding.summary == "2 new suppressions above the baseline"
+        assert finding.details_format == DetailsFormat.MARKDOWN
+        assert "| `app/a.py` | nosec | 1 → 3 | 1, 2, 3 |" in finding.details
+        assert "app/b.py" not in finding.details
+
+    def test_should_ask_for_a_baseline_update_when_suppressions_were_removed(self) -> None:
+        output = suppressions_output([suppression_change("app/b.py", 2, 0)], 4)
+
+        finding = analyze_suppressions(fragment(Analysis.SUPPRESSIONS, output, 1))
+
+        assert finding.status == Status.FAILED
+        assert finding.summary == (
+            "2 suppressions removed but still counted in the baseline: "
+            "run `make suppressions-update`"
+        )
+        assert "| `app/b.py` | nosec | 2 → 0 | - |" in finding.details
+
+    def test_should_point_to_the_full_list_when_there_are_too_many_changes(self) -> None:
+        changes = [suppression_change(f"app/m{index}.py", 0, 1) for index in range(52)]
+
+        finding = analyze_suppressions(
+            fragment(Analysis.SUPPRESSIONS, suppressions_output(changes, 58), 1)
+        )
+
+        assert "... and 2 more: run `make suppressions` for the full list." in finding.details
+        assert "app/m51.py" not in finding.details
+
+    def test_should_fail_without_a_result_line(self) -> None:
+        finding = analyze_suppressions(
+            fragment(Analysis.SUPPRESSIONS, "FileNotFoundError: root not found: app", 1)
+        )
+
+        assert finding.status == Status.FAILED
+        assert finding.summary == "Suppression check failed before producing a result"
+        assert finding.details == "FileNotFoundError: root not found: app"
+
+
 class TestFrontendAnalyzers:
     def test_should_warn_about_eslint_warnings_with_their_rules(self) -> None:
         finding = analyze_eslint(fragment(Analysis.ESLINT, ESLINT_WARNINGS))
@@ -579,7 +861,8 @@ class TestRender:
         assert lines[0] == MARKER
         assert lines[1] == "## 🔍 Quality Report"
         assert lines[3].startswith("❌ **Failed**")
-        rows = [line for line in lines if line.startswith(("| Backend |", "| Frontend |"))]
+        areas = ("| Backend |", "| Frontend |", "| Repository |")
+        rows = [line for line in lines if line.startswith(areas)]
         assert len(rows) == len(SECTIONS)
         assert "| Backend | Lint and format (ruff) | ✅ | lint: ✅ · format: ✅ |" in rows
         assert report.rstrip().endswith("commit `abc1234`")
@@ -600,7 +883,7 @@ class TestRender:
 
         report = render(fragments, {})
 
-        assert "✅ **All good** (12 sections not run)" in report
+        assert "✅ **All good** (15 sections not run)" in report
 
     def test_should_trim_details_to_fit_in_a_comment(self) -> None:
         huge = "E" * 5000 + "\n"

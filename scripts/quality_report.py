@@ -24,6 +24,9 @@ MAX_SURVIVORS_LISTED = 30
 MAX_COVERAGE_ROWS = 10
 # Must match scripts/mutation.py, which prints this line followed by a JSON document
 MUTATION_RESULT_PREFIX = "MUTATION_RESULT: "
+# Must match scripts/suppressions.py, which prints this line followed by a JSON document
+SUPPRESSIONS_RESULT_PREFIX = "SUPPRESSIONS_RESULT: "
+MAX_SUPPRESSION_CHANGES_LISTED = 50
 UV_NOISE = re.compile(r"^warning: `VIRTUAL_ENV=.*$", re.MULTILINE)
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 # Progress spinners (mutmut) print one braille frame per line
@@ -49,6 +52,9 @@ class Analysis(StrEnum):
     TSC = "tsc"
     VITEST = "vitest"
     FRONTEND_BUILD = "frontend-build"
+    SUPPRESSIONS = "suppressions"
+    SCHEMATHESIS = "schemathesis"
+    OASDIFF = "oasdiff"
 
 
 class Status(StrEnum):
@@ -61,6 +67,7 @@ class Status(StrEnum):
 class Area(StrEnum):
     BACKEND = "Backend"
     FRONTEND = "Frontend"
+    REPOSITORY = "Repository"
 
 
 class DetailsFormat(StrEnum):
@@ -172,11 +179,22 @@ SECTIONS = [
         ),
     ),
     Section(Area.BACKEND, "Boot smoke (API and MCP)", (Check(Analysis.SMOKE, "smoke"),)),
+    Section(
+        Area.BACKEND, "API contract (Schemathesis)", (Check(Analysis.SCHEMATHESIS, "contract"),)
+    ),
+    Section(
+        Area.BACKEND, "Breaking API changes (oasdiff)", (Check(Analysis.OASDIFF, "openapi-diff"),)
+    ),
     Section(Area.BACKEND, "Mutation testing (mutmut)", (Check(Analysis.MUTATION, "mutation"),)),
     Section(Area.FRONTEND, "Lint (ESLint)", (Check(Analysis.ESLINT, "frontend"),)),
     Section(Area.FRONTEND, "Types (tsc)", (Check(Analysis.TSC, "frontend"),)),
     Section(Area.FRONTEND, "Tests and coverage (Vitest)", (Check(Analysis.VITEST, "frontend"),)),
     Section(Area.FRONTEND, "Build (Vite)", (Check(Analysis.FRONTEND_BUILD, "frontend"),)),
+    Section(
+        Area.REPOSITORY,
+        "Suppressions (ratchet)",
+        (Check(Analysis.SUPPRESSIONS, "lint"),),
+    ),
 ]
 
 
@@ -615,7 +633,7 @@ class MutationOutcome:
 
     @classmethod
     def parse(cls, output: str) -> MutationOutcome | None:
-        line = mutation_result_line(output)
+        line = result_line(output, MUTATION_RESULT_PREFIX)
         if line is None:
             return None
         return cls.from_json(json.loads(line.removeprefix(MUTATION_RESULT_PREFIX)))
@@ -634,10 +652,9 @@ class MutationOutcome:
         )
 
 
-def mutation_result_line(output: str) -> str | None:
-    return next(
-        (line for line in output.splitlines() if line.startswith(MUTATION_RESULT_PREFIX)), None
-    )
+# The machine-readable line a script prints after its human-readable output.
+def result_line(output: str, prefix: str) -> str | None:
+    return next((line for line in output.splitlines() if line.startswith(prefix)), None)
 
 
 def mutation_details(outcome: MutationOutcome) -> str:
@@ -697,6 +714,118 @@ def analyze_mutation(fragment: Fragment) -> Finding:
         "Changed files and survivors",
         DetailsFormat.MARKDOWN,
     )
+
+
+SCHEMATHESIS_VERDICT = re.compile(r"^=+ (?P<verdict>.+?) in [\d.]+s =+$", re.MULTILINE)
+SCHEMATHESIS_FAILURE = re.compile(r"^\s*❌ (?P<check>[^:\n]+): (?P<count>\d+)$", re.MULTILINE)
+# Printed by scripts/contract.sh (RUN_LABEL=contract in scripts/api_server.sh)
+CONTRACT_FAILURE = re.compile(r"^!! CONTRACT FAILED: (?P<reason>.+)$", re.MULTILINE)
+
+
+def between(text: str, start: str, end: str) -> str:
+    begin = text.find(start)
+    if begin < 0:
+        return ""
+    finish = text.find(end, begin)
+    return text[begin + len(start) : finish if finish >= 0 else None].strip("= \n")
+
+
+def schemathesis_scope(output: str) -> str:
+    cases = first_int(r"(\d+) generated", output)
+    operations = first_int(r"Operations:\s+\d+ selected / (\d+) total", output)
+    known = first_int(r"Known failures: (\d+)", output)
+    seed = re.search(r"^Seed: (\S+)$", output, re.MULTILINE)
+    parts = [
+        f"{plural(cases, 'test case', 'test cases')} on "
+        f"{plural(operations, 'operation', 'operations')}",
+        f"{plural(known, 'known failure', 'known failures')} in the baseline",
+    ]
+    return " · ".join(parts + ([f"seed {seed[1]}"] if seed else []))
+
+
+def new_contract_failures_finding(output: str) -> Finding:
+    checks = "; ".join(
+        f"{match['check']} ({match['count']})" for match in SCHEMATHESIS_FAILURE.finditer(output)
+    )
+    unique = first_int(r"found (\d+) unique failure", output)
+    return Finding(
+        Status.FAILED,
+        f"{plural(unique, 'new failure', 'new failures')}: {checks} · {schemathesis_scope(output)}",
+        tail(between(output, " FAILURES ", " SUMMARY ")),
+        "New failures (reproduce with `make contract`)",
+    )
+
+
+def stale_contract_baseline_finding(output: str, unobserved: int) -> Finding:
+    return Finding(
+        Status.FAILED,
+        f"{plural(unobserved, 'baseline entry', 'baseline entries')} no longer "
+        f"{'happens' if unobserved == 1 else 'happen'}: run `make contract-prune` · "
+        f"{schemathesis_scope(output)}",
+    )
+
+
+def contract_not_run_finding(output: str) -> Finding:
+    reasons = CONTRACT_FAILURE.findall(output)
+    cause = f": {reasons[-1]}" if reasons else ""
+    return Finding(Status.FAILED, f"Contract test did not run{cause}", tail(output))
+
+
+def analyze_schemathesis(fragment: Fragment) -> Finding:
+    output = clean(fragment.output)
+    if fragment.passed:
+        return Finding(Status.OK, f"No new contract violations · {schemathesis_scope(output)}")
+    if SCHEMATHESIS_FAILURE.search(output):
+        return new_contract_failures_finding(output)
+    unobserved = first_int(r"Unobserved entries: (\d+)", output)
+    if unobserved and SCHEMATHESIS_VERDICT.search(output):
+        return stale_contract_baseline_finding(output, unobserved)
+    return contract_not_run_finding(output)
+
+
+OASDIFF_COUNTS = re.compile(
+    r"^(?P<total>\d+) changes?: (?P<errors>\d+) error, (?P<warnings>\d+) warning, \d+ info$",
+    re.MULTILINE,
+)
+OASDIFF_ENTRY = re.compile(
+    r"^(?P<level>error|warning|info)\t\[(?P<rule>[^\]]+)\][^\n]*\n\tin (?P<where>[^\n]+)\n"
+    r"\t\t(?P<text>[^\n]+)",
+    re.MULTILINE,
+)
+
+
+def oasdiff_listing(output: str) -> str:
+    return "\n".join(
+        f"{match['level']:7} {match['where']}: {match['text']} [{match['rule']}]"
+        for match in OASDIFF_ENTRY.finditer(output)
+    )
+
+
+def oasdiff_changes_finding(passed: bool, counts: re.Match[str], output: str) -> Finding:
+    total, errors, warnings = (int(counts[name]) for name in ("total", "errors", "warnings"))
+    listing = tail(oasdiff_listing(output))
+    if errors:
+        summary = f"{plural(errors, 'breaking change', 'breaking changes')} out of {total}"
+        return Finding(Status.FAILED, summary, listing, "API changes")
+    if not passed:
+        return Finding(Status.FAILED, "OpenAPI diff failed after comparing", tail(output))
+    if warnings:
+        summary = f"{plural(warnings, 'possible breaking change', 'possible breaking changes')}"
+        return Finding(
+            Status.WARNING, f"{summary} (warning) out of {total}", listing, "API changes"
+        )
+    summary = f"{plural(total, 'API change', 'API changes')}, none breaking"
+    return Finding(Status.OK, summary, listing, "API changes")
+
+
+def analyze_oasdiff(fragment: Fragment) -> Finding:
+    output = clean(fragment.output)
+    if fragment.passed and "No changes detected" in output:
+        return Finding(Status.OK, "No API changes")
+    counts = OASDIFF_COUNTS.search(output)
+    if counts is None:
+        return Finding(Status.FAILED, "OpenAPI diff failed before comparing", tail(output))
+    return oasdiff_changes_finding(fragment.passed, counts, output)
 
 
 ESLINT_PROBLEMS = re.compile(r"(\d+) problems? \((\d+) errors?, (\d+) warnings?\)")
@@ -827,6 +956,102 @@ def largest_asset(output: str) -> list[str]:
     return [f"largest asset {max(sizes):,.0f} kB"] if sizes else []
 
 
+@dataclass(frozen=True)
+class SuppressionChange:
+    path: str
+    kind: str
+    baseline: int
+    current: int
+    lines: list[int]
+
+    @property
+    def is_increase(self) -> bool:
+        return self.current > self.baseline
+
+    @property
+    def delta(self) -> int:
+        return abs(self.current - self.baseline)
+
+
+@dataclass(frozen=True)
+class SuppressionOutcome:
+    total: int
+    totals: dict[str, int]
+    changes: list[SuppressionChange]
+
+    @property
+    def increases(self) -> list[SuppressionChange]:
+        return [change for change in self.changes if change.is_increase]
+
+    @classmethod
+    def parse(cls, output: str) -> SuppressionOutcome | None:
+        line = result_line(output, SUPPRESSIONS_RESULT_PREFIX)
+        if line is None:
+            return None
+        return cls.from_json(json.loads(line.removeprefix(SUPPRESSIONS_RESULT_PREFIX)))
+
+    @classmethod
+    def from_json(cls, data: dict[str, Any]) -> SuppressionOutcome:
+        return cls(
+            total=int(data["total"]),
+            totals={str(kind): int(count) for kind, count in data["totals"].items()},
+            changes=[SuppressionChange(**item) for item in data["changes"]],
+        )
+
+
+def suppression_changes_table(changes: list[SuppressionChange]) -> str:
+    listed = changes[:MAX_SUPPRESSION_CHANGES_LISTED]
+    rows = ["| File | Kind | Baseline → current | Lines |", "|---|---|---|---|"]
+    rows += [
+        f"| `{c.path}` | {c.kind} | {c.baseline} → {c.current} | "
+        f"{', '.join(map(str, c.lines)) or '-'} |"
+        for c in listed
+    ]
+    hidden = len(changes) - len(listed)
+    if hidden > 0:
+        rows.append(f"\n... and {hidden} more: run `make suppressions` for the full list.")
+    return "\n".join(rows)
+
+
+def new_suppressions_finding(increases: list[SuppressionChange]) -> Finding:
+    added = sum(change.delta for change in increases)
+    return Finding(
+        Status.FAILED,
+        f"{plural(added, 'new suppression', 'new suppressions')} above the baseline",
+        suppression_changes_table(increases),
+        "New suppressions",
+        DetailsFormat.MARKDOWN,
+    )
+
+
+def stale_suppressions_finding(changes: list[SuppressionChange]) -> Finding:
+    removed = sum(change.delta for change in changes)
+    return Finding(
+        Status.FAILED,
+        f"{plural(removed, 'suppression', 'suppressions')} removed but still counted in the "
+        "baseline: run `make suppressions-update`",
+        suppression_changes_table(changes),
+        "Stale baseline",
+        DetailsFormat.MARKDOWN,
+    )
+
+
+def analyze_suppressions(fragment: Fragment) -> Finding:
+    output = clean(fragment.output)
+    outcome = SuppressionOutcome.parse(output)
+    if outcome is None:
+        return Finding(
+            Status.FAILED, "Suppression check failed before producing a result", tail(output)
+        )
+    if outcome.increases:
+        return new_suppressions_finding(outcome.increases)
+    if outcome.changes:
+        return stale_suppressions_finding(outcome.changes)
+    listing = "\n".join(f"{kind}: {count}" for kind, count in outcome.totals.items())
+    summary = f"{plural(outcome.total, 'suppression', 'suppressions')}, matching the baseline"
+    return Finding(Status.OK, summary, listing, "By kind")
+
+
 ANALYZERS: dict[Analysis, Callable[[Fragment], Finding]] = {
     Analysis.RUFF_CHECK: analyze_ruff_check,
     Analysis.RUFF_FORMAT: analyze_ruff_format,
@@ -846,6 +1071,9 @@ ANALYZERS: dict[Analysis, Callable[[Fragment], Finding]] = {
     Analysis.TSC: analyze_tsc,
     Analysis.VITEST: analyze_vitest,
     Analysis.FRONTEND_BUILD: analyze_frontend_build,
+    Analysis.SUPPRESSIONS: analyze_suppressions,
+    Analysis.SCHEMATHESIS: analyze_schemathesis,
+    Analysis.OASDIFF: analyze_oasdiff,
 }
 
 

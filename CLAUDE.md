@@ -28,10 +28,17 @@ make setup        install uv, dependencies and git hooks
 make run          run the API locally with hot reload
 make test         all tests with line and branch coverage (fails under 95%)
 make test-unit    only the fast unit tests
-make hooks        all quality checks: ruff, mypy, bandit, vulture, xenon, pip-audit
+make hooks        all quality checks: ruff, mypy, import-linter, suppressions, bandit, vulture, xenon, pip-audit
 make format-code  fix lint issues and format with ruff
 make smoke        boot smoke: clean Postgres + migrations + real API (auth on/off) + MCP
+make contract     API contract: real API (auth on) + bounded, deterministic Schemathesis against /openapi.json
+make contract-prune  drop contract-baseline.json entries that no longer happen (never adds one)
+make openapi-diff fail on breaking OpenAPI changes vs BASE (default origin/main); needs oasdiff
+make risk-floor   minimum risk level of the branch vs BASE (REF=origin/<branch> from another branch), from .github/risk-floors.yaml
+make risk-labels  create/update the risk:<level> labels on GitHub
 make lint-imports architecture contracts (import-linter) for app/ and mcp/
+make suppressions suppression ratchet: fails when noqa/type: ignore/nosec/eslint-disable/@ts-ignore/skip/only... differ from the baseline
+make suppressions-update  lower suppressions-baseline.json after removing suppressions (never raises it)
 make mutation     mutation testing of use cases and domain services (slow, weekly in CI)
 make mutation-changed  mutation testing of only the domain code changed vs BASE (default origin/main); runs on every PR
 ```
@@ -77,14 +84,35 @@ tests/integration/ HTTP tests with TestClient
 
 1. The app imports: `uv run python -c "import app.main.main"`.
 2. New environment variables have a default or an entry in `.env.example`.
-3. `make hooks`, `make test`, `make lint-imports` and `make smoke` pass. A PR with failing checks is not a PR.
+3. `make hooks`, `make test`, `make lint-imports`, `make smoke` and `make contract` pass, and so does
+   `make openapi-diff` when `oasdiff` is installed (CI always runs it). A PR with failing checks is not a PR.
 4. Existing routes are not removed or renamed unless the task asks for it.
 5. The README or the matching file in `docs/` is updated if the change affects setup, commands, routes, env vars or architecture.
 
 ## Validation of agent-generated code
 
-- Run `make smoke` (boots the real API on a clean, migrated Postgres, and the MCP server) and
-  `make lint-imports` (architecture contracts) before opening a PR, besides `make hooks` and `make test`.
+- Run `make smoke` (boots the real API on a clean, migrated Postgres, and the MCP server), `make contract`
+  (Schemathesis against the real API) and `make lint-imports` (architecture contracts) before opening a PR,
+  besides `make hooks` and `make test`.
+- `make contract` checks every HTTP operation of `/openapi.json` (documented status codes and schemas, invalid
+  input rejected, no 5xx) with a fixed seed. Known failures are in `contract-baseline.json`: a new failure fails,
+  so fix the route or document the response (`responses=`); never accept it (`--baseline-update`) without the
+  owner's approval. When a fix makes entries disappear, run `make contract-prune` and commit the smaller baseline
+  in the same PR. Never exclude a check or an operation to get it green.
+- `make openapi-diff` exports the OpenAPI schema of HEAD and of the merge base with the base branch and runs
+  `oasdiff changelog --fail-on ERR`: removing or renaming a route or a response field, or making a parameter
+  required, fails the PR. A deliberate breaking change needs the owner's explicit approval and is called out in
+  the PR.
+- `make suppressions` (pre-commit and CI) compares every suppression in `app/`, `alembic/`, `mcp/`, `scripts/`,
+  `tests/` and `frontend/` (`# noqa`, `# type: ignore`, `# nosec`, `# pragma: no cover`, tool directives,
+  skipped/xfail tests, `eslint-disable`, `@ts-ignore`, `@ts-expect-error`, `@ts-nocheck`, coverage ignores,
+  `.skip`/`.only`/`.fails` tests) with `suppressions-baseline.json`. Fix the cause instead of suppressing it. Never
+  raise the baseline (`update --allow-increase`) without the owner's explicit approval. When you remove
+  suppressions, run `make suppressions-update` and commit the lower baseline in the same PR.
+- Pipeline and agent files (dependency manifests and locks, `.pre-commit-config.yaml`, `Makefile`, the baselines,
+  `scripts/`, `.github/`, `.claude/`, `CLAUDE.md`, `docker/`, the frontend build/lint/test config), migrations and
+  auth (sign-in, API keys, share tokens, roles) put the PR at the `high` risk floor (`.github/risk-floors.yaml`).
+  Do not change pipeline files unless the task asks for it, and call the change out in the PR. Never lower a floor.
 - Never relax an import-linter contract (`[tool.importlinter]` in `pyproject.toml` or `mcp/pyproject.toml`)
   nor add `ignore_imports` without the owner's approval: fix the import instead.
 - Never remove or rename `/health` (liveness) or `/ready` (readiness): deploy probes depend on them.
@@ -102,9 +130,37 @@ tests/integration/ HTTP tests with TestClient
 
 ## Workflow
 
-- Code changes are delegated to the `coder` agent (`.claude/agents/coder.md`).
-- **Exception**: if a `.local_dev` file exists at the root, edit files directly without delegating.
+1. **Implement**: code changes are delegated to the `coder` agent (`.claude/agents/coder.md`), which creates a
+   branch, implements, commits (one commit per logical step), pushes and writes the handoff notes. It does not
+   open the PR and does not assess the risk. Never commit directly to `main`.
+2. **Describe and open**: then delegate to the `pr-writer` agent (`.claude/agents/pr-writer.md`) with the
+   original task verbatim, the branch, the base branch and the path of the handoff notes. It reads the diff
+   cold, commit by commit, fills `.github/pull_request_template.md`, assigns the risk level (never below
+   `make risk-floor`, at least medium when there are deploy steps), opens the PR with the `risk:<level>` label
+   and stops. It never writes code. Behavior items are plain language with no file, function, test or code
+   references; the evidence pointers for them go only in **Look here**, and a behavior without evidence is
+   listed under **Not verified**.
+3. **Fallback**: if `pr-writer` fails or cannot run, delegate back to `coder` saying so: it opens the PR itself
+   with a minimal body (summary plus the template headings, risk "unassessed", no risk label), so a failure
+   never blocks delivery. The Risk label check stays red until a person sets the label.
+4. **Merge**: nobody but the owner merges. Agents never merge, approve or enable auto-merge.
+
+- **Exception**: if a `.local_dev` file exists at the root, edit files directly without delegating to `coder`
+  or `pr-writer` and without creating commits or PRs.
 - Use the `reviewer` agent (`.claude/agents/reviewer.md`) to review a branch before merging.
+
+### Handoff notes
+
+The `coder` writes them to `.handoff/<branch>.md` (every `/` of the branch name replaced with `-`; the directory
+is gitignored) after pushing. `pr-writer` checks them against the diff and reports a **Mismatch** when they
+disagree. Sections, in this order:
+
+- `## Task`: the original task, verbatim.
+- `## Done`: what changed and why, one line per item.
+- `## Decisions`: choices made, alternatives rejected, conservative options taken on non-blocking doubts.
+- `## Deploy notes`: new env vars or secrets, migrations and their order, flags, external configuration; or
+  "None".
+- `## Not verified`: everything the author did not or could not check, and why; or "nothing".
 
 ## Personal preferences
 

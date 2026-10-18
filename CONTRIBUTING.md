@@ -31,17 +31,26 @@ Always use `uv run` for the backend. The MCP server is a separate uv project in 
    HTTP, third-party APIs).
 4. Run the checks before opening the pull request:
    - `uv run python -c "import app.main.main"` (the app imports);
-   - `make hooks` (ruff, mypy, bandit, vulture, xenon, pip-audit, import-linter, MCP manifest);
+   - `make hooks` (ruff, mypy, bandit, vulture, xenon, pip-audit, import-linter, MCP manifest, suppression ratchet);
    - `make test` (line and branch coverage, fails under 95%);
    - `make lint-imports` (architecture contracts of the API and the MCP server);
    - `make smoke` (clean Postgres, migrations, the real API with auth on and off, and the MCP server);
+   - `make contract` (Schemathesis against the real API; new failures fail, see
+     [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md#api-contract-schemathesis));
+   - `make openapi-diff` when you touch routes or schemas and have `oasdiff` installed (CI always runs it);
    - `make mutation-changed` when you touch `app/domain/usecases/` or `app/domain/services/`;
    - `make test-mcp` for `mcp/`, and `make test-frontend` plus `npm run build` for `frontend/`.
 5. Commit with [Conventional Commits](https://www.conventionalcommits.org/) in English (`feat`, `fix`,
    `refactor`, `chore`, `test`, `docs`, `ci`, `build`).
-6. Open the pull request against `main` with a *What*, *Why* and *How to test* section. CI posts one
-   **Quality Report** comment ([`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md#quality-report)); a failing check means
-   it is not ready.
+6. Open the pull request against `main`. GitHub fills the description from
+   [`.github/pull_request_template.md`](.github/pull_request_template.md): **Risk** first, a one-sentence
+   **Summary**, up to five **Behavior** changes in plain words (*before → after*, no file or code names),
+   **Unchanged**, **Look here** (the only place for files, functions and tests: the evidence of each behavior and
+   what deserves a human look), **Deploy steps** (always present; "None: normal merge and deploy." when nothing is
+   needed) and **Not verified**. Add exactly one `risk:<level>` label, never below the floor of the files you touch
+   (`make risk-floor`; the *Risk label* check enforces it, see
+   [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md#pull-requests-and-risk)). CI posts one **Quality Report** comment
+   ([`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md#quality-report)); a failing check means it is not ready.
 
 ## Rules that are easy to miss
 
@@ -50,11 +59,17 @@ Always use `uv run` for the backend. The MCP server is a separate uv project in 
 - Existing routes are not removed or renamed unless that is the point of the change; never remove or rename
   `/health` and `/ready`, which deploy probes depend on. Public contracts only grow additively.
 - Never relax an import-linter contract, add `ignore_imports`, lower a coverage or mutation threshold, or add a
-  suppression to get a pull request green: fix the code instead. Relaxing a gate needs the owner's approval.
+  suppression to get a pull request green: fix the code instead. Relaxing a gate needs the owner's approval. The
+  suppression ratchet (`make suppressions`) fails on any new `# noqa`, `eslint-disable`, `@ts-ignore`, skipped
+  test...; after removing some, commit the lower baseline with `make suppressions-update`.
 - Keep code identifiers brand-neutral: everything people or agents read takes the product name from
   configuration, so forks merge upstream cleanly ([`docs/WHITE_LABEL.md`](docs/WHITE_LABEL.md)).
 - Update the README or the relevant file in `docs/` when the change affects setup, commands, routes, environment
   variables or architecture.
 - Never commit `mutants/`.
+
+AI agents follow the same flow in two steps: the `coder` agent implements, commits and pushes with handoff notes,
+and the `pr-writer` agent reads the diff cold, fills the template, assigns the risk label and opens the PR
+(`.claude/agents/`, workflow in [`CLAUDE.md`](CLAUDE.md#workflow)). Nobody but the owner merges.
 
 Dependabot proposes grouped weekly updates of the Python dependencies and the GitHub Actions after a cooldown.

@@ -165,6 +165,8 @@ cython_debug/
 # Claude Code
 .claude/settings.local.json
 .local_dev
+# Handoff notes from the coder agent to the pr-writer agent (see CLAUDE.md)
+.handoff/
 
 # Frontend local overrides (e.g. Cognito login for local testing)
 frontend/.env.local
@@ -172,6 +174,9 @@ frontend/.env.*.local
 
 # mutmut
 mutants/
+# Schemathesis and Hypothesis caches (scripts/contract.sh runs in a temporary directory, but a manual
+# `schemathesis run` from the root writes them here)
+.schemathesis/
 # Quality Report fragments and output (scripts/quality_report.py)
 quality-fragments/
 quality-report.md
