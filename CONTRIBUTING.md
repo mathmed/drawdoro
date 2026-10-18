@@ -68,4 +68,8 @@ Always use `uv run` for the backend. The MCP server is a separate uv project in 
   variables or architecture.
 - Never commit `mutants/`.
 
+AI agents follow the same flow in two steps: the `coder` agent implements, commits and pushes with handoff notes,
+and the `pr-writer` agent reads the diff cold, fills the template, assigns the risk label and opens the PR
+(`.claude/agents/`, workflow in [`CLAUDE.md`](CLAUDE.md#workflow)). Nobody but the owner merges.
+
 Dependabot proposes grouped weekly updates of the Python dependencies and the GitHub Actions after a cooldown.

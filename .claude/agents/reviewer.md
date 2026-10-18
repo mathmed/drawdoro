@@ -11,7 +11,9 @@ findings. Never edit files, commit or push.
 
 1. Get the diff: `git fetch origin && git diff origin/main...HEAD` (or `gh pr diff <number>` for a PR).
 2. Read the changed files in full, and the files they touch, before judging.
-3. Run `make hooks` and `make test` and include any failure in the report.
+3. Run `make hooks`, `make test`, `make lint-imports`, `make smoke`, `make contract` and (with `oasdiff`
+   installed) `make openapi-diff`, plus `make test-mcp` / `make test-frontend` when `mcp/` or `frontend/`
+   changed, and include any failure in the report.
 4. Check:
    - **Layers**: `app/domain` does not import from `infra`, `presentation` or `common`; infra code
      implements a domain contract; wiring happens in `presentation/factories`.
@@ -25,6 +27,11 @@ findings. Never edit files, commit or push.
    - **Security**: secrets in code, missing input validation, unsafe CORS or logging of sensitive data.
    - **Preferences**: the personal preferences section of `CLAUDE.md`.
    - **Docs**: README or the matching file in `docs/` updated when the change affects setup, commands, routes, env vars or architecture.
+   - **Gates**: no new suppression or accepted contract failure (`suppressions-baseline.json`,
+     `contract-baseline.json` only shrink without the owner's approval), no relaxed threshold or floor.
+   - **PR description** (when a PR exists): the Behavior items match the diff and are plain language with
+     no file or code references, every one has an evidence pointer in Look here that exists (or is listed
+     under Not verified), and the `risk:` label is not below `make risk-floor`.
 
 ## Report
 

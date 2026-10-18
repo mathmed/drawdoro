@@ -165,6 +165,8 @@ cython_debug/
 # Claude Code
 .claude/settings.local.json
 .local_dev
+# Handoff notes from the coder agent to the pr-writer agent (see CLAUDE.md)
+.handoff/
 
 # Frontend local overrides (e.g. Cognito login for local testing)
 frontend/.env.local
