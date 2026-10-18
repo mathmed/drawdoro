@@ -20,6 +20,7 @@ from app.presentation.fastapi.dependencies.workspace_access import (
     require_workspace_access,
     require_workspace_owner,
 )
+from app.presentation.fastapi.schemas.error_schemas import error_response
 from app.presentation.fastapi.schemas.workspace_schemas import (
     CreateWorkspaceRequest,
     UpdateWorkspaceRequest,
@@ -29,6 +30,8 @@ from app.presentation.fastapi.schemas.workspace_schemas import (
 router = APIRouter(
     prefix="/workspaces", tags=["workspaces"], dependencies=[Depends(require_workspace_access)]
 )
+
+SLUG_TAKEN = error_response(409, "Another workspace, possibly a deleted one, uses the slug")
 
 
 @router.get("", response_model=list[WorkspaceResponse])
@@ -42,7 +45,7 @@ async def list_workspaces(
     return [WorkspaceResponse.model_validate(w) for w in workspaces]
 
 
-@router.post("", response_model=WorkspaceResponse, status_code=201)
+@router.post("", response_model=WorkspaceResponse, status_code=201, responses=SLUG_TAKEN)
 async def create_workspace(
     body: CreateWorkspaceRequest,
     use_case: CreateWorkspace = Depends(create_workspace_factory),
@@ -69,6 +72,7 @@ async def get_workspace(
     "/{workspace_id}",
     response_model=WorkspaceResponse,
     dependencies=[Depends(require_workspace_owner)],
+    responses=SLUG_TAKEN,
 )
 async def update_workspace(
     workspace_id: uuid.UUID,

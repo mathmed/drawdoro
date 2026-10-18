@@ -15,6 +15,7 @@ from app.presentation.factories.folder_factories import (
     update_folder_factory,
 )
 from app.presentation.fastapi.dependencies.workspace_access import require_workspace_access
+from app.presentation.fastapi.schemas.error_schemas import error_response
 from app.presentation.fastapi.schemas.folder_schemas import (
     CreateFolderRequest,
     FolderResponse,
@@ -27,6 +28,10 @@ router = APIRouter(
     dependencies=[Depends(require_workspace_access)],
 )
 
+MISSING_PLACEMENT = error_response(
+    404, "The project, the folder or the parent folder doesn't exist"
+)
+
 
 @router.get("", response_model=list[FolderResponse])
 async def list_folders(
@@ -37,7 +42,7 @@ async def list_folders(
     return [FolderResponse.model_validate(f) for f in folders]
 
 
-@router.post("", response_model=FolderResponse, status_code=201)
+@router.post("", response_model=FolderResponse, status_code=201, responses=MISSING_PLACEMENT)
 async def create_folder(
     project_id: uuid.UUID,
     body: CreateFolderRequest,
@@ -61,7 +66,7 @@ async def get_folder(
     return FolderResponse.model_validate(folder)
 
 
-@router.put("/{folder_id}", response_model=FolderResponse)
+@router.put("/{folder_id}", response_model=FolderResponse, responses=MISSING_PLACEMENT)
 async def update_folder(
     project_id: uuid.UUID,
     folder_id: uuid.UUID,

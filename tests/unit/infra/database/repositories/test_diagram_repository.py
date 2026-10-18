@@ -93,3 +93,22 @@ async def test_should_not_locate_a_missing_diagram(
     result.one_or_none.return_value = None
     session.execute.return_value = result
     assert await sut.get_location(uuid.uuid4()) is None
+
+
+@pytest.mark.parametrize("token", ["\x00", "tok\x00en", "\x00token", "token\x00"])
+async def test_should_not_find_a_share_token_with_nul_characters_without_querying(
+    sut: DiagramRepositoryImpl, session: AsyncMock, token: str
+) -> None:
+    assert await sut.get_by_share_token(token) is None
+    session.execute.assert_not_awaited()
+
+
+async def test_should_look_up_other_share_tokens_as_they_are(
+    sut: DiagramRepositoryImpl, session: AsyncMock
+) -> None:
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = None
+    session.execute.return_value = result
+    assert await sut.get_by_share_token(" tok en ") is None
+    statement = session.execute.await_args.args[0]
+    assert " tok en " in statement.compile().params.values()

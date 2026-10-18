@@ -3,10 +3,11 @@ import uuid
 from pydantic import BaseModel, ConfigDict
 
 from app.domain.enums.workspace_role import WorkspaceRole
+from app.presentation.fastapi.schemas.text_schemas import NulFreeStr
 
 
 class AddWorkspaceMemberRequest(BaseModel):
-    email: str
+    email: NulFreeStr
     role: WorkspaceRole = WorkspaceRole.EDITOR
 
 

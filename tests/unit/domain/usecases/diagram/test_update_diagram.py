@@ -10,6 +10,7 @@ from app.domain.entities.models.diagram_snapshot import DiagramSnapshot
 from app.domain.entities.models.revision_author import RevisionAuthor
 from app.domain.enums.revision_origin import RevisionOrigin
 from app.domain.errors.domain_errors import NotFoundError
+from app.domain.services.project_placement import ProjectPlacement
 from app.domain.services.revision_recorder import RevisionRecorder
 from app.domain.usecases.diagram.update_diagram import UpdateDiagram, UpdateDiagramParams
 from tests.doubles import double
@@ -31,10 +32,18 @@ def recorder() -> NonCallableMagicMock:
 
 
 @pytest.fixture
+def placement() -> NonCallableMagicMock:
+    return double(ProjectPlacement)
+
+
+@pytest.fixture
 def sut(
-    repo: NonCallableMagicMock, notifier: NonCallableMagicMock, recorder: NonCallableMagicMock
+    repo: NonCallableMagicMock,
+    notifier: NonCallableMagicMock,
+    recorder: NonCallableMagicMock,
+    placement: NonCallableMagicMock,
 ) -> UpdateDiagram:
-    return UpdateDiagram(repo, notifier, recorder)
+    return UpdateDiagram(repo, notifier, recorder, placement)
 
 
 def existing_diagram() -> Diagram:
@@ -42,9 +51,10 @@ def existing_diagram() -> Diagram:
 
 
 async def test_should_replace_fields_and_return_persisted_diagram(
-    sut: UpdateDiagram, repo: NonCallableMagicMock
+    sut: UpdateDiagram, repo: NonCallableMagicMock, placement: NonCallableMagicMock
 ) -> None:
-    diagram = existing_diagram()
+    diagram = existing_diagram().model_copy(update={"folder_id": uuid.uuid4()})
+    current_folder_id = diagram.folder_id
     folder_id = uuid.uuid4()
     repo.get_by_id.return_value = diagram
     repo.update.side_effect = lambda updated: updated
@@ -58,6 +68,7 @@ async def test_should_replace_fields_and_return_persisted_diagram(
         )
     )
     repo.get_by_id.assert_awaited_once_with(diagram.id)
+    placement.check_move.assert_awaited_once_with(diagram.project_id, current_folder_id, folder_id)
     assert result.folder_id == folder_id
     assert result.name == "New"
     assert result.canvas_state == {"shapes": ["new"]}
@@ -129,3 +140,22 @@ async def test_should_record_nothing_when_diagram_missing(
     with pytest.raises(NotFoundError):
         await sut.execute(UpdateDiagramParams(diagram_id=uuid.uuid4(), name="New"))
     recorder.record.assert_not_awaited()
+
+
+async def test_should_not_save_record_or_notify_a_move_to_a_missing_folder(
+    sut: UpdateDiagram,
+    repo: NonCallableMagicMock,
+    recorder: NonCallableMagicMock,
+    notifier: NonCallableMagicMock,
+    placement: NonCallableMagicMock,
+) -> None:
+    diagram = existing_diagram()
+    repo.get_by_id.return_value = diagram
+    placement.check_move.side_effect = NotFoundError("Folder not found")
+    with pytest.raises(NotFoundError, match="Folder not found"):
+        await sut.execute(
+            UpdateDiagramParams(diagram_id=diagram.id, name="New", folder_id=uuid.uuid4())
+        )
+    repo.update.assert_not_awaited()
+    recorder.record.assert_not_awaited()
+    notifier.notify_updated.assert_not_awaited()

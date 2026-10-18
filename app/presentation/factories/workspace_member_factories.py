@@ -12,6 +12,7 @@ from app.infra.database.repositories.user_repository import UserRepositoryImpl
 from app.infra.database.repositories.workspace_member_repository import (
     WorkspaceMemberRepositoryImpl,
 )
+from app.infra.database.repositories.workspace_repository import WorkspaceRepositoryImpl
 from app.infra.database.session import get_session
 
 
@@ -27,6 +28,7 @@ async def add_workspace_member_factory(
     return AddWorkspaceMember(
         WorkspaceMemberRepositoryImpl(session),
         UserRepositoryImpl(session),
+        WorkspaceRepositoryImpl(session),
         get_settings().app_name,
     )
 

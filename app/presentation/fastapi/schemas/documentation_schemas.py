@@ -3,9 +3,11 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
+from app.presentation.fastapi.schemas.text_schemas import NulFreeStr
+
 
 class UpsertDocumentationPageRequest(BaseModel):
-    content: str
+    content: NulFreeStr
 
 
 class DocumentationPageResponse(BaseModel):

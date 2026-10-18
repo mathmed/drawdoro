@@ -3,6 +3,7 @@ import uuid
 from app.domain.contracts.usecase import InputData, Usecase
 from app.domain.contracts.user_repository import UserRepository
 from app.domain.contracts.workspace_member_repository import WorkspaceMemberRepository
+from app.domain.contracts.workspace_repository import WorkspaceRepository
 from app.domain.entities.models.workspace_member import WorkspaceMember
 from app.domain.entities.models.workspace_member_details import WorkspaceMemberDetails
 from app.domain.enums.workspace_role import WorkspaceRole
@@ -17,13 +18,22 @@ class AddWorkspaceMemberParams(InputData):
 
 class AddWorkspaceMember(Usecase[AddWorkspaceMemberParams, WorkspaceMemberDetails]):
     def __init__(
-        self, members: WorkspaceMemberRepository, users: UserRepository, app_name: str
+        self,
+        members: WorkspaceMemberRepository,
+        users: UserRepository,
+        workspaces: WorkspaceRepository,
+        app_name: str,
     ) -> None:
         self._members = members
         self._users = users
+        self._workspaces = workspaces
         self._app_name = app_name
 
     async def execute(self, params: AddWorkspaceMemberParams) -> WorkspaceMemberDetails:
+        # Workspace access checks it for people; the service key and auth off skip that. As with
+        # workspace access, a deleted workspace still counts.
+        if not await self._workspaces.exists_including_deleted(params.workspace_id):
+            raise NotFoundError(f"Workspace {params.workspace_id} not found")
         # Users only exist after their first sign-in, so invitations need that to happen first.
         user = await self._users.get_by_email(params.email.strip().lower())
         if user is None:

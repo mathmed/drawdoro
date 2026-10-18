@@ -16,6 +16,7 @@ from app.domain.constants.revisions import REVISION_SUMMARY_MAX_LENGTH
 from app.domain.enums.gallery_item_kind import GalleryItemKind
 from app.domain.enums.image_mime_type import ImageMimeType
 from app.domain.enums.placement_side import PlacementSide
+from app.presentation.fastapi.schemas.text_schemas import NulFreeStr
 
 # Stored bytes go out as base64 text; Base64Bytes would try to decode them on the way in.
 EncodedBytes = Annotated[
@@ -33,21 +34,21 @@ Coordinate = Annotated[
 
 
 class CreateGalleryItemRequest(BaseModel):
-    name: str = Field(min_length=1, max_length=GALLERY_MAX_NAME_LENGTH)
+    name: NulFreeStr = Field(min_length=1, max_length=GALLERY_MAX_NAME_LENGTH)
     kind: GalleryItemKind
     content: dict[str, Any] | None = None
     image_base64: Base64Bytes | None = None
     thumbnail_base64: Base64Bytes | None = None
     tags: RawTags = []
-    description: str | None = Field(default=None, max_length=GALLERY_MAX_DESCRIPTION_LENGTH)
+    description: NulFreeStr | None = Field(default=None, max_length=GALLERY_MAX_DESCRIPTION_LENGTH)
 
 
 # Every field is optional and only the ones sent change; {"name": ...} alone still renames.
 class UpdateGalleryItemRequest(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=GALLERY_MAX_NAME_LENGTH)
+    name: NulFreeStr | None = Field(default=None, min_length=1, max_length=GALLERY_MAX_NAME_LENGTH)
     tags: RawTags | None = None
     # An empty string clears the description.
-    description: str | None = Field(default=None, max_length=GALLERY_MAX_DESCRIPTION_LENGTH)
+    description: NulFreeStr | None = Field(default=None, max_length=GALLERY_MAX_DESCRIPTION_LENGTH)
 
 
 class GalleryItemSummaryResponse(BaseModel):
@@ -80,7 +81,9 @@ class InsertGalleryItemRequest(BaseModel):
     side: PlacementSide = PlacementSide.RIGHT
     gap: float = Field(default=CANVAS_DEFAULT_GAP, ge=0, le=10_000, allow_inf_nan=False)
     scale: float = Field(default=1, gt=0, allow_inf_nan=False)
-    revision_summary: str | None = Field(default=None, max_length=REVISION_SUMMARY_MAX_LENGTH)
+    revision_summary: NulFreeStr | None = Field(
+        default=None, max_length=REVISION_SUMMARY_MAX_LENGTH
+    )
 
 
 # The saved canvas is not echoed back: it can be megabytes, and the caller only needs the ids.

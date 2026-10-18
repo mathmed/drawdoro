@@ -1,6 +1,7 @@
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domain.services.project_placement import ProjectPlacement
 from app.domain.usecases.project.create_project import CreateProject
 from app.domain.usecases.project.delete_project import DeleteProject
 from app.domain.usecases.project.get_project import GetProject
@@ -10,11 +11,16 @@ from app.domain.usecases.project.update_project import UpdateProject
 from app.infra.database.repositories.diagram_repository import DiagramRepositoryImpl
 from app.infra.database.repositories.folder_repository import FolderRepositoryImpl
 from app.infra.database.repositories.project_repository import ProjectRepositoryImpl
+from app.infra.database.repositories.workspace_repository import WorkspaceRepositoryImpl
 from app.infra.database.session import get_session
 
 
+def build_project_placement(session: AsyncSession) -> ProjectPlacement:
+    return ProjectPlacement(ProjectRepositoryImpl(session), FolderRepositoryImpl(session))
+
+
 async def create_project_factory(session: AsyncSession = Depends(get_session)) -> CreateProject:
-    return CreateProject(ProjectRepositoryImpl(session))
+    return CreateProject(ProjectRepositoryImpl(session), WorkspaceRepositoryImpl(session))
 
 
 async def get_project_factory(session: AsyncSession = Depends(get_session)) -> GetProject:

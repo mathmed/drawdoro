@@ -65,6 +65,13 @@ def users() -> NonCallableMagicMock:
     return mock
 
 
+@pytest.fixture
+def workspaces() -> NonCallableMagicMock:
+    mock = double(WorkspaceRepository)
+    mock.exists_including_deleted.return_value = True
+    return mock
+
+
 async def test_should_list_members(members: NonCallableMagicMock) -> None:
     details = [
         WorkspaceMemberDetails(
@@ -78,11 +85,13 @@ async def test_should_list_members(members: NonCallableMagicMock) -> None:
 
 
 async def test_should_add_member_who_already_signed_in(
-    members: NonCallableMagicMock, users: NonCallableMagicMock
+    members: NonCallableMagicMock,
+    users: NonCallableMagicMock,
+    workspaces: NonCallableMagicMock,
 ) -> None:
     newcomer = User(email="bia@x.com", name="Bia")
     users.get_by_email.return_value = newcomer
-    sut = AddWorkspaceMember(members, users, APP_NAME)
+    sut = AddWorkspaceMember(members, users, workspaces, APP_NAME)
     added = await sut.execute(
         AddWorkspaceMemberParams(
             workspace_id=WORKSPACE_ID, email=" Bia@X.com ", role=WorkspaceRole.EDITOR
@@ -90,6 +99,7 @@ async def test_should_add_member_who_already_signed_in(
     )
     assert (added.email, added.role) == ("bia@x.com", WorkspaceRole.EDITOR)
     users.get_by_email.assert_awaited_once_with("bia@x.com")
+    workspaces.exists_including_deleted.assert_awaited_once_with(WORKSPACE_ID)
     created = members.create.call_args.args[0]
     assert (created.workspace_id, created.user_id, created.role) == (
         WORKSPACE_ID,
@@ -99,10 +109,12 @@ async def test_should_add_member_who_already_signed_in(
 
 
 async def test_should_reject_unknown_email(
-    members: NonCallableMagicMock, users: NonCallableMagicMock
+    members: NonCallableMagicMock,
+    users: NonCallableMagicMock,
+    workspaces: NonCallableMagicMock,
 ) -> None:
     with pytest.raises(NotFoundError, match="ghost@x.com hasn't signed in to Acme Draw yet"):
-        await AddWorkspaceMember(members, users, APP_NAME).execute(
+        await AddWorkspaceMember(members, users, workspaces, APP_NAME).execute(
             AddWorkspaceMemberParams(
                 workspace_id=WORKSPACE_ID, email="ghost@x.com", role=WorkspaceRole.EDITOR
             )
@@ -110,15 +122,35 @@ async def test_should_reject_unknown_email(
 
 
 async def test_should_reject_duplicate_member(
-    members: NonCallableMagicMock, users: NonCallableMagicMock
+    members: NonCallableMagicMock,
+    users: NonCallableMagicMock,
+    workspaces: NonCallableMagicMock,
 ) -> None:
     users.get_by_email.return_value = User(id=MEMBER_ID, email="m@x.com", name="M")
     with pytest.raises(ConflictError, match="^m@x.com is already a member of this workspace$"):
-        await AddWorkspaceMember(members, users, APP_NAME).execute(
+        await AddWorkspaceMember(members, users, workspaces, APP_NAME).execute(
             AddWorkspaceMemberParams(
                 workspace_id=WORKSPACE_ID, email="m@x.com", role=WorkspaceRole.EDITOR
             )
         )
+
+
+async def test_should_reject_a_workspace_that_does_not_exist(
+    members: NonCallableMagicMock,
+    users: NonCallableMagicMock,
+    workspaces: NonCallableMagicMock,
+) -> None:
+    missing = uuid.uuid4()
+    workspaces.exists_including_deleted.return_value = False
+    users.get_by_email.return_value = User(email="bia@x.com", name="Bia")
+    with pytest.raises(NotFoundError, match=f"^Workspace {missing} not found$"):
+        await AddWorkspaceMember(members, users, workspaces, APP_NAME).execute(
+            AddWorkspaceMemberParams(
+                workspace_id=missing, email="bia@x.com", role=WorkspaceRole.EDITOR
+            )
+        )
+    workspaces.exists_including_deleted.assert_awaited_once_with(missing)
+    members.create.assert_not_awaited()
 
 
 async def test_should_change_role(members: NonCallableMagicMock) -> None:

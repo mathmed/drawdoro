@@ -3,14 +3,16 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
+from app.presentation.fastapi.schemas.text_schemas import NameStr
+
 
 class CreateFolderRequest(BaseModel):
-    name: str
+    name: NameStr
     parent_folder_id: uuid.UUID | None = None
 
 
 class UpdateFolderRequest(BaseModel):
-    name: str
+    name: NameStr
     parent_folder_id: uuid.UUID | None = None
 
 

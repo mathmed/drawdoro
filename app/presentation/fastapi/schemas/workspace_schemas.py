@@ -3,15 +3,17 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
+from app.presentation.fastapi.schemas.text_schemas import NameStr
+
 
 class CreateWorkspaceRequest(BaseModel):
-    name: str
-    slug: str
+    name: NameStr
+    slug: NameStr
 
 
 class UpdateWorkspaceRequest(BaseModel):
-    name: str
-    slug: str
+    name: NameStr
+    slug: NameStr
 
 
 class WorkspaceResponse(BaseModel):

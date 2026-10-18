@@ -2,12 +2,17 @@ import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.contracts.workspace_repository import WorkspaceRepository
 from app.domain.entities.models.workspace import Workspace
+from app.domain.errors.domain_errors import ConflictError
 from app.infra.database.models.workspace import WorkspaceORM
 from app.infra.database.models.workspace_member import WorkspaceMemberORM
+
+# SQLSTATE Postgres reports for a unique violation.
+UNIQUE_VIOLATION = "23505"
 
 
 class WorkspaceRepositoryImpl(WorkspaceRepository):
@@ -21,7 +26,7 @@ class WorkspaceRepositoryImpl(WorkspaceRepository):
             slug=workspace.slug,
         )
         self._session.add(orm)
-        await self._session.commit()
+        await self._commit()
         await self._session.refresh(orm)
         return _to_domain(orm)
 
@@ -34,6 +39,12 @@ class WorkspaceRepositoryImpl(WorkspaceRepository):
         )
         orm = result.scalar_one_or_none()
         return _to_domain(orm) if orm else None
+
+    async def exists_including_deleted(self, workspace_id: uuid.UUID) -> bool:
+        result = await self._session.execute(
+            select(WorkspaceORM.id).where(WorkspaceORM.id == workspace_id)
+        )
+        return result.scalar_one_or_none() is not None
 
     async def list_all(self) -> list[Workspace]:
         result = await self._session.execute(
@@ -68,7 +79,7 @@ class WorkspaceRepositoryImpl(WorkspaceRepository):
         orm = result.scalar_one()
         orm.name = workspace.name
         orm.slug = workspace.slug
-        await self._session.commit()
+        await self._commit()
         await self._session.refresh(orm)
         return _to_domain(orm)
 
@@ -82,6 +93,28 @@ class WorkspaceRepositoryImpl(WorkspaceRepository):
         orm = result.scalar_one()
         orm.deleted_at = datetime.now(UTC)
         await self._session.commit()
+
+    # The unique constraint is what decides, so two requests racing for a free slug get a 201 and
+    # a 409 rather than a 500.
+    async def _commit(self) -> None:
+        try:
+            await self._session.commit()
+        except IntegrityError as error:
+            await self._session.rollback()
+            if _is_slug_taken(error):
+                raise ConflictError("Another workspace already uses this slug") from error
+            raise
+
+
+# The constraint's name depends on how the database was created, and Postgres names the table but
+# not the column of a unique violation. Besides the generated id, the slug is the only unique column
+# of workspaces (a test keeps it so).
+def _is_slug_taken(error: IntegrityError) -> bool:
+    cause = error.driver_exception
+    return (
+        getattr(cause, "sqlstate", None) == UNIQUE_VIOLATION
+        and getattr(cause, "table_name", None) == WorkspaceORM.__tablename__
+    )
 
 
 def _to_domain(orm: WorkspaceORM) -> Workspace:

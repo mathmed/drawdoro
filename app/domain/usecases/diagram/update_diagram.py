@@ -8,6 +8,7 @@ from app.domain.entities.models.diagram import Diagram
 from app.domain.entities.models.diagram_snapshot import DiagramSnapshot
 from app.domain.entities.models.revision_author import RevisionAuthor
 from app.domain.errors.domain_errors import NotFoundError
+from app.domain.services.project_placement import ProjectPlacement
 from app.domain.services.revision_recorder import RevisionRecorder
 
 
@@ -30,15 +31,18 @@ class UpdateDiagram(Usecase[UpdateDiagramParams, Diagram]):
         repo: DiagramRepository,
         notifier: DiagramUpdateNotifier,
         recorder: RevisionRecorder,
+        placement: ProjectPlacement,
     ) -> None:
         self._repo = repo
         self._notifier = notifier
         self._recorder = recorder
+        self._placement = placement
 
     async def execute(self, params: UpdateDiagramParams) -> Diagram:
         diagram = await self._repo.get_by_id(params.diagram_id)
         if diagram is None:
             raise NotFoundError(f"Diagram {params.diagram_id} not found")
+        await self._placement.check_move(diagram.project_id, diagram.folder_id, params.folder_id)
         before = DiagramSnapshot.of(diagram)
         diagram.name = params.name
         diagram.folder_id = params.folder_id

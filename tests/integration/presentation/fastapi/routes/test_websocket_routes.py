@@ -1,7 +1,8 @@
 import uuid
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -18,6 +19,8 @@ from app.domain.usecases.auth.authenticate_user import AuthenticateUser
 from app.domain.usecases.auth.authorize_workspace_access import AuthorizeWorkspaceAccess
 from app.domain.usecases.diagram.get_diagram_by_share_token import GetDiagramByShareToken
 from app.domain.usecases.diagram.get_diagram_location import GetDiagramLocation
+from app.infra.database.models.diagram import DiagramORM
+from app.infra.database.repositories.diagram_repository import DiagramRepositoryImpl
 from app.main.main import app
 from app.presentation.factories.auth_factories import (
     authenticate_user_factory,
@@ -179,6 +182,29 @@ def test_should_admit_a_guest_with_a_share_link_under_their_name(
     assert presence["users"][0]["id"] == presence["you"]
     authenticate.execute.assert_not_awaited()
     assert shared_lookup.execute.await_args.args[0].share_token == "tok"
+
+
+# A database that would find the room's diagram for "token": a NUL in the link must not let the
+# guest in.
+def test_should_refuse_a_share_link_whose_token_has_nul_characters(client: TestClient) -> None:
+    diagram_id = room()
+    now = datetime.now(UTC)
+    session = AsyncMock()
+    session.execute.return_value = MagicMock()
+    session.execute.return_value.scalar_one_or_none.return_value = DiagramORM(
+        id=uuid.UUID(diagram_id),
+        project_id=uuid.uuid4(),
+        name="Checkout",
+        share_token="token",
+        created_at=now,
+        updated_at=now,
+    )
+    app.dependency_overrides[get_diagram_by_share_token_factory] = lambda: GetDiagramByShareToken(
+        DiagramRepositoryImpl(session)
+    )
+    url = f"/ws/diagrams/{diagram_id}?share=tok%00en&name=Carla"
+    assert closed_code(client, url) == POLICY_VIOLATION
+    session.execute.assert_not_awaited()
 
 
 def receive_until(ws: Any, kind: str) -> dict[str, Any]:
