@@ -18,11 +18,12 @@ from app.infra.database.repositories.diagram_thumbnail_repository import (
 from app.infra.database.session import get_session
 from app.infra.realtime.connection_manager import manager
 from app.infra.realtime.realtime_diagram_update_notifier import RealtimeDiagramUpdateNotifier
+from app.presentation.factories.project_factories import build_project_placement
 from app.presentation.factories.revision_factories import build_revision_recorder
 
 
 async def create_diagram_factory(session: AsyncSession = Depends(get_session)) -> CreateDiagram:
-    return CreateDiagram(DiagramRepositoryImpl(session))
+    return CreateDiagram(DiagramRepositoryImpl(session), build_project_placement(session))
 
 
 async def get_diagram_factory(session: AsyncSession = Depends(get_session)) -> GetDiagram:
@@ -52,6 +53,7 @@ async def update_diagram_factory(session: AsyncSession = Depends(get_session)) -
         DiagramRepositoryImpl(session),
         RealtimeDiagramUpdateNotifier(manager),
         build_revision_recorder(session),
+        build_project_placement(session),
     )
 
 

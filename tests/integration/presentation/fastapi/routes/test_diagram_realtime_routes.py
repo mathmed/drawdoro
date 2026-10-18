@@ -10,6 +10,7 @@ from app.domain.entities.models.diagram import Diagram
 from app.domain.entities.models.revision_author import RevisionAuthor
 from app.domain.enums.revision_origin import RevisionOrigin
 from app.domain.errors.domain_errors import NotFoundError
+from app.domain.services.project_placement import ProjectPlacement
 from app.domain.services.revision_recorder import RevisionRecorder
 from app.domain.usecases.diagram.get_diagram_location import GetDiagramLocation
 from app.domain.usecases.diagram.update_diagram import UpdateDiagram, UpdateDiagramParams
@@ -82,6 +83,7 @@ def test_should_push_saved_diagram_to_open_editors(client: TestClient, diagram: 
         repo,
         RealtimeDiagramUpdateNotifier(manager),
         create_autospec(RevisionRecorder, instance=True),
+        create_autospec(ProjectPlacement, instance=True),
     )
     locate = AsyncMock(spec=GetDiagramLocation)
     locate.execute.side_effect = NotFoundError("Diagram not found")

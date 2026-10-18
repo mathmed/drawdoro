@@ -8,10 +8,11 @@ from app.domain.usecases.folder.list_folders import ListFolders
 from app.domain.usecases.folder.update_folder import UpdateFolder
 from app.infra.database.repositories.folder_repository import FolderRepositoryImpl
 from app.infra.database.session import get_session
+from app.presentation.factories.project_factories import build_project_placement
 
 
 async def create_folder_factory(session: AsyncSession = Depends(get_session)) -> CreateFolder:
-    return CreateFolder(FolderRepositoryImpl(session))
+    return CreateFolder(FolderRepositoryImpl(session), build_project_placement(session))
 
 
 async def get_folder_factory(session: AsyncSession = Depends(get_session)) -> GetFolder:
@@ -23,7 +24,7 @@ async def list_folders_factory(session: AsyncSession = Depends(get_session)) -> 
 
 
 async def update_folder_factory(session: AsyncSession = Depends(get_session)) -> UpdateFolder:
-    return UpdateFolder(FolderRepositoryImpl(session))
+    return UpdateFolder(FolderRepositoryImpl(session), build_project_placement(session))
 
 
 async def delete_folder_factory(session: AsyncSession = Depends(get_session)) -> DeleteFolder:

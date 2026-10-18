@@ -1,12 +1,19 @@
 import uuid
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, NonCallableMagicMock
 
 import pytest
 from fastapi.testclient import TestClient
 
+from app.domain.contracts.diagram_repository import DiagramRepository
+from app.domain.contracts.diagram_update_notifier import DiagramUpdateNotifier
+from app.domain.contracts.folder_repository import FolderRepository
+from app.domain.contracts.project_repository import ProjectRepository
 from app.domain.entities.models.comment import Comment
 from app.domain.entities.models.diagram import Diagram
 from app.domain.entities.models.documentation_page import DocumentationPage
+from app.domain.entities.models.project import Project
+from app.domain.services.project_placement import ProjectPlacement
+from app.domain.services.revision_recorder import RevisionRecorder
 from app.domain.usecases.comment.create_comment import CreateComment
 from app.domain.usecases.comment.delete_comment import DeleteComment
 from app.domain.usecases.diagram.create_diagram import CreateDiagram
@@ -26,6 +33,7 @@ from app.presentation.factories.diagram_factories import (
     update_diagram_factory,
 )
 from app.presentation.factories.documentation_factories import upsert_documentation_page_factory
+from tests.doubles import double
 
 
 @pytest.fixture
@@ -165,3 +173,129 @@ def test_should_get_diagram_by_id_alone(client: TestClient) -> None:
         assert mock_uc.execute.await_args.args[0].diagram_id == diagram.id
     finally:
         app.dependency_overrides.clear()
+
+
+# Authentication is off in the tests, so nothing checks the path's project before the use case:
+# the path a trusted service (the MCP server) takes.
+@pytest.fixture
+def projects() -> NonCallableMagicMock:
+    repo = double(ProjectRepository)
+    repo.get_by_id.return_value = Project(workspace_id=uuid.uuid4(), name="Shop")
+    return repo
+
+
+@pytest.fixture
+def folders() -> NonCallableMagicMock:
+    repo = double(FolderRepository)
+    repo.get_by_id.return_value = None
+    return repo
+
+
+@pytest.fixture
+def diagrams() -> NonCallableMagicMock:
+    repo = double(DiagramRepository)
+    repo.update.side_effect = lambda diagram: diagram
+    return repo
+
+
+@pytest.fixture
+def placement(projects: NonCallableMagicMock, folders: NonCallableMagicMock) -> ProjectPlacement:
+    return ProjectPlacement(projects, folders)
+
+
+def update_diagram_with(
+    diagrams: NonCallableMagicMock, placement: ProjectPlacement
+) -> UpdateDiagram:
+    return UpdateDiagram(
+        diagrams, double(DiagramUpdateNotifier), double(RevisionRecorder), placement
+    )
+
+
+def test_should_return_404_when_creating_a_diagram_in_a_missing_project(
+    client: TestClient,
+    projects: NonCallableMagicMock,
+    diagrams: NonCallableMagicMock,
+    placement: ProjectPlacement,
+) -> None:
+    project_id = uuid.uuid4()
+    projects.get_by_id.return_value = None
+    app.dependency_overrides[create_diagram_factory] = lambda: CreateDiagram(diagrams, placement)
+    try:
+        response = client.post(f"/projects/{project_id}/diagrams", json={"name": "Flow"})
+        assert response.status_code == 404
+        assert response.json() == {"detail": f"Project {project_id} not found"}
+        diagrams.create.assert_not_awaited()
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_should_return_404_when_creating_a_diagram_in_a_missing_folder(
+    client: TestClient, diagrams: NonCallableMagicMock, placement: ProjectPlacement
+) -> None:
+    folder_id = uuid.uuid4()
+    app.dependency_overrides[create_diagram_factory] = lambda: CreateDiagram(diagrams, placement)
+    try:
+        response = client.post(
+            f"/projects/{uuid.uuid4()}/diagrams",
+            json={"name": "Flow", "folder_id": str(folder_id)},
+        )
+        assert response.status_code == 404
+        assert response.json() == {"detail": f"Folder {folder_id} not found"}
+        diagrams.create.assert_not_awaited()
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_should_return_404_when_moving_a_diagram_to_a_missing_folder(
+    client: TestClient, diagrams: NonCallableMagicMock, placement: ProjectPlacement
+) -> None:
+    diagram = Diagram(project_id=uuid.uuid4(), name="Flow")
+    diagrams.get_by_id.return_value = diagram
+    folder_id = uuid.uuid4()
+    app.dependency_overrides[update_diagram_factory] = lambda: update_diagram_with(
+        diagrams, placement
+    )
+    try:
+        response = client.put(
+            f"/projects/{diagram.project_id}/diagrams/{diagram.id}",
+            json={"name": "Flow", "folder_id": str(folder_id)},
+        )
+        assert response.status_code == 404
+        assert response.json() == {"detail": f"Folder {folder_id} not found"}
+        diagrams.update.assert_not_awaited()
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_should_keep_saving_a_diagram_whose_folder_was_deleted(
+    client: TestClient, diagrams: NonCallableMagicMock, placement: ProjectPlacement
+) -> None:
+    deleted_folder_id = uuid.uuid4()
+    diagram = Diagram(project_id=uuid.uuid4(), folder_id=deleted_folder_id, name="Flow")
+    diagrams.get_by_id.return_value = diagram
+    app.dependency_overrides[update_diagram_factory] = lambda: update_diagram_with(
+        diagrams, placement
+    )
+    try:
+        response = client.put(
+            f"/projects/{diagram.project_id}/diagrams/{diagram.id}",
+            json={"name": "Flow v2", "folder_id": str(deleted_folder_id)},
+        )
+        assert response.status_code == 200
+        assert response.json()["name"] == "Flow v2"
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.parametrize(
+    ("path", "method"),
+    [
+        ("/projects/{project_id}/diagrams", "post"),
+        ("/projects/{project_id}/diagrams/{diagram_id}", "put"),
+    ],
+)
+def test_should_document_the_missing_project_diagram_or_folder(path: str, method: str) -> None:
+    not_found = app.openapi()["paths"][path][method]["responses"]["404"]
+    assert not_found["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/ErrorResponse"
+    }

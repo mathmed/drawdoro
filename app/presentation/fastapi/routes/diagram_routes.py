@@ -37,9 +37,12 @@ from app.presentation.fastapi.schemas.diagram_schemas import (
     SaveDiagramThumbnailRequest,
     UpdateDiagramRequest,
 )
+from app.presentation.fastapi.schemas.error_schemas import error_response
 
 # Editor tabs send their realtime client id so they can recognise the echo of their own saves.
 CLIENT_ID_MAX_LENGTH = 64
+
+MISSING_PLACEMENT = error_response(404, "The project, the diagram or the folder doesn't exist")
 
 router = APIRouter(
     prefix="/projects/{project_id}/diagrams",
@@ -78,7 +81,7 @@ async def list_diagram_thumbnails(
     return [DiagramThumbnailResponse.model_validate(t) for t in thumbnails]
 
 
-@router.post("", response_model=DiagramResponse, status_code=201)
+@router.post("", response_model=DiagramResponse, status_code=201, responses=MISSING_PLACEMENT)
 async def create_diagram(
     project_id: uuid.UUID,
     body: CreateDiagramRequest,
@@ -113,6 +116,7 @@ async def get_diagram(
     "/{diagram_id}",
     response_model=DiagramResponse,
     dependencies=[Depends(track_agent_activity)],
+    responses=MISSING_PLACEMENT,
 )
 async def update_diagram(
     project_id: uuid.UUID,
