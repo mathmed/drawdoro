@@ -993,15 +993,6 @@
       "last_seen": "2026-10-18"
     },
     {
-      "id": "9896a7",
-      "operation": "POST /workspaces/{workspace_id}/members",
-      "check": "status_code_conformance",
-      "failure": "UndefinedStatusCode",
-      "signature": "404",
-      "first_seen": "2026-10-18",
-      "last_seen": "2026-10-18"
-    },
-    {
       "id": "8c43e3",
       "operation": "POST /workspaces/{workspace_id}/members",
       "check": "status_code_conformance",
@@ -1065,15 +1056,6 @@
       "last_seen": "2026-10-18"
     },
     {
-      "id": "8c8a44",
-      "operation": "POST /workspaces/{workspace_id}/projects",
-      "check": "status_code_conformance",
-      "failure": "UndefinedStatusCode",
-      "signature": "404",
-      "first_seen": "2026-10-18",
-      "last_seen": "2026-10-18"
-    },
-    {
       "id": "616aa9",
       "operation": "PUT /diagrams/{diagram_id}/documentation",
       "check": "allow_header_conformance",
@@ -1088,15 +1070,6 @@
       "check": "status_code_conformance",
       "failure": "UndefinedStatusCode",
       "signature": "400",
-      "first_seen": "2026-10-18",
-      "last_seen": "2026-10-18"
-    },
-    {
-      "id": "bd4a9c",
-      "operation": "PUT /diagrams/{diagram_id}/documentation",
-      "check": "status_code_conformance",
-      "failure": "UndefinedStatusCode",
-      "signature": "404",
       "first_seen": "2026-10-18",
       "last_seen": "2026-10-18"
     },
