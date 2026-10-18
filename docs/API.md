@@ -15,13 +15,13 @@ both: never remove or rename them.
 | Method | Path | Description |
 |---|---|---|
 | GET | /me | Signed-in user (creates it on first sign-in), with the profile photo as `picture_url` |
-| GET/POST | /workspaces/{id}/members | List members / add a member by email (owner) |
+| GET/POST | /workspaces/{id}/members | List members / add a member by email (owner). A missing workspace, or an email nobody has signed in with yet, answers `404` |
 | PUT/DELETE | /workspaces/{id}/members/{user_id} | Change a role (owner) / remove a member (owner, or yourself to leave) |
 | GET | /health | Liveness: the process answers (`{"status": "ok"}`); never touches the database |
 | GET | /ready | Readiness: `{"status": "ready"}` when the database answers, `503` otherwise |
 | GET/POST | /workspaces | List / create workspaces. A `slug` another workspace uses, deleted ones included, answers `409` |
 | GET/PUT/DELETE | /workspaces/{id} | Get / update / delete workspace. Same `409` for a taken `slug` |
-| GET/POST | /workspaces/{id}/projects | List / create projects |
+| GET/POST | /workspaces/{id}/projects | List / create projects. Creating one in a workspace that does not exist answers `404` |
 | GET/PUT/DELETE | /workspaces/{id}/projects/{id} | Get / update / delete project |
 | GET/POST | /projects/{id}/folders | List / create folders. A missing project or `parent_folder_id`, or a folder of another project, answers `404` |
 | GET/PUT/DELETE | /projects/{id}/folders/{id} | Get / update / delete folder. Moving it under a missing folder, or one of another project, answers `404`; keeping its current parent always works, even once that parent is deleted |
@@ -31,7 +31,7 @@ both: never remove or rename them.
 | GET | /projects/{id}/diagrams/thumbnails | The previews of the project's diagrams in one theme (`?theme=light`, the default, or `dark`), in one query, for the listing cards: `diagram_id`, `version`, `mime_type` and `image_base64`. Diagrams without a preview are left out. See [Diagram previews](FEATURES.md#diagram-previews) |
 | PUT | /diagrams/{id}/thumbnail | Store the light and dark previews of a diagram (editor): `version` (the diagram's `updated_at` they were rendered from), `light_base64` and `dark_base64` (PNG or WebP, up to 64 KiB each; `null` when there is nothing to show). An older version never replaces a newer one. `204` |
 | GET/PUT/DELETE | /projects/{id}/diagrams/{id} | Get / update / delete diagram. Every saved update is pushed to open editors as `diagram_updated`; editor tabs send `X-Client-Id` so they skip the echo of their own saves. Moving it to a missing folder, or one of another project, answers `404`; keeping its current folder always works, even once that folder is deleted |
-| GET/PUT | /diagrams/{id}/documentation | Get / update documentation page |
+| GET/PUT | /diagrams/{id}/documentation | Get / update documentation page. Writing the page of a missing (or deleted) diagram answers `404` |
 | GET/POST | /diagrams/{id}/comments | List comments (`?status=open`, `resolved` or `all`, the default) / create one (editor). Plain text up to 5000 characters; `element_id` is optional (omitted for a comment on the whole diagram) |
 | PATCH/DELETE | /diagrams/{id}/comments/{comment_id} | Resolve or reopen (`{"resolved": true}`) / delete a comment (editor). Agents only delete the comments their own key wrote; see [Comments](FEATURES.md#comments) |
 | POST | /diagrams/{id}/share | Generate (or return) the diagram's shareable link token |
@@ -40,7 +40,7 @@ both: never remove or rename them.
 | POST | /diagrams/{id}/revisions/{revision_id}/restore | Bring the canvas and shape metadata of a revision back (editor). Recorded as a new revision and pushed to open editors |
 | GET/POST | /me/api-keys | List / create the signed-in user's personal API keys. The secret is only in the creation response |
 | DELETE | /me/api-keys/{key_id} | Revoke a personal API key |
-| GET | /share/{share_token} | Public: open a shared diagram by token, no sign-in required (used by guests) |
+| GET | /share/{share_token} | Public: open a shared diagram by token, no sign-in required (used by guests). The token is matched as sent: one with a NUL character (`\u0000`) anywhere answers `404` |
 | GET/POST | /gallery | List the caller's gallery items (without payloads; `?query=` words in the name, tags and description, `?kind=shapes\|image`, `?tag=`, `?limit=`, `?include_thumbnails=false`) / save a selection (`kind=shapes`, tldraw content) or an image (`kind=image`, base64) with a PNG thumbnail, optional `tags` and `description` |
 | GET/PATCH/DELETE | /gallery/{id} | Get an item with its payload and size / change its name, tags or description / delete it. Items are private: someone else's item answers 404. See [Personal gallery](FEATURES.md#personal-gallery) |
 | POST | /diagrams/{id}/gallery-insertions | Insert a copy of one of the caller's gallery items into the diagram (editor): at `x`/`y`, next to `near_shape_id` (`side`, `gap`) or to the right of everything, with `scale`. New ids, recorded in the history and pushed to open editors |
@@ -50,8 +50,12 @@ both: never remove or rename them.
 All routes except `/health` and `/ready` return `501 Not Implemented` until infra is wired.
 
 Text sent to the API (names, slugs, descriptions, documentation, revision summaries, comment `element_id`, API key
-labels, member e-mails, gallery names and descriptions, the share token) loses its NUL characters (`\u0000`) on the
-way in: Postgres can't store them. Length limits apply to the text without them.
+labels, member e-mails, gallery names and descriptions) loses its NUL characters (`\u0000`) on the way in: Postgres
+can't store them. Length limits apply to the text without them. The share token is the exception (see above).
+
+Workspace names and slugs, and project, folder and diagram names, hold at most 255 characters (the size of their
+columns). Longer ones answer the usual `422` (`string_too_long`, with `ctx.max_length`), although the OpenAPI schema
+does not publish the limit as `maxLength`: `make openapi-diff` reports adding one to a request as a breaking change.
 
 ## Contract tests
 
