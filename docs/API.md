@@ -19,18 +19,18 @@ both: never remove or rename them.
 | PUT/DELETE | /workspaces/{id}/members/{user_id} | Change a role (owner) / remove a member (owner, or yourself to leave) |
 | GET | /health | Liveness: the process answers (`{"status": "ok"}`); never touches the database |
 | GET | /ready | Readiness: `{"status": "ready"}` when the database answers, `503` otherwise |
-| GET/POST | /workspaces | List / create workspaces |
-| GET/PUT/DELETE | /workspaces/{id} | Get / update / delete workspace |
+| GET/POST | /workspaces | List / create workspaces. A `slug` another workspace uses, deleted ones included, answers `409` |
+| GET/PUT/DELETE | /workspaces/{id} | Get / update / delete workspace. Same `409` for a taken `slug` |
 | GET/POST | /workspaces/{id}/projects | List / create projects |
 | GET/PUT/DELETE | /workspaces/{id}/projects/{id} | Get / update / delete project |
-| GET/POST | /projects/{id}/folders | List / create folders |
-| GET/PUT/DELETE | /projects/{id}/folders/{id} | Get / update / delete folder |
+| GET/POST | /projects/{id}/folders | List / create folders. A missing project or `parent_folder_id`, or a folder of another project, answers `404` |
+| GET/PUT/DELETE | /projects/{id}/folders/{id} | Get / update / delete folder. Moving it under a missing folder, or one of another project, answers `404`; keeping its current parent always works, even once that parent is deleted |
 | GET | /projects/{id}/tree | Folders and diagram summaries of a project in one response (the sidebar tree) |
-| GET/POST | /projects/{id}/diagrams | List diagram summaries (no canvas or metadata) / create a diagram |
+| GET/POST | /projects/{id}/diagrams | List diagram summaries (no canvas or metadata) / create a diagram. A missing project or `folder_id`, or a folder of another project, answers `404` |
 | GET | /diagrams/{id} | Get a diagram by its id alone, as in the editor link `/diagrams/<id>` (used by the MCP server's `open_link`) |
 | GET | /projects/{id}/diagrams/thumbnails | The previews of the project's diagrams in one theme (`?theme=light`, the default, or `dark`), in one query, for the listing cards: `diagram_id`, `version`, `mime_type` and `image_base64`. Diagrams without a preview are left out. See [Diagram previews](FEATURES.md#diagram-previews) |
 | PUT | /diagrams/{id}/thumbnail | Store the light and dark previews of a diagram (editor): `version` (the diagram's `updated_at` they were rendered from), `light_base64` and `dark_base64` (PNG or WebP, up to 64 KiB each; `null` when there is nothing to show). An older version never replaces a newer one. `204` |
-| GET/PUT/DELETE | /projects/{id}/diagrams/{id} | Get / update / delete diagram. Every saved update is pushed to open editors as `diagram_updated`; editor tabs send `X-Client-Id` so they skip the echo of their own saves |
+| GET/PUT/DELETE | /projects/{id}/diagrams/{id} | Get / update / delete diagram. Every saved update is pushed to open editors as `diagram_updated`; editor tabs send `X-Client-Id` so they skip the echo of their own saves. Moving it to a missing folder, or one of another project, answers `404`; keeping its current folder always works, even once that folder is deleted |
 | GET/PUT | /diagrams/{id}/documentation | Get / update documentation page |
 | GET/POST | /diagrams/{id}/comments | List comments (`?status=open`, `resolved` or `all`, the default) / create one (editor). Plain text up to 5000 characters; `element_id` is optional (omitted for a comment on the whole diagram) |
 | PATCH/DELETE | /diagrams/{id}/comments/{comment_id} | Resolve or reopen (`{"resolved": true}`) / delete a comment (editor). Agents only delete the comments their own key wrote; see [Comments](FEATURES.md#comments) |
@@ -48,6 +48,10 @@ both: never remove or rename them.
 | WS | /ws/workspaces/{id}/presence | Who is in each diagram of the workspace, for the sidebar: a snapshot on connect, then batched deltas (see [Sidebar presence](REALTIME.md#sidebar-presence)). Signed-in members only (`?token=<ID token>`); share-link guests are refused. Nothing is stored |
 
 All routes except `/health` and `/ready` return `501 Not Implemented` until infra is wired.
+
+Text sent to the API (names, slugs, descriptions, documentation, revision summaries, comment `element_id`, API key
+labels, member e-mails, gallery names and descriptions, the share token) loses its NUL characters (`\u0000`) on the
+way in: Postgres can't store them. Length limits apply to the text without them.
 
 ## Contract tests
 

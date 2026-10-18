@@ -183,7 +183,7 @@ failure (for example `POST /workspaces`, `not_a_server_error`, `500`). They are 
 but only a failure that is not in the file fails the run. The first run recorded the API as it was: undocumented
 status codes (mostly `404`), naive timestamps that are not RFC 3339 `date-time`, domain `422` errors whose `detail`
 is a string instead of the documented list, missing `Allow` headers on `405`, and `500`s on unknown parents, a
-duplicate workspace slug or NUL bytes in text. It works as a ratchet:
+duplicate workspace slug or NUL bytes in text (those `500`s have since been fixed). It works as a ratchet:
 
 - a **new failure** fails the job: fix the route or document the response (`responses=` on the route). Accepting
   it (`./scripts/contract.sh --baseline-update`) needs the owner's explicit approval;
