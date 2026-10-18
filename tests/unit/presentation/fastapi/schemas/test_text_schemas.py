@@ -3,6 +3,7 @@ import uuid
 import pytest
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
+from app.domain.constants.names import NAME_MAX_LENGTH
 from app.domain.constants.revisions import REVISION_SUMMARY_MAX_LENGTH
 from app.presentation.fastapi.schemas.api_key_schemas import CreateApiKeyRequest
 from app.presentation.fastapi.schemas.comment_schemas import CreateCommentRequest
@@ -21,7 +22,7 @@ from app.presentation.fastapi.schemas.project_schemas import (
     CreateProjectRequest,
     UpdateProjectRequest,
 )
-from app.presentation.fastapi.schemas.text_schemas import NulFreeStr
+from app.presentation.fastapi.schemas.text_schemas import NameStr, NulFreeStr
 from app.presentation.fastapi.schemas.workspace_member_schemas import AddWorkspaceMemberRequest
 from app.presentation.fastapi.schemas.workspace_schemas import (
     CreateWorkspaceRequest,
@@ -53,6 +54,22 @@ TEXT_FIELDS: list[tuple[type[BaseModel], str, dict[str, object]]] = [
     (UpdateGalleryItemRequest, "description", {}),
     (InsertGalleryItemRequest, "revision_summary", {"item_id": str(uuid.uuid4())}),
 ]
+
+# Every request field stored in a column of NAME_MAX_LENGTH characters, with the other required
+# fields.
+NAME_FIELDS: list[tuple[type[BaseModel], str, dict[str, object]]] = [
+    (CreateWorkspaceRequest, "name", {"slug": "acme"}),
+    (CreateWorkspaceRequest, "slug", {"name": "Acme"}),
+    (UpdateWorkspaceRequest, "name", {"slug": "acme"}),
+    (UpdateWorkspaceRequest, "slug", {"name": "Acme"}),
+    (CreateProjectRequest, "name", {}),
+    (UpdateProjectRequest, "name", {}),
+    (CreateFolderRequest, "name", {}),
+    (UpdateFolderRequest, "name", {}),
+    (CreateDiagramRequest, "name", {}),
+    (UpdateDiagramRequest, "name", {}),
+]
+NAME_FIELD_IDS = [f"{model.__name__}.{field}" for model, field, _ in NAME_FIELDS]
 
 
 @pytest.mark.parametrize(
@@ -87,3 +104,35 @@ def test_should_still_reject_values_that_are_not_text() -> None:
 
 def test_should_document_nul_free_text_as_a_plain_string() -> None:
     assert TypeAdapter(NulFreeStr).json_schema() == TypeAdapter(str).json_schema()
+
+
+@pytest.mark.parametrize(("model", "field", "others"), NAME_FIELDS, ids=NAME_FIELD_IDS)
+def test_should_reject_names_longer_than_their_column_like_a_max_length(
+    model: type[BaseModel], field: str, others: dict[str, object]
+) -> None:
+    with pytest.raises(ValidationError) as raised:
+        model.model_validate(others | {field: "x" * (NAME_MAX_LENGTH + 1)})
+    [error] = raised.value.errors()
+    assert (error["type"], error["loc"], error["msg"], error.get("ctx")) == (
+        "string_too_long",
+        (field,),
+        f"String should have at most {NAME_MAX_LENGTH} characters",
+        {"max_length": NAME_MAX_LENGTH},
+    )
+
+
+@pytest.mark.parametrize(("model", "field", "others"), NAME_FIELDS, ids=NAME_FIELD_IDS)
+def test_should_accept_names_that_fill_their_column(
+    model: type[BaseModel], field: str, others: dict[str, object]
+) -> None:
+    longest = "x" * NAME_MAX_LENGTH
+    assert getattr(model.model_validate(others | {field: longest}), field) == longest
+
+
+def test_should_count_the_length_of_a_name_without_its_nul_characters() -> None:
+    longest = "\x00" + "é" * NAME_MAX_LENGTH + "\x00"
+    assert TypeAdapter(NameStr).validate_python(longest) == "é" * NAME_MAX_LENGTH
+
+
+def test_should_document_names_as_plain_strings_without_a_max_length() -> None:
+    assert TypeAdapter(NameStr).json_schema() == TypeAdapter(str).json_schema()

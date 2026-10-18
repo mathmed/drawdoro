@@ -3,16 +3,16 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
-from app.presentation.fastapi.schemas.text_schemas import NulFreeStr
+from app.presentation.fastapi.schemas.text_schemas import NameStr, NulFreeStr
 
 
 class CreateProjectRequest(BaseModel):
-    name: NulFreeStr
+    name: NameStr
     description: NulFreeStr = ""
 
 
 class UpdateProjectRequest(BaseModel):
-    name: NulFreeStr
+    name: NameStr
     description: NulFreeStr = ""
 
 

@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 from fastapi.testclient import TestClient
 
+from app.domain.constants.names import NAME_MAX_LENGTH
 from app.domain.entities.models.diagram import Diagram
 from app.domain.entities.models.folder import Folder
 from app.domain.entities.models.project import Project
@@ -18,6 +19,7 @@ from app.domain.usecases.diagram.update_diagram import UpdateDiagram
 from app.domain.usecases.folder.create_folder import CreateFolder
 from app.domain.usecases.folder.update_folder import UpdateFolder
 from app.domain.usecases.project.create_project import CreateProject
+from app.domain.usecases.project.update_project import UpdateProject
 from app.domain.usecases.workspace.create_workspace import CreateWorkspace
 from app.domain.usecases.workspace.update_workspace import UpdateWorkspace
 from app.domain.usecases.workspace_member.add_workspace_member import AddWorkspaceMember
@@ -28,7 +30,10 @@ from app.presentation.factories.diagram_factories import (
     update_diagram_factory,
 )
 from app.presentation.factories.folder_factories import create_folder_factory, update_folder_factory
-from app.presentation.factories.project_factories import create_project_factory
+from app.presentation.factories.project_factories import (
+    create_project_factory,
+    update_project_factory,
+)
 from app.presentation.factories.workspace_factories import (
     create_workspace_factory,
     update_workspace_factory,
@@ -138,6 +143,66 @@ CASES = {
 }
 
 
+# A request whose name or slug, stored in a column of NAME_MAX_LENGTH characters, is too long.
+@dataclass(frozen=True)
+class NameCase:
+    method: str
+    path: str
+    factory: Callable[..., object]
+    use_case: type[object]
+    body: dict[str, str]
+    field: str
+
+
+NAME_CASES = {
+    "create-workspace-name": NameCase(
+        "POST", "/workspaces", create_workspace_factory, CreateWorkspace, {"slug": "acme"}, "name"
+    ),
+    "create-workspace-slug": NameCase(
+        "POST", "/workspaces", create_workspace_factory, CreateWorkspace, {"name": "Acme"}, "slug"
+    ),
+    "update-workspace-name": NameCase(
+        "PUT", f"/workspaces/{ID}", update_workspace_factory, UpdateWorkspace, {"slug": "a"}, "name"
+    ),
+    "update-workspace-slug": NameCase(
+        "PUT", f"/workspaces/{ID}", update_workspace_factory, UpdateWorkspace, {"name": "A"}, "slug"
+    ),
+    "create-project": NameCase(
+        "POST", f"/workspaces/{ID}/projects", create_project_factory, CreateProject, {}, "name"
+    ),
+    "update-project": NameCase(
+        "PUT",
+        f"/workspaces/{ID}/projects/{uuid.uuid4()}",
+        update_project_factory,
+        UpdateProject,
+        {},
+        "name",
+    ),
+    "create-folder": NameCase(
+        "POST", f"/projects/{ID}/folders", create_folder_factory, CreateFolder, {}, "name"
+    ),
+    "update-folder": NameCase(
+        "PUT",
+        f"/projects/{ID}/folders/{uuid.uuid4()}",
+        update_folder_factory,
+        UpdateFolder,
+        {},
+        "name",
+    ),
+    "create-diagram": NameCase(
+        "POST", f"/projects/{ID}/diagrams", create_diagram_factory, CreateDiagram, {}, "name"
+    ),
+    "update-diagram": NameCase(
+        "PUT",
+        f"/projects/{ID}/diagrams/{uuid.uuid4()}",
+        update_diagram_factory,
+        UpdateDiagram,
+        {},
+        "name",
+    ),
+}
+
+
 @pytest.fixture
 def client() -> Iterator[TestClient]:
     yield TestClient(app, raise_server_exceptions=False)
@@ -155,3 +220,24 @@ def test_should_pass_text_without_nul_characters_to_the_use_case(
     assert response.is_success
     params = use_case.execute.await_args.args[0]
     assert {field: getattr(params, field) for field in case.expected} == case.expected
+
+
+@pytest.mark.parametrize("case", NAME_CASES.values(), ids=NAME_CASES.keys())
+def test_should_reject_names_longer_than_their_column_with_the_usual_422(
+    client: TestClient, case: NameCase
+) -> None:
+    use_case = AsyncMock(spec=case.use_case)
+    app.dependency_overrides[case.factory] = lambda: use_case
+    too_long = "x" * (NAME_MAX_LENGTH + 1)
+    response = client.request(case.method, case.path, json=case.body | {case.field: too_long})
+    assert response.status_code == 422
+    assert response.json()["detail"] == [
+        {
+            "type": "string_too_long",
+            "loc": ["body", case.field],
+            "msg": f"String should have at most {NAME_MAX_LENGTH} characters",
+            "input": too_long,
+            "ctx": {"max_length": NAME_MAX_LENGTH},
+        }
+    ]
+    use_case.execute.assert_not_awaited()

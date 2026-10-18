@@ -5,6 +5,7 @@ from typing import Any
 from sqlalchemy import JSON, DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.domain.constants.names import NAME_MAX_LENGTH
 from app.domain.constants.user import PICTURE_URL_MAX_LENGTH
 from app.infra.database.models.workspace import Base
 
@@ -30,7 +31,7 @@ class DiagramRevisionORM(Base):
     restored_from_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("diagram_revisions.id", ondelete="SET NULL"), nullable=True
     )
-    name: Mapped[str] = mapped_column(String(255))
+    name: Mapped[str] = mapped_column(String(NAME_MAX_LENGTH))
     canvas_state: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     semantic_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

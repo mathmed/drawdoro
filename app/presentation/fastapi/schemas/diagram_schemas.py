@@ -7,17 +7,17 @@ from pydantic import Base64Bytes, BaseModel, ConfigDict, Field
 from app.domain.constants.revisions import REVISION_SUMMARY_MAX_LENGTH
 from app.domain.enums.image_mime_type import ImageMimeType
 from app.presentation.fastapi.schemas.gallery_schemas import EncodedBytes
-from app.presentation.fastapi.schemas.text_schemas import NulFreeStr
+from app.presentation.fastapi.schemas.text_schemas import NameStr, NulFreeStr
 
 
 class CreateDiagramRequest(BaseModel):
-    name: NulFreeStr
+    name: NameStr
     folder_id: uuid.UUID | None = None
     canvas_state: dict[str, Any] | None = None
 
 
 class UpdateDiagramRequest(BaseModel):
-    name: NulFreeStr
+    name: NameStr
     folder_id: uuid.UUID | None = None
     canvas_state: dict[str, Any] | None = None
     semantic_metadata: dict[str, Any] | None = None
