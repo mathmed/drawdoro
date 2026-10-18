@@ -11,6 +11,8 @@ from app.domain.entities.objects.diagram_location import DiagramLocation
 from app.infra.database.models.diagram import DiagramORM
 from app.infra.database.models.project import ProjectORM
 
+NUL = "\x00"
+
 
 class DiagramRepositoryImpl(DiagramRepository):
     def __init__(self, session: AsyncSession) -> None:
@@ -65,6 +67,10 @@ class DiagramRepositoryImpl(DiagramRepository):
         return DiagramLocation(workspace_id=row.workspace_id, project_id=row.project_id)
 
     async def get_by_share_token(self, share_token: str) -> Diagram | None:
+        # Postgres text can't hold NUL, so no stored token has one: such a token matches nothing,
+        # and querying with it would fail.
+        if NUL in share_token:
+            return None
         result = await self._session.execute(
             select(DiagramORM).where(
                 DiagramORM.share_token == share_token,

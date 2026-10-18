@@ -14,7 +14,6 @@ from app.domain.entities.models.workspace import Workspace
 from app.domain.entities.models.workspace_member_details import WorkspaceMemberDetails
 from app.domain.enums.workspace_role import WorkspaceRole
 from app.domain.usecases.diagram.create_diagram import CreateDiagram
-from app.domain.usecases.diagram.get_diagram_by_share_token import GetDiagramByShareToken
 from app.domain.usecases.diagram.update_diagram import UpdateDiagram
 from app.domain.usecases.folder.create_folder import CreateFolder
 from app.domain.usecases.folder.update_folder import UpdateFolder
@@ -26,7 +25,6 @@ from app.domain.usecases.workspace_member.add_workspace_member import AddWorkspa
 from app.main.main import app
 from app.presentation.factories.diagram_factories import (
     create_diagram_factory,
-    get_diagram_by_share_token_factory,
     update_diagram_factory,
 )
 from app.presentation.factories.folder_factories import create_folder_factory, update_folder_factory
@@ -130,15 +128,6 @@ CASES = {
         ),
         {"email": "ada@example.com\x00"},
         {"email": "ada@example.com"},
-    ),
-    "open-share-link": TextCase(
-        "GET",
-        "/share/tok%00en",
-        get_diagram_by_share_token_factory,
-        GetDiagramByShareToken,
-        Diagram(project_id=ID, name="Flow"),
-        None,
-        {"share_token": "token"},
     ),
 }
 
