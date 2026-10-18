@@ -24,6 +24,7 @@ from scripts.quality_report import (
     analyze_ruff_check,
     analyze_ruff_format,
     analyze_smoke,
+    analyze_suppressions,
     analyze_tsc,
     analyze_vitest,
     analyze_vulture,
@@ -435,6 +436,79 @@ class TestMutationAnalyzer:
         assert finding.summary == "mutmut failed before producing a score"
 
 
+def suppressions_output(changes: list[dict[str, object]], total: int = 6) -> str:
+    payload = {
+        "total": total,
+        "baseline_total": 6,
+        "totals": {"type-ignore": 1, "nosec": 5},
+        "changes": changes,
+    }
+    return "Suppressions: 6 (baseline 6)\nSUPPRESSIONS_RESULT: " + json.dumps(payload)
+
+
+def suppression_change(path: str, baseline: int, current: int) -> dict[str, object]:
+    return {
+        "path": path,
+        "kind": "nosec",
+        "baseline": baseline,
+        "current": current,
+        "lines": list(range(1, current + 1)),
+    }
+
+
+class TestSuppressionsAnalyzer:
+    def test_should_pass_and_list_the_totals_by_kind_when_matching_the_baseline(self) -> None:
+        finding = analyze_suppressions(fragment(Analysis.SUPPRESSIONS, suppressions_output([])))
+
+        assert finding.status == Status.OK
+        assert finding.summary == "6 suppressions, matching the baseline"
+        assert finding.details == "type-ignore: 1\nnosec: 5"
+
+    def test_should_fail_and_list_only_the_new_suppressions(self) -> None:
+        output = suppressions_output(
+            [suppression_change("app/a.py", 1, 3), suppression_change("app/b.py", 2, 0)], 7
+        )
+
+        finding = analyze_suppressions(fragment(Analysis.SUPPRESSIONS, output, 1))
+
+        assert finding.status == Status.FAILED
+        assert finding.summary == "2 new suppressions above the baseline"
+        assert finding.details_format == DetailsFormat.MARKDOWN
+        assert "| `app/a.py` | nosec | 1 → 3 | 1, 2, 3 |" in finding.details
+        assert "app/b.py" not in finding.details
+
+    def test_should_ask_for_a_baseline_update_when_suppressions_were_removed(self) -> None:
+        output = suppressions_output([suppression_change("app/b.py", 2, 0)], 4)
+
+        finding = analyze_suppressions(fragment(Analysis.SUPPRESSIONS, output, 1))
+
+        assert finding.status == Status.FAILED
+        assert finding.summary == (
+            "2 suppressions removed but still counted in the baseline: "
+            "run `make suppressions-update`"
+        )
+        assert "| `app/b.py` | nosec | 2 → 0 | - |" in finding.details
+
+    def test_should_point_to_the_full_list_when_there_are_too_many_changes(self) -> None:
+        changes = [suppression_change(f"app/m{index}.py", 0, 1) for index in range(52)]
+
+        finding = analyze_suppressions(
+            fragment(Analysis.SUPPRESSIONS, suppressions_output(changes, 58), 1)
+        )
+
+        assert "... and 2 more: run `make suppressions` for the full list." in finding.details
+        assert "app/m51.py" not in finding.details
+
+    def test_should_fail_without_a_result_line(self) -> None:
+        finding = analyze_suppressions(
+            fragment(Analysis.SUPPRESSIONS, "FileNotFoundError: root not found: app", 1)
+        )
+
+        assert finding.status == Status.FAILED
+        assert finding.summary == "Suppression check failed before producing a result"
+        assert finding.details == "FileNotFoundError: root not found: app"
+
+
 class TestFrontendAnalyzers:
     def test_should_warn_about_eslint_warnings_with_their_rules(self) -> None:
         finding = analyze_eslint(fragment(Analysis.ESLINT, ESLINT_WARNINGS))
@@ -579,7 +653,8 @@ class TestRender:
         assert lines[0] == MARKER
         assert lines[1] == "## 🔍 Quality Report"
         assert lines[3].startswith("❌ **Failed**")
-        rows = [line for line in lines if line.startswith(("| Backend |", "| Frontend |"))]
+        areas = ("| Backend |", "| Frontend |", "| Repository |")
+        rows = [line for line in lines if line.startswith(areas)]
         assert len(rows) == len(SECTIONS)
         assert "| Backend | Lint and format (ruff) | ✅ | lint: ✅ · format: ✅ |" in rows
         assert report.rstrip().endswith("commit `abc1234`")
@@ -600,7 +675,7 @@ class TestRender:
 
         report = render(fragments, {})
 
-        assert "✅ **All good** (12 sections not run)" in report
+        assert "✅ **All good** (13 sections not run)" in report
 
     def test_should_trim_details_to_fit_in_a_comment(self) -> None:
         huge = "E" * 5000 + "\n"

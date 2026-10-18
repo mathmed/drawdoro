@@ -28,10 +28,12 @@ make setup        install uv, dependencies and git hooks
 make run          run the API locally with hot reload
 make test         all tests with line and branch coverage (fails under 95%)
 make test-unit    only the fast unit tests
-make hooks        all quality checks: ruff, mypy, bandit, vulture, xenon, pip-audit
+make hooks        all quality checks: ruff, mypy, import-linter, suppressions, bandit, vulture, xenon, pip-audit
 make format-code  fix lint issues and format with ruff
 make smoke        boot smoke: clean Postgres + migrations + real API (auth on/off) + MCP
 make lint-imports architecture contracts (import-linter) for app/ and mcp/
+make suppressions suppression ratchet: fails when noqa/type: ignore/nosec/eslint-disable/@ts-ignore/skip/only... differ from the baseline
+make suppressions-update  lower suppressions-baseline.json after removing suppressions (never raises it)
 make mutation     mutation testing of use cases and domain services (slow, weekly in CI)
 make mutation-changed  mutation testing of only the domain code changed vs BASE (default origin/main); runs on every PR
 ```
@@ -85,6 +87,12 @@ tests/integration/ HTTP tests with TestClient
 
 - Run `make smoke` (boots the real API on a clean, migrated Postgres, and the MCP server) and
   `make lint-imports` (architecture contracts) before opening a PR, besides `make hooks` and `make test`.
+- `make suppressions` (pre-commit and CI) compares every suppression in `app/`, `alembic/`, `mcp/`, `scripts/`,
+  `tests/` and `frontend/` (`# noqa`, `# type: ignore`, `# nosec`, `# pragma: no cover`, tool directives,
+  skipped/xfail tests, `eslint-disable`, `@ts-ignore`, `@ts-expect-error`, `@ts-nocheck`, coverage ignores,
+  `.skip`/`.only`/`.fails` tests) with `suppressions-baseline.json`. Fix the cause instead of suppressing it. Never
+  raise the baseline (`update --allow-increase`) without the owner's explicit approval. When you remove
+  suppressions, run `make suppressions-update` and commit the lower baseline in the same PR.
 - Never relax an import-linter contract (`[tool.importlinter]` in `pyproject.toml` or `mcp/pyproject.toml`)
   nor add `ignore_imports` without the owner's approval: fix the import instead.
 - Never remove or rename `/health` (liveness) or `/ready` (readiness): deploy probes depend on them.

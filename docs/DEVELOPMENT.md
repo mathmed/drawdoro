@@ -45,13 +45,15 @@ Health checks: `curl http://localhost:8000/health` (liveness, never touches the 
 | `make test-unit` | Run only the unit tests |
 | `make test-mcp` | Run the MCP server tests and type check |
 | `make test-frontend` | Run the frontend lint, type check and tests with coverage |
-| `make hooks` | Run all quality checks (ruff, mypy, bandit, vulture, xenon, pip-audit) |
+| `make hooks` | Run all quality checks (ruff, mypy, import-linter, MCP manifest, suppression ratchet, bandit, vulture, xenon, pip-audit) |
 | `make format-code` | Fix lint issues and format the code |
 | `make smoke` | Boot smoke: clean Postgres, `alembic upgrade head`, real API (auth on and off), `/health`, `/ready` and the MCP server. See [Boot smoke](#boot-smoke) |
 | `make smoke-mcp` | MCP smoke only: streamable-http server, `/health`, `initialize` and `tools/list` |
 | `make lint-imports` | Check the architecture contracts (import-linter) of the API and the MCP server |
 | `make mutation` | Mutation testing (mutmut) of the use cases and domain services; report in `mutants/report.md` |
 | `make mcp-manifest` | Regenerate `frontend/src/config/mcpTools.json` (the *Available tools* list in *Connect Claude*) from the tools the MCP server registers. The MCP tests and a pre-commit hook fail while it is out of date |
+| `make suppressions` | Suppression ratchet: fails when the suppressions of the repository differ from `suppressions-baseline.json`. See [Suppression ratchet](#suppression-ratchet) |
+| `make suppressions-update` | Lower `suppressions-baseline.json` after removing suppressions (never raises it) |
 | `make mutation-changed` | What the PR job runs: mutation testing of only the use cases and domain services changed against `BASE` (default `origin/main`) |
 | `make migrate` | Apply database migrations (requires running DB) |
 | `make migration msg="desc"` | Generate a new Alembic migration |
@@ -145,13 +147,15 @@ gallery items and reads the diagram and its history back.
 ### Static analysis thresholds
 
 `make hooks`, CI jobs `lint` and `quality`. The backend holds the strictest setting of every tool, with no
-baseline, per-file ignore, `# noqa`, `# type: ignore` or vulture allowlist. A regression fails pre-commit and CI.
+per-file ignore or vulture allowlist. A regression fails pre-commit and CI.
 
-The only suppressions are five line-scoped `# nosec` in `scripts/`, where running a process is the job:
-`B404` (importing `subprocess`) and `B603` (a process started without a shell) in `quality_report.py`
+The few line-scoped suppressions left are counted by the [suppression ratchet](#suppression-ratchet) and listed in
+`suppressions-baseline.json`. Most are `# nosec` in `scripts/`, where running a process is the job: `B404`
+(importing `subprocess`) and `B603` (a process started without a shell) in `quality_report.py`
 (`run <analysis> -- <command>` runs the CI analysis commands) and `mutation.py` (`git` and `mutmut`, resolved
 to absolute paths with `shutil.which`). Bandit flags every `subprocess` call at low severity whatever its
-input, so these are reviewed call sites, not tolerated findings; nothing else may be suppressed.
+input, so these are reviewed call sites, not tolerated findings; nothing else may be suppressed without the
+owner's approval.
 
 | Tool | Scope | Threshold |
 |---|---|---|
@@ -165,6 +169,32 @@ input, so these are reviewed call sites, not tolerated findings; nothing else ma
 | mutmut | use cases and domain services | `MUTATION_MIN_SCORE` ratchet, see below |
 
 Thresholds are ratchets: raise them when the code allows it, never lower them to get a PR green.
+
+### Suppression ratchet
+
+`make suppressions`, pre-commit hook `suppressions` and a step of the CI job `lint`. `scripts/suppressions.py`
+counts, per file and per kind, every suppression in `app/`, `alembic/`, `mcp/`, `scripts/`, `tests/` and
+`frontend/` (skipping hidden directories such as `.venv`, `node_modules`, `dist`, `coverage` and caches) and
+compares the counts with the committed `suppressions-baseline.json`:
+
+| Language | What counts |
+|---|---|
+| Python | `# noqa`, `# type: ignore`, `# nosec`, `# pragma: no cover` / `no branch`, `# pylint: disable`, `# mypy:`, `# pyright:`, `# fmt: off` / `skip` (and `isort`/`yapf`), `pytest.mark.skip` / `skipif` / `xfail`, `pytest.skip()` / `xfail()` / `importorskip()`, `unittest.skip*` / `expectedFailure`, `self.skipTest()` |
+| TypeScript / JavaScript | `eslint-disable` (also `-line`, `-next-line` and inline rule configuration such as `/* eslint no-console: "off" */`), `@ts-ignore`, `@ts-expect-error`, `@ts-nocheck`, `istanbul` / `v8` / `c8 ignore`, `prettier-ignore`, skipped tests (`it` / `test` / `describe` / `suite` `.skip`, `.skipIf`, `.runIf`, `.todo`, `xit`, `xdescribe`, `ctx.skip()`), focused tests (`.only`, `fit`, `fdescribe`) and expected failures (`.fails`) |
+
+Python comments are read with the tokenizer and test markers with the AST, so the same words inside strings do
+not count. In TypeScript a directive only counts right after a comment opener (`//`, `/*`).
+
+Any difference fails, in both directions:
+
+- **more** suppressions in a file than in the baseline: remove them and fix the cause. Raising the baseline
+  (`uv run python scripts/suppressions.py update --allow-increase`) needs the owner's explicit approval and is
+  called out in the PR;
+- **fewer**: lock the improvement in with `make suppressions-update` and commit the lower baseline in the same
+  PR. The target refuses to raise any count.
+
+Moving a suppression to another file counts as one more there and one less in the old file. The Quality Report
+shows the totals by kind, or the files and lines that changed.
 
 ### Architecture contracts
 
@@ -214,8 +244,8 @@ Every PR gets **one** comment titled *Quality Report* (found and updated through
 
 - the top line is the verdict (❌ failed, ⚠️ passed with warnings, ✅ all good) and the table has one row per
   analysis: backend lint/format, types (API and MCP), security, dead code, complexity, tests and coverage
-  (API and MCP), architecture contracts (API and MCP), boot smoke, mutation testing, and the frontend lint,
-  types, tests with coverage and build;
+  (API and MCP), architecture contracts (API and MCP), boot smoke, mutation testing, the frontend lint,
+  types, tests with coverage and build, and the suppression ratchet of the whole repository;
 - each section below has the summary and, in a collapsed `<details>`, the evidence: least covered files,
   broken contracts with the violating import, smoke scenarios with their boot time, surviving mutants with
   their diffs, lint problems, failures;

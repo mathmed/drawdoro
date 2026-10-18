@@ -1,5 +1,6 @@
 .PHONY: setup dev dev-build run build test test-unit test-mcp test-frontend hooks check-code format-code frontend db \
-	smoke smoke-mcp lint-imports mutation mutation-report mutation-changed mcp-manifest
+	smoke smoke-mcp lint-imports mutation mutation-report mutation-changed mcp-manifest \
+	suppressions suppressions-update
 
 # Install uv (if missing), project dependencies and git hooks
 setup:
@@ -51,7 +52,8 @@ test-mcp:
 test-frontend:
 	cd frontend && npm run lint && npm run typecheck && npm run test:coverage
 
-# Run all quality checks (ruff, mypy, bandit, vulture, xenon, pip-audit)
+# Run all quality checks (ruff, mypy, import-linter, MCP manifest, suppressions, bandit, vulture,
+# xenon, pip-audit)
 hooks:
 	uv run pre-commit run --all-files
 
@@ -91,6 +93,17 @@ mutation-report:
 BASE ?= origin/main
 mutation-changed:
 	uv run python scripts/mutation.py changed --base $(BASE)
+
+# Suppression ratchet: fails when the noqa, type: ignore, nosec, eslint-disable, @ts-ignore, skipped
+# or focused tests... of app/, alembic/, mcp/, scripts/, tests/ and frontend/ differ from
+# suppressions-baseline.json, in either direction.
+suppressions:
+	uv run python scripts/suppressions.py check
+
+# Lower suppressions-baseline.json after removing suppressions. It refuses to raise it: that needs
+# `update --allow-increase` and the owner's approval.
+suppressions-update:
+	uv run python scripts/suppressions.py update
 
 # Lint and check formatting
 check-code:

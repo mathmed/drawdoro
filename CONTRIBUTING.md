@@ -31,7 +31,7 @@ Always use `uv run` for the backend. The MCP server is a separate uv project in 
    HTTP, third-party APIs).
 4. Run the checks before opening the pull request:
    - `uv run python -c "import app.main.main"` (the app imports);
-   - `make hooks` (ruff, mypy, bandit, vulture, xenon, pip-audit, import-linter, MCP manifest);
+   - `make hooks` (ruff, mypy, bandit, vulture, xenon, pip-audit, import-linter, MCP manifest, suppression ratchet);
    - `make test` (line and branch coverage, fails under 95%);
    - `make lint-imports` (architecture contracts of the API and the MCP server);
    - `make smoke` (clean Postgres, migrations, the real API with auth on and off, and the MCP server);
@@ -50,7 +50,9 @@ Always use `uv run` for the backend. The MCP server is a separate uv project in 
 - Existing routes are not removed or renamed unless that is the point of the change; never remove or rename
   `/health` and `/ready`, which deploy probes depend on. Public contracts only grow additively.
 - Never relax an import-linter contract, add `ignore_imports`, lower a coverage or mutation threshold, or add a
-  suppression to get a pull request green: fix the code instead. Relaxing a gate needs the owner's approval.
+  suppression to get a pull request green: fix the code instead. Relaxing a gate needs the owner's approval. The
+  suppression ratchet (`make suppressions`) fails on any new `# noqa`, `eslint-disable`, `@ts-ignore`, skipped
+  test...; after removing some, commit the lower baseline with `make suppressions-update`.
 - Keep code identifiers brand-neutral: everything people or agents read takes the product name from
   configuration, so forks merge upstream cleanly ([`docs/WHITE_LABEL.md`](docs/WHITE_LABEL.md)).
 - Update the README or the relevant file in `docs/` when the change affects setup, commands, routes, environment

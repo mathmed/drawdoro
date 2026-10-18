@@ -44,6 +44,13 @@ repos:
         files: ^(mcp/.*\.py|frontend/src/config/mcpTools\.json)$
         pass_filenames: false
 
+      - id: suppressions
+        name: suppression ratchet (suppressions-baseline.json)
+        entry: uv run python scripts/suppressions.py check
+        language: system
+        # No type filter: suppressions in the frontend count as much as those in Python
+        pass_filenames: false
+
       - id: bandit
         name: bandit (security)
         entry: uv run bandit -r app mcp scripts -q -x mcp/tests,mcp/.venv

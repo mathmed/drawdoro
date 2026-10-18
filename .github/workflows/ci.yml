@@ -33,6 +33,13 @@ jobs:
       - name: Architecture contracts (import-linter)
         if: ${{ !cancelled() }}
         run: uv run --locked python scripts/quality_report.py run import-linter -- lint-imports
+      # Counts the suppressions of the whole repository (Python and the frontend) against
+      # suppressions-baseline.json: any difference fails, see scripts/suppressions.py.
+      - name: Suppression ratchet
+        if: ${{ !cancelled() }}
+        run: >-
+          uv run --locked python scripts/quality_report.py run suppressions --
+          python scripts/suppressions.py check
 
       - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
