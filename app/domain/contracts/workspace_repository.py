@@ -5,6 +5,8 @@ from app.domain.entities.models.workspace import Workspace
 
 
 class WorkspaceRepository(ABC):
+    # create and update raise ConflictError when another workspace, deleted ones included, already
+    # uses the slug.
     @abstractmethod
     async def create(self, workspace: Workspace) -> Workspace: ...
 

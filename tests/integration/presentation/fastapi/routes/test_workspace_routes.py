@@ -1,11 +1,12 @@
 import uuid
+from collections.abc import Callable
 from unittest.mock import AsyncMock
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.domain.entities.models.workspace import Workspace
-from app.domain.errors.domain_errors import NotFoundError
+from app.domain.errors.domain_errors import ConflictError, NotFoundError
 from app.domain.usecases.workspace.create_workspace import CreateWorkspace
 from app.domain.usecases.workspace.delete_workspace import DeleteWorkspace
 from app.domain.usecases.workspace.get_workspace import GetWorkspace
@@ -104,3 +105,41 @@ def test_should_delete_workspace(client: TestClient) -> None:
         assert response.status_code == 204
     finally:
         app.dependency_overrides.clear()
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "factory", "use_case"),
+    [
+        ("POST", "/workspaces", create_workspace_factory, CreateWorkspace),
+        ("PUT", f"/workspaces/{uuid.uuid4()}", update_workspace_factory, UpdateWorkspace),
+    ],
+    ids=["create", "update"],
+)
+def test_should_return_409_when_the_slug_is_taken(
+    client: TestClient,
+    method: str,
+    path: str,
+    factory: Callable[..., object],
+    use_case: type[object],
+) -> None:
+    mock_uc = AsyncMock(spec=use_case)
+    mock_uc.execute.side_effect = ConflictError("Another workspace already uses this slug")
+    app.dependency_overrides[factory] = lambda: mock_uc
+    try:
+        response = client.request(method, path, json={"name": "Acme", "slug": "acme"})
+        assert response.status_code == 409
+        assert response.json() == {"detail": "Another workspace already uses this slug"}
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.parametrize(
+    ("path", "method"), [("/workspaces", "post"), ("/workspaces/{workspace_id}", "put")]
+)
+def test_should_document_the_taken_slug_conflict(path: str, method: str) -> None:
+    schema = app.openapi()
+    conflict = schema["paths"][path][method]["responses"]["409"]
+    assert conflict["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/ErrorResponse"
+    }
+    assert schema["components"]["schemas"]["ErrorResponse"]["required"] == ["detail"]
