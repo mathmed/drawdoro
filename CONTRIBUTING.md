@@ -42,9 +42,13 @@ Always use `uv run` for the backend. The MCP server is a separate uv project in 
    - `make test-mcp` for `mcp/`, and `make test-frontend` plus `npm run build` for `frontend/`.
 5. Commit with [Conventional Commits](https://www.conventionalcommits.org/) in English (`feat`, `fix`,
    `refactor`, `chore`, `test`, `docs`, `ci`, `build`).
-6. Open the pull request against `main` with a *What*, *Why* and *How to test* section. CI posts one
-   **Quality Report** comment ([`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md#quality-report)); a failing check means
-   it is not ready.
+6. Open the pull request against `main`. GitHub fills the description from
+   [`.github/pull_request_template.md`](.github/pull_request_template.md): **Risk** first, a one-sentence
+   **Summary**, up to five **Behavior** changes in plain words (*before → after*, no file or code names),
+   **Unchanged**, **Look here** (the only place for files, functions and tests: the evidence of each behavior and
+   what deserves a human look), **Deploy steps** (always present; "None: normal merge and deploy." when nothing is
+   needed) and **Not verified**. CI posts one **Quality Report** comment
+   ([`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md#quality-report)); a failing check means it is not ready.
 
 ## Rules that are easy to miss
 
