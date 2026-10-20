@@ -9,11 +9,11 @@ updates:
       time: "09:00"
       timezone: "America/Sao_Paulo"
     open-pull-requests-limit: 100
-    # Dependency bumps touch pyproject.toml and uv.lock, which are pipeline config: never below high
-    # (.github/risk-floors.yaml). The labels must exist: run `make risk-labels` once.
+    # Bumps are born low (docs/DEVELOPMENT.md, "Pull requests and risk"); raise the label by hand when one
+    # deserves it. The labels must exist: run `make risk-labels` once.
     labels:
       - "dependencies"
-      - "risk:high"
+      - "risk:low"
     groups:
       python-non-breaking:
         update-types:
@@ -37,10 +37,11 @@ updates:
       time: "09:00"
       timezone: "America/Sao_Paulo"
     open-pull-requests-limit: 50
-    # Workflow changes are pipeline config: never below high (.github/risk-floors.yaml)
+    # Bumps are born low (docs/DEVELOPMENT.md, "Pull requests and risk"); raise the label by hand when one
+    # deserves it. The labels must exist: run `make risk-labels` once.
     labels:
       - "dependencies"
-      - "risk:high"
+      - "risk:low"
     groups:
       actions-non-breaking:
         update-types:
