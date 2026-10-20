@@ -58,7 +58,6 @@ Health checks: `curl http://localhost:8000/health` (liveness, never touches the 
 | `make suppressions` | Suppression ratchet: fails when the suppressions of the repository differ from `suppressions-baseline.json`. See [Suppression ratchet](#suppression-ratchet) |
 | `make suppressions-update` | Lower `suppressions-baseline.json` after removing suppressions (never raises it) |
 | `make mutation-changed` | What the PR job runs: mutation testing of only the use cases and domain services changed against `BASE` (default `origin/main`) |
-| `make risk-floor` | Minimum risk level of the commits of `REF` (default `HEAD`) against `BASE`, from `.github/risk-floors.yaml`. See [Pull requests and risk](#pull-requests-and-risk) |
 | `make risk-labels` | Create or update the four `risk:<level>` labels on the GitHub repository (idempotent, needs `gh`) |
 | `make migrate` | Apply database migrations (requires running DB) |
 | `make migration msg="desc"` | Generate a new Alembic migration |
@@ -319,17 +318,24 @@ Every pull request description follows [`.github/pull_request_template.md`](../.
 | **Deploy steps** | Always present: env vars, secrets, migration order, flags, external configuration, rollback; or "None: normal merge and deploy." |
 | **Not verified** | What the author could not check, or "nothing"; plus **Mismatch** when the diff contradicts the author's handoff notes |
 
-The risk level has floors by file, in [`.github/risk-floors.yaml`](../.github/risk-floors.yaml): pipeline config
-(dependency manifests and locks, pre-commit, `Makefile`, baselines, `scripts/`, `.github/`, `.claude/`,
-`CLAUDE.md`, `docker/`, the frontend's build, lint, test and TypeScript configuration), database migrations (and
-the SQLAlchemy models) and auth (sign-in, API keys, share tokens, workspace roles, the dependencies that decide who
-may do what, the settings) are never below **high**, and any deploy step other than "None" makes it at least
-**medium**. `make risk-floor` prints the floor of the current branch and the files that set it.
+The risk level is a judgement, not computed from the files a PR touches, and most PRs are **low** or **medium**:
+
+| Level | When |
+|---|---|
+| **low** | No behaviour change: docs, tests, CI, formatting, dependency patch/minor bumps, refactors covered by tests |
+| **medium** | New behaviour behind an existing contract, a new endpoint, MCP tool or option, or any deploy step (new env var, migration, flag) |
+| **high** | Can break production or changes existing behaviour drastically (data-changing migrations, a changed public contract, changed sharing or permission behaviour), but a revert recovers it |
+| **critical** | A failure takes down what users depend on, leaks private diagrams or destroys data, and is hard to revert |
+
+High and critical need one concrete sentence in the Risk line naming what can break; without it the level is
+lowered. Touching pipeline files (`.github/`, `scripts/`, `Makefile`, `pyproject.toml`, `.claude/`) is not by
+itself a reason for high. The [Critical surfaces](../CLAUDE.md#critical-surfaces) of the repository are where
+high and critical usually come from.
 
 The *Risk label* workflow (`.github/workflows/risk-label.yml`, outside `ci.yml` so a label change does not rerun
-every analysis) requires exactly one `risk:<level>` label on the PR and fails when it is below the file floor
-(`scripts/risk.py`). It reruns when labels change. Dependabot PRs get `risk:high`, since they change
-pipeline config. Create the labels once with `make risk-labels`.
+every analysis) only requires exactly one known `risk:<level>` label on the PR (`scripts/risk.py`). It reruns
+when labels change. Dependabot PRs are born `risk:low`; raise the label by hand when a bump deserves it (a
+major version with breaking changes). Create the labels once with `make risk-labels`.
 
 ### Quality Report
 

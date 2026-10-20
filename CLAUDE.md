@@ -34,7 +34,6 @@ make smoke        boot smoke: clean Postgres + migrations + real API (auth on/of
 make contract     API contract: real API (auth on) + bounded, deterministic Schemathesis against /openapi.json
 make contract-prune  drop contract-baseline.json entries that no longer happen (never adds one)
 make openapi-diff fail on breaking OpenAPI changes vs BASE (default origin/main); needs oasdiff
-make risk-floor   minimum risk level of the branch vs BASE (REF=origin/<branch> from another branch), from .github/risk-floors.yaml
 make risk-labels  create/update the risk:<level> labels on GitHub
 make lint-imports architecture contracts (import-linter) for app/ and mcp/
 make suppressions suppression ratchet: fails when noqa/type: ignore/nosec/eslint-disable/@ts-ignore/skip/only... differ from the baseline
@@ -80,6 +79,42 @@ tests/integration/ HTTP tests with TestClient
 | User | Member of one or more Workspaces |
 | WorkspaceMember | User x Workspace join with role: owner/editor/viewer |
 
+## Critical surfaces
+
+Where a mistake can leak private diagrams, lock users out or destroy data. A PR is `high` or `critical` because
+of what it changes here, not because of which files it touches; the `pr-writer` reads this list before assigning
+either level.
+
+- **Who the caller is** (`dependencies/current_user.py`, `infra/auth/cognito_token_verifier.py`,
+  `usecases/auth/`): Cognito ID tokens, personal API keys (`X-API-Key` with the key prefix, looked up by SHA-256
+  hash, managed only from a browser session) and the shared `SERVICE_API_KEY`. A service caller and
+  `AUTH_ENABLED=false` both mean "no user", which skips every workspace check: widening either opens all
+  workspaces.
+- **What the caller may do** (`dependencies/workspace_access.py`, `usecases/auth/authorize_workspace_access.py`,
+  `usecases/workspace_member/`): viewer reads, editor writes, owner manages members, a workspace keeps at least
+  one owner. Gallery items answer only to their owner (`services/gallery_ownership.py`) and comments to their
+  author (`services/comment_ownership.py`).
+- **The MCP server's key** (`mcp/caller_key.py`, `mcp/tools/api.py`, `mcp/settings.py`): over HTTP each call
+  forwards the caller's personal key so the agent acts as that person; without one it falls back to
+  `MCP_API_KEY`. Mixing up the two keys makes one person's agent act with someone else's (or the service's)
+  access.
+- **Share links** (`routes/share_routes.py`, the guest path of `routes/websocket_routes.py`,
+  `usecases/diagram/*share*`): `/share/{token}` is public, and guests join the live room read-only through the
+  token. A link cannot be revoked, so whatever a shared payload exposes cannot be taken back: the public
+  response must stay limited to what the canvas needs to render.
+- **Diagram data and its history** (`alembic/versions/`, `infra/database/`, `usecases/diagram/`,
+  `usecases/revision/`): deletes are soft (`deleted_at`, filtered by every query) and every save records a
+  revision that can be restored. A migration or change that deletes or rewrites `canvas_state`,
+  `semantic_metadata` or revisions, hard-deletes rows or drops the `deleted_at` filter destroys or resurfaces
+  data that a revert does not bring back.
+- **Real-time collaboration** (`routes/websocket_routes.py`, `infra/realtime/`,
+  `frontend/src/hooks/useRealtime.ts`): there is no merge or conflict resolution. Every save replaces the whole canvas (last write wins) and peers load
+  the full snapshot they receive, skipping their own echo by tab client id. The server relays `update` messages
+  from every participant of the room without checking their role (share-link guests and viewers included). A
+  change to that echo filter, to which snapshot is newest or to who may broadcast can make one editor silently
+  overwrite everyone else's work.
+- **Probes**: `/health` and `/ready` back the deploy; removing or breaking them takes the service down.
+
 ## Before opening a PR (mandatory)
 
 1. The app imports: `uv run python -c "import app.main.main"`.
@@ -109,10 +144,9 @@ tests/integration/ HTTP tests with TestClient
   `.skip`/`.only`/`.fails` tests) with `suppressions-baseline.json`. Fix the cause instead of suppressing it. Never
   raise the baseline (`update --allow-increase`) without the owner's explicit approval. When you remove
   suppressions, run `make suppressions-update` and commit the lower baseline in the same PR.
-- Pipeline and agent files (dependency manifests and locks, `.pre-commit-config.yaml`, `Makefile`, the baselines,
-  `scripts/`, `.github/`, `.claude/`, `CLAUDE.md`, `docker/`, the frontend build/lint/test config), migrations and
-  auth (sign-in, API keys, share tokens, roles) put the PR at the `high` risk floor (`.github/risk-floors.yaml`).
-  Do not change pipeline files unless the task asks for it, and call the change out in the PR. Never lower a floor.
+- Do not change pipeline and agent files (dependency manifests and locks, `.pre-commit-config.yaml`, `Makefile`,
+  the baselines, `scripts/`, `.github/`, `.claude/`, `CLAUDE.md`, `docker/`, the frontend build/lint/test config)
+  unless the task asks for it, and call the change out in the PR.
 - Never relax an import-linter contract (`[tool.importlinter]` in `pyproject.toml` or `mcp/pyproject.toml`)
   nor add `ignore_imports` without the owner's approval: fix the import instead.
 - Never remove or rename `/health` (liveness) or `/ready` (readiness): deploy probes depend on them.
@@ -135,8 +169,9 @@ tests/integration/ HTTP tests with TestClient
    open the PR and does not assess the risk. Never commit directly to `main`.
 2. **Describe and open**: then delegate to the `pr-writer` agent (`.claude/agents/pr-writer.md`) with the
    original task verbatim, the branch, the base branch and the path of the handoff notes. It reads the diff
-   cold, commit by commit, fills `.github/pull_request_template.md`, assigns the risk level (never below
-   `make risk-floor`, at least medium when there are deploy steps), opens the PR with the `risk:<level>` label
+   cold, commit by commit, fills `.github/pull_request_template.md`, assigns the risk level by judgement
+   (rubric in `pr-writer.md`, at least medium when there are deploy steps, high or critical only with a concrete
+   sentence naming what can break, checked against **Critical surfaces** below), opens the PR with the `risk:<level>` label
    and stops. It never writes code. Behavior items are plain language with no file, function, test or code
    references; the evidence pointers for them go only in **Look here**, and a behavior without evidence is
    listed under **Not verified**.

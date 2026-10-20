@@ -91,7 +91,7 @@ app/        FastAPI backend: domain, infra and presentation layers
 frontend/   React + Vite + TypeScript frontend (tldraw, Zustand)
 mcp/        Python MCP server for AI agents
 docker/     Dockerfile and docker-compose
-scripts/    Boot smoke, API contract, OpenAPI diff, suppression ratchet, risk floors, mutation testing
+scripts/    Boot smoke, API contract, OpenAPI diff, suppression ratchet, risk label check, mutation testing
             helpers and the CI Quality Report
 docs/       Architecture, configuration, API, MCP and development guides
 ```
@@ -125,8 +125,8 @@ transport. Tools, transports and keys are in [docs/MCP.md](docs/MCP.md).
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`CLAUDE.md`](CLAUDE.md) (the rules people and AI agents follow
 alike), and report security problems privately as [`SECURITY.md`](SECURITY.md) explains. Pull requests follow
-[the template](.github/pull_request_template.md) and carry a `risk:<level>` label never below the floor of the
-files they touch; AI agents work in two steps, the `coder` agent implements and pushes and the `pr-writer` agent
+[the template](.github/pull_request_template.md) and carry exactly one `risk:<level>` label, assigned by judgement
+(see [Critical surfaces](CLAUDE.md#critical-surfaces)); AI agents work in two steps, the `coder` agent implements and pushes and the `pr-writer` agent
 describes the change and opens the PR (see `CLAUDE.md`).
 
 ## License
