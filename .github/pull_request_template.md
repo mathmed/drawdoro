@@ -1,6 +1,6 @@
 ## Risk
 **<low | medium | high | critical>** — <one line: why>
-<!-- Floors (.github/risk-floors.yaml): pipeline config, DB migrations and auth (sign-in, API keys, share tokens, permissions) are never below high. Any deploy step other than "None" is at least medium. -->
+<!-- Most PRs are low or medium. Any deploy step other than "None" is at least medium. High or critical needs one concrete sentence naming what can break (see Critical surfaces in CLAUDE.md); without it, lower the level. -->
 
 ## Summary
 <one sentence: what changes in behavior, and why>

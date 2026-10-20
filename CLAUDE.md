@@ -34,7 +34,6 @@ make smoke        boot smoke: clean Postgres + migrations + real API (auth on/of
 make contract     API contract: real API (auth on) + bounded, deterministic Schemathesis against /openapi.json
 make contract-prune  drop contract-baseline.json entries that no longer happen (never adds one)
 make openapi-diff fail on breaking OpenAPI changes vs BASE (default origin/main); needs oasdiff
-make risk-floor   minimum risk level of the branch vs BASE (REF=origin/<branch> from another branch), from .github/risk-floors.yaml
 make risk-labels  create/update the risk:<level> labels on GitHub
 make lint-imports architecture contracts (import-linter) for app/ and mcp/
 make suppressions suppression ratchet: fails when noqa/type: ignore/nosec/eslint-disable/@ts-ignore/skip/only... differ from the baseline
@@ -109,10 +108,9 @@ tests/integration/ HTTP tests with TestClient
   `.skip`/`.only`/`.fails` tests) with `suppressions-baseline.json`. Fix the cause instead of suppressing it. Never
   raise the baseline (`update --allow-increase`) without the owner's explicit approval. When you remove
   suppressions, run `make suppressions-update` and commit the lower baseline in the same PR.
-- Pipeline and agent files (dependency manifests and locks, `.pre-commit-config.yaml`, `Makefile`, the baselines,
-  `scripts/`, `.github/`, `.claude/`, `CLAUDE.md`, `docker/`, the frontend build/lint/test config), migrations and
-  auth (sign-in, API keys, share tokens, roles) put the PR at the `high` risk floor (`.github/risk-floors.yaml`).
-  Do not change pipeline files unless the task asks for it, and call the change out in the PR. Never lower a floor.
+- Do not change pipeline and agent files (dependency manifests and locks, `.pre-commit-config.yaml`, `Makefile`,
+  the baselines, `scripts/`, `.github/`, `.claude/`, `CLAUDE.md`, `docker/`, the frontend build/lint/test config)
+  unless the task asks for it, and call the change out in the PR.
 - Never relax an import-linter contract (`[tool.importlinter]` in `pyproject.toml` or `mcp/pyproject.toml`)
   nor add `ignore_imports` without the owner's approval: fix the import instead.
 - Never remove or rename `/health` (liveness) or `/ready` (readiness): deploy probes depend on them.
@@ -135,8 +133,9 @@ tests/integration/ HTTP tests with TestClient
    open the PR and does not assess the risk. Never commit directly to `main`.
 2. **Describe and open**: then delegate to the `pr-writer` agent (`.claude/agents/pr-writer.md`) with the
    original task verbatim, the branch, the base branch and the path of the handoff notes. It reads the diff
-   cold, commit by commit, fills `.github/pull_request_template.md`, assigns the risk level (never below
-   `make risk-floor`, at least medium when there are deploy steps), opens the PR with the `risk:<level>` label
+   cold, commit by commit, fills `.github/pull_request_template.md`, assigns the risk level by judgement
+   (rubric in `pr-writer.md`, at least medium when there are deploy steps, high or critical only with a concrete
+   sentence naming what can break, checked against **Critical surfaces** below), opens the PR with the `risk:<level>` label
    and stops. It never writes code. Behavior items are plain language with no file, function, test or code
    references; the evidence pointers for them go only in **Look here**, and a behavior without evidence is
    listed under **Not verified**.

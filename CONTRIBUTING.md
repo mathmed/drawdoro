@@ -47,9 +47,9 @@ Always use `uv run` for the backend. The MCP server is a separate uv project in 
    **Summary**, up to five **Behavior** changes in plain words (*before → after*, no file or code names),
    **Unchanged**, **Look here** (the only place for files, functions and tests: the evidence of each behavior and
    what deserves a human look), **Deploy steps** (always present; "None: normal merge and deploy." when nothing is
-   needed) and **Not verified**. Add exactly one `risk:<level>` label, never below the floor of the files you touch
-   (`make risk-floor`; the *Risk label* check enforces it, see
-   [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md#pull-requests-and-risk)). CI posts one **Quality Report** comment
+   needed) and **Not verified**. Add exactly one `risk:<level>` label, chosen by the
+   rubric in [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md#pull-requests-and-risk) (the *Risk label* check only
+   requires that there is exactly one). CI posts one **Quality Report** comment
    ([`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md#quality-report)); a failing check means it is not ready.
 
 ## Rules that are easy to miss
