@@ -1,6 +1,6 @@
 .PHONY: setup dev dev-build run build test test-unit test-mcp test-frontend hooks check-code format-code frontend db \
 	smoke smoke-mcp lint-imports mutation mutation-report mutation-changed mcp-manifest \
-	suppressions suppressions-update contract contract-prune openapi-diff risk-floor risk-labels
+	suppressions suppressions-update contract contract-prune openapi-diff risk-labels
 
 # Install uv (if missing), project dependencies and git hooks
 setup:
@@ -100,23 +100,15 @@ mutation-report:
 	@sed -n '1,4p' mutants/report.md
 	@echo ">> full report: mutants/report.md | inspect a mutant: uv run mutmut show <name>"
 
-# Base branch of mutation-changed, openapi-diff and risk-floor, and the revision risk-floor compares
-# with it (e.g. `make risk-floor REF=origin/claude/my-branch` from another branch)
+# Base branch of mutation-changed and openapi-diff
 BASE ?= origin/main
-REF ?= HEAD
-
-# Print the minimum risk level of the changes of REF against its merge base with BASE, from
-# .github/risk-floors.yaml (what the Risk label workflow enforces)
-risk-floor:
-	@files="$$(git diff --name-only --no-renames $(BASE)...$(REF))" && \
-		printf '%s\n' "$$files" | uv run python scripts/risk.py --changed-files - floor
 
 # Create (or update) the four risk:<level> labels on the GitHub repository; idempotent, needs gh
 risk-labels:
-	gh label create "risk:low" --color 0E8A16 --description "Low risk: routine change" --force
-	gh label create "risk:medium" --color FBCA04 --description "Medium risk: deploy steps or wider impact" --force
-	gh label create "risk:high" --color D93F0B --description "High risk: pipeline config, migrations, auth or core rules" --force
-	gh label create "risk:critical" --color B60205 --description "Critical risk: needs the closest review" --force
+	gh label create "risk:low" --color 0E8A16 --description "Low risk: no behaviour change" --force
+	gh label create "risk:medium" --color FBCA04 --description "Medium risk: new behaviour or deploy steps" --force
+	gh label create "risk:high" --color D93F0B --description "High risk: can break production or changes behaviour drastically" --force
+	gh label create "risk:critical" --color B60205 --description "Critical risk: outage, private data leak or data loss, hard to revert" --force
 
 # Fail on breaking changes between the OpenAPI schema of HEAD (working tree) and of its merge base with
 # BASE: oasdiff changelog --fail-on ERR. Needs oasdiff on PATH (see docs/DEVELOPMENT.md).
