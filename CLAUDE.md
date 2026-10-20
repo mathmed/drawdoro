@@ -79,6 +79,42 @@ tests/integration/ HTTP tests with TestClient
 | User | Member of one or more Workspaces |
 | WorkspaceMember | User x Workspace join with role: owner/editor/viewer |
 
+## Critical surfaces
+
+Where a mistake can leak private diagrams, lock users out or destroy data. A PR is `high` or `critical` because
+of what it changes here, not because of which files it touches; the `pr-writer` reads this list before assigning
+either level.
+
+- **Who the caller is** (`dependencies/current_user.py`, `infra/auth/cognito_token_verifier.py`,
+  `usecases/auth/`): Cognito ID tokens, personal API keys (`X-API-Key` with the key prefix, looked up by SHA-256
+  hash, managed only from a browser session) and the shared `SERVICE_API_KEY`. A service caller and
+  `AUTH_ENABLED=false` both mean "no user", which skips every workspace check: widening either opens all
+  workspaces.
+- **What the caller may do** (`dependencies/workspace_access.py`, `usecases/auth/authorize_workspace_access.py`,
+  `usecases/workspace_member/`): viewer reads, editor writes, owner manages members, a workspace keeps at least
+  one owner. Gallery items answer only to their owner (`services/gallery_ownership.py`) and comments to their
+  author (`services/comment_ownership.py`).
+- **The MCP server's key** (`mcp/caller_key.py`, `mcp/tools/api.py`, `mcp/settings.py`): over HTTP each call
+  forwards the caller's personal key so the agent acts as that person; without one it falls back to
+  `MCP_API_KEY`. Mixing up the two keys makes one person's agent act with someone else's (or the service's)
+  access.
+- **Share links** (`routes/share_routes.py`, the guest path of `routes/websocket_routes.py`,
+  `usecases/diagram/*share*`): `/share/{token}` is public, and guests join the live room read-only through the
+  token. A link cannot be revoked, so whatever a shared payload exposes cannot be taken back: the public
+  response must stay limited to what the canvas needs to render.
+- **Diagram data and its history** (`alembic/versions/`, `infra/database/`, `usecases/diagram/`,
+  `usecases/revision/`): deletes are soft (`deleted_at`, filtered by every query) and every save records a
+  revision that can be restored. A migration or change that deletes or rewrites `canvas_state`,
+  `semantic_metadata` or revisions, hard-deletes rows or drops the `deleted_at` filter destroys or resurfaces
+  data that a revert does not bring back.
+- **Real-time collaboration** (`routes/websocket_routes.py`, `infra/realtime/`,
+  `frontend/src/hooks/useRealtime.ts`): there is no merge or conflict resolution. Every save replaces the whole canvas (last write wins) and peers load
+  the full snapshot they receive, skipping their own echo by tab client id. The server relays `update` messages
+  from every participant of the room without checking their role (share-link guests and viewers included). A
+  change to that echo filter, to which snapshot is newest or to who may broadcast can make one editor silently
+  overwrite everyone else's work.
+- **Probes**: `/health` and `/ready` back the deploy; removing or breaking them takes the service down.
+
 ## Before opening a PR (mandatory)
 
 1. The app imports: `uv run python -c "import app.main.main"`.
