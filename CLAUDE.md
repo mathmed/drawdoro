@@ -172,11 +172,11 @@ either level.
    cold, commit by commit, fills `.github/pull_request_template.md`, assigns the risk level by judgement
    (rubric in `pr-writer.md`, at least medium when there are deploy steps, high or critical only with a concrete
    sentence naming what can break, checked against **Critical surfaces** below), opens the PR with the `risk:<level>` label
-   and stops. It never writes code. Behavior items are plain language with no file, function, test or code
-   references; the evidence pointers for them go only in **Look here**, and a behavior without evidence is
-   listed under **Not verified**.
+   and stops. It never writes code. It checks every claim against the diff and the tests, but the body stays
+   short: a standalone Summary, at most one visual chosen by the type of change, a Deploy line only for a real
+   step; risk lives in the label (plus one top line for high or critical).
 3. **Fallback**: if `pr-writer` fails or cannot run, delegate back to `coder` saying so: it opens the PR itself
-   with a minimal body (summary plus the template headings, risk "unassessed", no risk label), so a failure
+   with a minimal body (a summary saying risk is unassessed, plus the Deploy line if any; no risk label), so a failure
    never blocks delivery. The Risk label check stays red until a person sets the label.
 4. **Merge**: nobody but the owner merges. Agents never merge, approve or enable auto-merge.
 
