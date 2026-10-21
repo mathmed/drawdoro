@@ -1,6 +1,6 @@
-<!-- Risk lives in the risk:<level> label. Only for high or critical, keep this one line at the very top,
-naming in one concrete sentence what can break. Stacked PR only: add "Stacked on #<n>: merge it first." -->
-Risk high: <what can break>
+<!-- Risk lives in the risk:<level> label. Only for high or critical, start the body with one line
+"Risk high: <what can break>" (or "Risk critical: ..."), one concrete sentence.
+Stacked PR only: add "Stacked on #<n>: merge it first." -->
 
 ## Summary
 <!-- 1-2 sentences: what changes and why; it must stand alone. Only if something important was not
