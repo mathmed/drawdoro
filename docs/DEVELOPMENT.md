@@ -306,17 +306,18 @@ clean run; `uv run mutmut browse` explores the results interactively.
 
 ### Pull requests and risk
 
-Every pull request description follows [`.github/pull_request_template.md`](../.github/pull_request_template.md):
+Every pull request description follows [`.github/pull_request_template.md`](../.github/pull_request_template.md),
+short enough to be read (target 1,500 characters, at most 2,500, no fact repeated):
 
-| Section | What goes in it |
+| Block | What goes in it |
 |---|---|
-| **Risk** | `low`, `medium`, `high` or `critical` and one line of why |
-| **Summary** | One sentence: what changes in behavior, and why |
-| **Behavior** | Up to five changes, most critical first, as *before → after*, in plain words for someone who has not read the code: no backticks, paths, file, function or test names |
-| **Unchanged** | What a reviewer might fear broke, or "behavior-preserving refactor" |
-| **Look here** | The only place for file, function and test references: the evidence (test or code) of every Behavior item, pipeline or check changes, departures from the task and what deserves a human look |
-| **Deploy steps** | Always present: env vars, secrets, migration order, flags, external configuration, rollback; or "None: normal merge and deploy." |
-| **Not verified** | What the author could not check, or "nothing"; plus **Mismatch** when the diff contradicts the author's handoff notes |
+| **Risk line** | Only for high or critical, at the very top: `Risk high: <what can break>` |
+| **Summary** | 1-2 sentences that stand alone: what changes and why; the last one says what important thing was not verified, only when there is one |
+| **Visual** | At most one, by type of change: a *What \| Before \| After* table (max 3 rows, 12 plain words per cell), a small Mermaid diagram, a before/after values table, or a `diff` of max 15 lines; none when the Summary says it all |
+| **Deploy** | One line, only for a real step (migration, env var or secret, flag, merge order, external config); rollback only when it is not a plain revert |
+
+A stacked-PR banner appears only when the PR is stacked, and a **Mismatch** line only when the diff contradicts
+the author's handoff notes. No file or test lists, CI status, filler or attribution footer.
 
 The risk level is a judgement, not computed from the files a PR touches, and most PRs are **low** or **medium**:
 
@@ -327,7 +328,7 @@ The risk level is a judgement, not computed from the files a PR touches, and mos
 | **high** | Can break production or changes existing behaviour drastically (data-changing migrations, a changed public contract, changed sharing or permission behaviour), but a revert recovers it |
 | **critical** | A failure takes down what users depend on, leaks private diagrams or destroys data, and is hard to revert |
 
-High and critical need one concrete sentence in the Risk line naming what can break; without it the level is
+High and critical need one concrete sentence in the top risk line naming what can break; without it the level is
 lowered. Touching pipeline files (`.github/`, `scripts/`, `Makefile`, `pyproject.toml`, `.claude/`) is not by
 itself a reason for high. The [Critical surfaces](../CLAUDE.md#critical-surfaces) of the repository are where
 high and critical usually come from.

@@ -29,10 +29,10 @@ findings. Never edit files, commit or push.
    - **Docs**: README or the matching file in `docs/` updated when the change affects setup, commands, routes, env vars or architecture.
    - **Gates**: no new suppression or accepted contract failure (`suppressions-baseline.json`,
      `contract-baseline.json` only shrink without the owner's approval), no relaxed threshold.
-   - **PR description** (when a PR exists): the Behavior items match the diff and are plain language with
-     no file or code references, every one has an evidence pointer in Look here that exists (or is listed
-     under Not verified), and the `risk:` label follows the rubric in `pr-writer.md` (a high or critical
-     label names, in the Risk line, what can break).
+   - **PR description** (when a PR exists): every claim in the Summary, the visual and the Deploy line
+     matches the diff; it follows the model in `pr-writer.md` (a standalone Summary, at most one visual in
+     plain words, a Deploy line only for a real step, no filler); and the `risk:` label follows the rubric in
+     `pr-writer.md` (high or critical opens the body with one line naming what can break).
 
 ## Report
 
